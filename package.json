@@ -1,5 +1,5 @@
 {
-  "name": "rollup-starter-lib",
+  "name": "@carbonorm/carbonnode",
   "version": "1.0.0",
   "main": "dist/carbonnode.cjs.js",
   "module": "dist/carbonnode.esm.js",

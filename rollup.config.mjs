@@ -10,7 +10,7 @@ const production = !process.env.ROLLUP_WATCH;
 
 const plugins = [
 	resolve({
-		extensions: ['.js', '.svelte', '.jsx', '.ts', '.tsx']
+		extensions: ['.js', '.jsx', '.ts', '.tsx']
 	}),
 	commonjs(),
 	typescript({
