@@ -1,11 +1,12 @@
 {
   "name": "rollup-starter-lib",
   "version": "1.0.0",
-  "main": "dist/how-long-till-lunch.cjs.js",
-  "module": "dist/how-long-till-lunch.esm.js",
-  "browser": "dist/how-long-till-lunch.umd.js",
-  "dependencies": {
-    "ms": "^2.0.0"
+  "main": "dist/carbonnode.cjs.js",
+  "module": "dist/carbonnode.esm.js",
+  "browser": "dist/carbonnode.umd.js",
+  "peerDependencies": {
+    "axios": "^1.4.0",
+    "react-toastify": "^9.1.3"
   },
   "devDependencies": {
     "@drop-in-gaming/barrelsby": "^0.0.2",

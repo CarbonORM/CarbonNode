@@ -1,5 +1,8 @@
 {
   "compilerOptions": {
+    "allowSyntheticDefaultImports": true,
+    "rootDir": "./src/",
+    "baseUrl": "./src/",
     "target": "es6",
     "module": "esnext",
     "removeComments": false,

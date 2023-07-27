@@ -5,33 +5,47 @@ import typescript from '@rollup/plugin-typescript';
 import { readFileSync } from "fs";
 const pkg = JSON.parse(readFileSync('package.json', {encoding: 'utf8'}));
 
-
 // @link https://stackoverflow.com/questions/63128597/how-to-get-rid-of-the-rollup-plugin-typescript-rollup-sourcemap-option-must
 const production = !process.env.ROLLUP_WATCH;
 
+const plugins = [
+	resolve({
+		extensions: ['.js', '.svelte', '.jsx', '.ts', '.tsx']
+	}),
+	commonjs(),
+	typescript({
+		sourceMap: !production,
+		inlineSources: !production
+	})
+]
+
+// noinspection JSUnresolvedReference
+const externals = Object.keys(pkg.peerDependencies)
+
+console.log('externals',externals)
+
+const globals = []
+
+externals.forEach((external) => {
+
+	globals[external] = external
+
+})
+
+console.log(globals)
 
 export default [
 	// browser-friendly UMD build
 	{
 		input: 'src/index.ts',
+		external: externals,
 		output: {
-			name: 'howLongUntilLunch',
+			name: 'carbonNode',
 			file: pkg.browser,
 			format: 'umd',
-			globals: {
-				ms: 'ms',
-			}
+			globals: globals
 		},
-		plugins: [
-			resolve({
-				extensions: ['.js', '.svelte', '.jsx', '.ts', '.tsx']
-			}),
-			commonjs(),
-			typescript({
-				sourceMap: !production,
-				inlineSources: !production
-			})
-		]
+		plugins: plugins
 	},
 
 	// CommonJS (for Node) and ES module (for bundlers) build.
@@ -42,17 +56,8 @@ export default [
 	// `file` and `format` for each target)
 	{
 		input: 'src/index.ts',
-		external: ['ms'],
-		plugins: [
-			resolve({
-				extensions: ['.js', '.svelte', '.jsx', '.ts', '.tsx']
-			}),
-			commonjs(),
-			typescript({
-				sourceMap: !production,
-				inlineSources: !production
-			})
-		],
+		external: externals,
+		plugins: plugins,
 		output: [
 			{ file: pkg.main, format: 'cjs' },
 			{ file: pkg.module, format: 'es' }
