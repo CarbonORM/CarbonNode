@@ -1,0 +1,25 @@
+{
+  "compilerOptions": {
+    "target": "es6",
+    "module": "esnext",
+    "removeComments": false,
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noImplicitReturns": true,
+    "noImplicitAny": false,
+    "noFallthroughCasesInSwitch": true,
+    "moduleResolution": "node",
+    "esModuleInterop": true,
+    "allowUnusedLabels": false,
+    "forceConsistentCasingInFileNames": true,
+    "newLine": "LF",
+    "allowUnreachableCode": false,
+    "declaration": true,
+    "sourceMap": true,
+    "outDir": "./bin"
+  },
+  "include": [
+      "src/**/*.ts"
+  ]
+}

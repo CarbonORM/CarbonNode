@@ -1,0 +1,32 @@
+{
+  "name": "rollup-starter-lib",
+  "version": "1.0.0",
+  "main": "dist/how-long-till-lunch.cjs.js",
+  "module": "dist/how-long-till-lunch.esm.js",
+  "browser": "dist/how-long-till-lunch.umd.js",
+  "dependencies": {
+    "ms": "^2.0.0"
+  },
+  "devDependencies": {
+    "@drop-in-gaming/barrelsby": "^0.0.2",
+    "@open-wc/building-rollup": "^3.0.1",
+    "@rollup/plugin-commonjs": "^11.0.1",
+    "@rollup/plugin-node-resolve": "^7.0.0",
+    "@rollup/plugin-typescript": "^11.1.2",
+    "@types/ms": "^0.7.31",
+    "deepmerge": "^4.3.1",
+    "rimraf": "^5.0.1",
+    "rollup": "^3.26.3",
+    "typescript": "^5.1.6"
+  },
+  "scripts": {
+    "build": "npm run build:index && rollup -c",
+    "dev": "rollup -c -w",
+    "test": "node test/test.js",
+    "pretest": "npm run build",
+    "build:index": "npx barrelsby -d ./src --delete --exclude '(jestHoc|\\.test|\\.d).(js|tsx?)$' --exportDefault --verbose"
+  },
+  "files": [
+    "dist"
+  ]
+}
