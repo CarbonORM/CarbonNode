@@ -6,7 +6,7 @@ import { readFileSync } from "fs";
 const pkg = JSON.parse(readFileSync('package.json', {encoding: 'utf8'}));
 
 // @link https://stackoverflow.com/questions/63128597/how-to-get-rid-of-the-rollup-plugin-typescript-rollup-sourcemap-option-must
-const production = !process.env.ROLLUP_WATCH;
+// const production = !process.env.ROLLUP_WATCH;
 
 const plugins = [
 	resolve({
@@ -14,8 +14,8 @@ const plugins = [
 	}),
 	commonjs(),
 	typescript({
-		sourceMap: !production,
-		inlineSources: !production
+		sourceMap: true,
+		inlineSources: false,
 	})
 ]
 
@@ -43,7 +43,8 @@ export default [
 			name: 'carbonNode',
 			file: pkg.browser,
 			format: 'umd',
-			globals: globals
+			globals: globals,
+			sourcemap: true
 		},
 		plugins: plugins
 	},
@@ -59,8 +60,8 @@ export default [
 		external: externals,
 		plugins: plugins,
 		output: [
-			{ file: pkg.main, format: 'cjs' },
-			{ file: pkg.module, format: 'es' }
+			{ file: pkg.main, format: 'cjs', sourcemap: true },
+			{ file: pkg.module, format: 'es', sourcemap: true }
 		]
 	}
 ];

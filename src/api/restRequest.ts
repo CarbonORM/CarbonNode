@@ -44,7 +44,6 @@ export function TestRestfulResponse(response: AxiosResponse | any, success: ((r:
 
 }
 
-
 export function removeInvalidKeys<iRestObject>(request: any, c6Tables: (C6RestfulModel)[]): iRestObject {
 
     let intersection: iRestObject = {} as iRestObject

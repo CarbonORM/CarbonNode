@@ -1,9 +1,11 @@
 {
   "name": "@carbonorm/carbonnode",
-  "version": "1.0.0",
-  "main": "dist/carbonnode.cjs.js",
-  "module": "dist/carbonnode.esm.js",
-  "browser": "dist/carbonnode.umd.js",
+  "version": "1.0.1",
+  "main": "dist/index.cjs.js",
+  "module": "dist/index.esm.js",
+  "browser": "dist/index.umd.js",
+  "types": "dist/index.d.ts",
+  "type": "module",
   "peerDependencies": {
     "axios": "^1.4.0",
     "react-toastify": "^9.1.3"
@@ -28,6 +30,7 @@
     "build:index": "npx barrelsby -d ./src --delete --exclude '(jestHoc|\\.test|\\.d).(js|tsx?)$' --exportDefault --verbose"
   },
   "files": [
-    "dist"
+    "dist",
+    "src"
   ]
 }
