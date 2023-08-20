@@ -9,6 +9,14 @@ export default function <RestTableInterfaces extends { [key:string] : any }>(res
 
     tableNames.forEach((table) => {
 
+        if (!(table in C6)) {
+
+            console.error(`Table name (${table}) is not found in the C6 object.`, C6);
+
+            throw new Error(`Table name (${table}) is not found in the C6 object.`);
+
+        }
+
         Object.keys(restfulObject).map(value => {
 
             let shortReference = value.toUpperCase();
