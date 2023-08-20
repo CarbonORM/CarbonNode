@@ -17,6 +17,15 @@ export default function <RestTableInterfaces extends { [key:string] : any }>(res
 
         }
 
+        if (undefined === C6[table]) {
+
+            console.log(`Table name (${table}) exists but is undefined in the C6 object. This is unexpected.`)
+
+            throw new Error(`Table name (${table}) exists but is undefined in the C6 object. This is unexpected.`);
+
+        }
+
+
         Object.keys(restfulObject).map(value => {
 
             let shortReference = value.toUpperCase();

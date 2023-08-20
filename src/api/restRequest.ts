@@ -306,8 +306,18 @@ export type iGetC6RestResponse<ResponseDataType, ResponseDataOverrides = {}> = i
 
 interface iRest<CustomAndRequiredFields extends { [key: string]: any }, RestTableInterfaces extends {
     [key: string]: any
-}, RequestTableOverrides = { [key in keyof RestTableInterfaces]: any }, ResponseDataType = any, RestShortTableNames extends string = any> {
-    C6: { TABLES: { [key: string]: C6RestfulModel & { [key: string]: string | number } } } & { [key: string]: string },
+}, RequestTableOverrides = {
+    [key in keyof RestTableInterfaces]: any
+}, ResponseDataType = any,
+    RestShortTableNames extends string = any> {
+    C6: {
+        TABLES: {
+            [key: string]: C6RestfulModel &
+                { [key: string]: string | number }
+        }
+    } & {
+        [key: string]: any
+    },
     axios: AxiosInstance,
     restURL: string,
     tableName: RestShortTableNames | RestShortTableNames[],
