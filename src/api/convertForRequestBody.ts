@@ -1,7 +1,8 @@
-import {C6} from "api/C6";
+import {C6Constants} from "api/C6Constants";
+import {C6Object} from "api/restRequest";
 
 
-export default function <RestTableInterfaces extends { [key:string] : any }>(restfulObject: RestTableInterfaces, tableName: string | string[], regexErrorHandler: (message:string) => void = alert) {
+export default function <RestTableInterfaces extends { [key:string] : any }>(restfulObject: RestTableInterfaces, tableName: string | string[], C6: C6Object, regexErrorHandler: (message:string) => void = alert) {
 
     let payload = {};
 
@@ -26,19 +27,19 @@ export default function <RestTableInterfaces extends { [key:string] : any }>(res
         }
 
 
-        Object.keys(restfulObject).map(value => {
+        Object.keys(restfulObject).forEach(value => {
 
             let shortReference = value.toUpperCase();
 
             switch (value) {
-                case C6.GET:
-                case C6.POST:
-                case C6.UPDATE:
-                case C6.REPLACE:
-                case C6.DELETE:
-                case C6.WHERE:
-                case C6.JOIN:
-                case C6.PAGINATION:
+                case C6Constants.GET:
+                case C6Constants.POST:
+                case C6Constants.UPDATE:
+                case C6Constants.REPLACE:
+                case C6Constants.DELETE:
+                case C6Constants.WHERE:
+                case C6Constants.JOIN:
+                case C6Constants.PAGINATION:
                     if (Array.isArray(restfulObject[value])) {
                         payload[value] = restfulObject[value].sort()
                     } else if (typeof restfulObject[value] === 'object' && restfulObject[value] !== null) {
@@ -72,7 +73,7 @@ export default function <RestTableInterfaces extends { [key:string] : any }>(res
 
                 } else if (typeof regexValidations === 'object' && regexValidations !== null) {
 
-                    Object.keys(regexValidations)?.map((errorMessage) => {
+                    Object.keys(regexValidations)?.forEach((errorMessage) => {
 
                         const regex : RegExp = regexValidations[errorMessage];
 

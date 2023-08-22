@@ -1,6 +1,5 @@
 
-
-export const C6 = {
+export const C6Constants = {
 
     // try to 1=1 match the Rest abstract class
     ADDDATE: 'ADDDATE',

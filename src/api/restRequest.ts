@@ -302,6 +302,15 @@ export interface iPutC6RestResponse<RestData = any, RequestData = any> extends i
     updated: boolean | number | string | RequestData,
 }
 
+export interface C6Object {
+    TABLES: {
+        [key: string]: C6RestfulModel &
+            { [key: string]: string | number }
+    },
+
+    [key: string]: any
+}
+
 export type iGetC6RestResponse<ResponseDataType, ResponseDataOverrides = {}> = iC6RestResponse<Modify<ResponseDataType, ResponseDataOverrides>[]>
 
 interface iRest<CustomAndRequiredFields extends { [key: string]: any }, RestTableInterfaces extends {
@@ -310,14 +319,7 @@ interface iRest<CustomAndRequiredFields extends { [key: string]: any }, RestTabl
     [key in keyof RestTableInterfaces]: any
 }, ResponseDataType = any,
     RestShortTableNames extends string = any> {
-    C6: {
-        TABLES: {
-            [key: string]: C6RestfulModel &
-                { [key: string]: string | number }
-        }
-    } & {
-        [key: string]: any
-    },
+    C6: C6Object,
     axios: AxiosInstance,
     restURL: string,
     tableName: RestShortTableNames | RestShortTableNames[],
@@ -673,20 +675,20 @@ export default function restApi<
                             if (undefined !== request?.dataInsertMultipleRows) {
 
                                 return request.dataInsertMultipleRows.map(data =>
-                                    convertForRequestBody<typeof data>(data, fullTableList, (message) => toast.error(message, toastOptions)));
+                                    convertForRequestBody<typeof data>(data, fullTableList, C6, (message) => toast.error(message, toastOptions)));
 
                             }
 
-                            return convertForRequestBody<RestTableInterfaces>(query as RestTableInterfaces, fullTableList, (message) => toast.error(message, toastOptions))
+                            return convertForRequestBody<RestTableInterfaces>(query as RestTableInterfaces, fullTableList, C6,(message) => toast.error(message, toastOptions))
 
                         } else if (requestMethod === PUT) {
 
-                            return convertForRequestBody<RestTableInterfaces>(query as RestTableInterfaces, fullTableList, (message) => toast.error(message, toastOptions))
+                            return convertForRequestBody<RestTableInterfaces>(query as RestTableInterfaces, fullTableList, C6,(message) => toast.error(message, toastOptions))
 
                         } else if (requestMethod === DELETE) {
 
                             return {
-                                data: convertForRequestBody<RestTableInterfaces>(query as RestTableInterfaces, fullTableList, (message) => toast.error(message, toastOptions))
+                                data: convertForRequestBody<RestTableInterfaces>(query as RestTableInterfaces, fullTableList, C6,(message) => toast.error(message, toastOptions))
                             }
 
                         } else {
