@@ -1,3 +1,4 @@
+import axiosInstance from "api/axiosInstance";
 import convertForRequestBody from "api/convertForRequestBody";
 import {C6RestfulModel} from "api/interfaces/ormInterfaces";
 import {AxiosInstance, AxiosPromise, AxiosResponse} from "axios";
@@ -8,7 +9,6 @@ import isTest from "variables/isTest";
 import isVerbose from "variables/isVerbose";
 import {toastOptions, toastOptionsDevs} from "variables/toastOptions";
 
-// todo - use bootstrap, it currently is prefixed with an underscore to denote to TS that we are aware it is unused.
 // When we capture DropExceptions and display them as a custom page, this will change.
 export function TestRestfulResponse(response: AxiosResponse | any, success: ((r: AxiosResponse) => (string | void)) | string | undefined, error: ((r: AxiosResponse) => (string | void)) | string | undefined): string | boolean | number {
 
@@ -44,13 +44,15 @@ export function TestRestfulResponse(response: AxiosResponse | any, success: ((r:
 
 }
 
-export function removeInvalidKeys<iRestObject>(request: any, c6Tables: (C6RestfulModel)[]): iRestObject {
+export function removeInvalidKeys<iRestObject>(request: any, c6Tables: { [key: string]: (C6RestfulModel & { [key: string]: any }) }): iRestObject {
 
     let intersection: iRestObject = {} as iRestObject
 
     let restfulObjectKeys: string[] = [];
 
-    c6Tables.forEach(table => Object.values(table.COLUMNS).forEach(column => {
+    const tableList = Object.values(c6Tables)
+
+    tableList.forEach(table => Object.values(table.COLUMNS).forEach(column => {
 
         if (false === restfulObjectKeys.includes(column)) {
 
@@ -320,8 +322,8 @@ interface iRest<CustomAndRequiredFields extends { [key: string]: any }, RestTabl
 }, ResponseDataType = any,
     RestShortTableNames extends string = any> {
     C6: C6Object,
-    axios: AxiosInstance,
-    restURL: string,
+    axios?: AxiosInstance,
+    restURL?: string,
     tableName: RestShortTableNames | RestShortTableNames[],
     requestMethod: iRestMethods,
     clearCache?: () => void,
@@ -357,8 +359,8 @@ export default function restApi<
     RestShortTableNames extends string = any
 >({
       C6,
-      axios,
-      restURL,
+      axios = axiosInstance,
+      restURL = '/rest/',
       tableName,
       requestMethod = GET,
       queryCallback = {},

@@ -3,6 +3,8 @@
  */
 
 export * from "./api/C6Constants";
+export { default as axiosInstance } from "./api/axiosInstance";
+export * from "./api/axiosInstance";
 export { default as convertForRequestBody } from "./api/convertForRequestBody";
 export * from "./api/convertForRequestBody";
 export { default as restRequest } from "./api/restRequest";
