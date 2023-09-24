@@ -355,7 +355,8 @@ export default function restApi<
     } = any,
     RequestTableOverrides extends {
         [key: string]: any;
-    } = any, ResponseDataType = any,
+    } = any,
+    ResponseDataType = any,
     RestShortTableNames extends string = any
 >({
       C6,

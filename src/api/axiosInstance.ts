@@ -1,9 +1,6 @@
 // @link https://www.npmjs.com/package/axios-cache-adapter
 import axios from "axios";
 import Qs from "qs";
-//import axiosInterceptors from "api/hoc/axiosInterceptors";
-
-// noinspection SpellCheckingInspection
 
 export default (axios.create({
 
