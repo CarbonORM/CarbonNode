@@ -25,6 +25,7 @@ export interface iTypeValidation {
 export interface C6RestfulModel<RestShortTableNames extends string = string> {
     TABLE_NAME: RestShortTableNames,
     PRIMARY: string[],
+    PRIMARY_SHORT: string[],
     COLUMNS: stringMap,
     REGEX_VALIDATION: RegExpMap,
     TYPE_VALIDATION: {[key: string]: iTypeValidation},

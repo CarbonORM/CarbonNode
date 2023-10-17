@@ -2,6 +2,15 @@
 import axios from "axios";
 import Qs from "qs";
 
+
+// updating these values
+// @link https://github.com/axios/axios/issues/209
+//
+// only affects the global instance and instances created afterwards
+// axios.defaults.headers.common['Auth-Token'] = 'foo bar';
+//
+// immediately affects this instance
+// axiosInstance.defaults.headers['Auth-Token'] = 'foo bar';
 export default (axios.create({
 
     // `baseURL` will be prepended to `url` unless `url` is absolute.
