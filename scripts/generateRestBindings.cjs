@@ -1,0 +1,205 @@
+var __values = (this && this.__values) || function(o) {
+    var s = typeof Symbol === "function" && Symbol.iterator, m = s && o[s], i = 0;
+    if (m) return m.call(o);
+    if (o && typeof o.length === "number") return {
+        next: function () {
+            if (o && i >= o.length) o = void 0;
+            return { value: o && o[i++], done: !o };
+        }
+    };
+    throw new TypeError(s ? "Object is not iterable." : "Symbol.iterator is not defined.");
+};
+var execSync = require('child_process').execSync;
+var fs = require('fs');
+var path = require('path');
+var Handlebars = require('handlebars');
+var args = process.argv.slice(2); // Slice the first two elements
+var argMap = {};
+for (var i = 0; i < args.length; i += 2) {
+    argMap[args[i]] = args[i + 1];
+}
+var MySQLDump = /** @class */ (function () {
+    function MySQLDump() {
+    }
+    MySQLDump.buildCNF = function (cnfFile) {
+        if (cnfFile === void 0) { cnfFile = null; }
+        if (this.mysqlcnf !== '') {
+            return this.mysqlcnf;
+        }
+        var cnf = [
+            '[client]',
+            "user = ".concat(this.DB_USER),
+            "password = ".concat(this.DB_PASS),
+            "host = ".concat(this.DB_HOST),
+            "port = ".concat(this.DB_PORT),
+            '',
+        ];
+        cnf.push("");
+        cnfFile !== null && cnfFile !== void 0 ? cnfFile : (cnfFile = path.join(process.cwd(), '/mysql.cnf'));
+        try {
+            fs.writeFileSync(cnfFile, cnf.join('\n'));
+            fs.chmodSync(cnfFile, 488);
+            console.log("Successfully created mysql.cnf file in (".concat(cnfFile, ")"));
+        }
+        catch (error) {
+            console.error("Failed to store file contents of mysql.cnf in (".concat(process.cwd(), ")"), error);
+            process.exit(1);
+        }
+        return (this.mysqlcnf = cnfFile);
+    };
+    MySQLDump.MySQLDump = function (mysqldump, data, schemas, outputFile, otherOption, specificTable) {
+        if (mysqldump === void 0) { mysqldump = null; }
+        if (data === void 0) { data = false; }
+        if (schemas === void 0) { schemas = true; }
+        if (outputFile === void 0) { outputFile = null; }
+        if (otherOption === void 0) { otherOption = ''; }
+        if (specificTable === void 0) { specificTable = null; }
+        specificTable = specificTable || '';
+        if (outputFile === null) {
+            outputFile = path.join(process.cwd(), 'mysqldump.sql');
+        }
+        if (!data && !schemas) {
+            console.warn("MysqlDump is running with --no-create-info and --no-data. Why?");
+        }
+        var defaultsExtraFile = this.buildCNF();
+        var hexBlobOption = data ? '--hex-blob ' : '--no-data ';
+        var createInfoOption = schemas ? '' : ' --no-create-info ';
+        var cmd = "".concat(mysqldump || 'mysqldump', " --defaults-extra-file=\"").concat(defaultsExtraFile, "\" ").concat(otherOption, " --skip-add-locks --single-transaction --quick ").concat(createInfoOption).concat(hexBlobOption).concat(this.DB_NAME, " ").concat(specificTable, " > '").concat(outputFile, "'");
+        this.executeAndCheckStatus(cmd);
+        return (this.mysqldump = outputFile);
+    };
+    MySQLDump.executeAndCheckStatus = function (command, exitOnFailure, output) {
+        if (exitOnFailure === void 0) { exitOnFailure = true; }
+        if (output === void 0) { output = []; }
+        try {
+            var stdout = execSync(command, { encoding: 'utf-8' });
+            output.push(stdout);
+        }
+        catch (error) {
+            console.log("The command >>  ".concat(command, " \n\t returned with a status code (").concat(error.status, "). Expecting 0 for success."));
+            console.log("Command output::\t ".concat(error.stdout));
+            if (exitOnFailure) {
+                process.exit(error.status);
+            }
+        }
+    };
+    MySQLDump.mysqlcnf = '';
+    MySQLDump.mysqldump = '';
+    MySQLDump.DB_USER = argMap['--user'] || 'root';
+    MySQLDump.DB_PASS = argMap['--pass'] || 'password';
+    MySQLDump.DB_HOST = argMap['--host'] || '127.0.0.1';
+    MySQLDump.DB_PORT = argMap['--port'] || '3306';
+    MySQLDump.DB_NAME = argMap['--dbname'] || 'carbonPHP';
+    MySQLDump.DB_PREFIX = argMap['--prefix'] || 'carbon_';
+    return MySQLDump;
+}());
+// Usage example
+var dumpFileLocation = MySQLDump.MySQLDump();
+function capitalizeFirstLetter(string) {
+    return string.charAt(0).toUpperCase() + string.slice(1);
+}
+function determineTypeScriptType(mysqlType) {
+    switch (mysqlType.toLowerCase()) {
+        case 'varchar':
+        case 'text':
+        case 'char':
+        case 'datetime':
+        case 'timestamp':
+        case 'date':
+            return 'string';
+        case 'int':
+        case 'bigint':
+        case 'smallint':
+        case 'decimal':
+        case 'float':
+        case 'double':
+            return 'number';
+        case 'boolean':
+        case 'tinyint(1)':
+            return 'boolean';
+        case 'json':
+            return 'any'; // or 'object' based on usage
+        default:
+            return 'string';
+    }
+}
+var parseSQLToTypeScript = function (sql) {
+    var e_1, _a;
+    var tableMatches = sql.matchAll(/CREATE\s+TABLE\s+`?(\w+)`?\s+\(((.|\n)+?)\)\s*(ENGINE=.+?);/gm);
+    var tableData = [];
+    var _loop_1 = function (tableMatch) {
+        var tableName = tableMatch[1]; // Previously tableMatch.groups.TableName
+        var columnDefinitions = tableMatch[2]; // Previously tableMatch.groups.ColumnDefinitions
+        var columns = {};
+        var columnRegex = /`(\w+)` (\w+)(?:\((\d+)\))?( NOT NULL)?( AUTO_INCREMENT)?(?: DEFAULT '(\w+)')?/g;
+        var columnMatch = void 0;
+        while ((columnMatch = columnRegex.exec(columnDefinitions))) {
+            columns[columnMatch[1]] = {
+                type: columnMatch[2],
+                length: columnMatch[3] || '',
+                notNull: !!columnMatch[4],
+                autoIncrement: !!columnMatch[5],
+                defaultValue: columnMatch[6] || '',
+            };
+        }
+        var primaryKeyMatch = columnDefinitions.match(/PRIMARY KEY \(([^)]+)\)/i);
+        var primaryKeys = primaryKeyMatch
+            ? primaryKeyMatch[1].split(',').map(function (key) { return key.trim().replace(/`/g, ''); })
+            : [];
+        var tsModel_1 = {
+            TABLE_NAME: tableName,
+            TABLE_NAME_SHORT: tableName.replace(MySQLDump.DB_PREFIX, ''),
+            TABLE_NAME_LOWER: tableName.toLowerCase(),
+            TABLE_NAME_UPPER: tableName.toUpperCase(),
+            TABLE_NAME_PASCAL_CASE: tableName.split('_').map(capitalizeFirstLetter).join('_'),
+            TABLE_NAME_SHORT_PASCAL_CASE: tableName.replace(MySQLDump.DB_PREFIX, '').split('_').map(capitalizeFirstLetter).join('_'),
+            PRIMARY: primaryKeys.map(function (pk) { return "".concat(tableName, ".").concat(pk); }),
+            PRIMARY_SHORT: primaryKeys,
+            COLUMNS: {},
+            COLUMNS_UPPERCASE: {},
+            TYPE_VALIDATION: {},
+            REGEX_VALIDATION: {},
+        };
+        for (var colName in columns) {
+            tsModel_1.COLUMNS["".concat(tableName, ".").concat(colName)] = colName;
+            tsModel_1.COLUMNS_UPPERCASE[colName.toUpperCase()] = tableName + '.' + colName;
+            tsModel_1.TYPE_VALIDATION["".concat(tableName, ".").concat(colName)] = {
+                COLUMN_NAME: colName,
+                MYSQL_TYPE: columns[colName].type.toLowerCase(),
+                TYPESCRIPT_TYPE: determineTypeScriptType(columns[colName].type.toLowerCase()) === "number" ? "number" : "string",
+                MAX_LENGTH: columns[colName].length,
+                AUTO_INCREMENT: columns[colName].autoIncrement,
+                SKIP_COLUMN_IN_POST: !columns[colName].notNull && !columns[colName].defaultValue,
+            };
+        }
+        tableData.push(tsModel_1);
+    };
+    try {
+        // @ts-ignore
+        for (var tableMatches_1 = __values(tableMatches), tableMatches_1_1 = tableMatches_1.next(); !tableMatches_1_1.done; tableMatches_1_1 = tableMatches_1.next()) {
+            var tableMatch = tableMatches_1_1.value;
+            _loop_1(tableMatch);
+        }
+    }
+    catch (e_1_1) { e_1 = { error: e_1_1 }; }
+    finally {
+        try {
+            if (tableMatches_1_1 && !tableMatches_1_1.done && (_a = tableMatches_1.return)) _a.call(tableMatches_1);
+        }
+        finally { if (e_1) throw e_1.error; }
+    }
+    return tableData;
+};
+// use dumpFileLocation to get sql
+var sql = fs.readFileSync(dumpFileLocation, 'utf-8');
+var tsModel = parseSQLToTypeScript(sql);
+// write to file
+fs.writeFileSync(path.join(process.cwd(), 'C6MySqlDump.json'), JSON.stringify(tsModel));
+// import this file  src/assets/handlebars/C6.tsx.handlebars for a mustache template
+var template = fs.readFileSync(path.resolve(__dirname, 'assets/handlebars/C6.tsx.handlebars'), 'utf-8');
+fs.writeFileSync(path.join(process.cwd(), 'C6.tsx'), Handlebars.compile(template)({
+    TABLES: tsModel,
+    RestTableNames: tsModel.map(function (table) { return "'" + table.TABLE_NAME_PASCAL_CASE + "'"; }).join('\n | '),
+    RestShortTableNames: tsModel.map(function (table) { return "'" + table.TABLE_NAME_SHORT_PASCAL_CASE + "'"; }).join('\n | '),
+    RestTableInterfaces: tsModel.map(function (table) { return 'i' + table.TABLE_NAME_SHORT_PASCAL_CASE; }).join('\n | '),
+}));
