@@ -14,7 +14,7 @@ for (let i = 0; i < args.length; i += 2) {
 }
 
 const createDirIfNotExists = dir =>
-    !fs.existsSync(dir) ? fs.mkdirSync(dir) : undefined;
+    !fs.existsSync(dir) ? fs.mkdirSync(dir, { recursive: true }) : undefined;
 
 class MySQLDump {
 
