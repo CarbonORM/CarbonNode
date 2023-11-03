@@ -1,0 +1,121 @@
+import {xdescribe, expect, test} from '@jest/globals';
+import {CarbonReact} from "@carbonorm/carbonreact";
+import {checkAllRequestsComplete} from "@carbonorm/carbonnode";
+import {act, waitFor} from '@testing-library/react';
+import {C6, iRestfulObjectArrayTypes, i{{TABLE_NAME_SHORT_PASCAL_CASE}}, {{TABLE_NAME_SHORT}} } from "{{RELATIVE_OUTPUT_DIR}}/C6";
+
+const randomString = Math.random().toString(36).substring(7);
+const randomInt = Math.floor(Math.random() * 1000000);
+const fillString = 'string' + randomString + randomInt;
+
+/**
+{{{TABLE_DEFINITION}}}
+**/
+
+const Test_Data: i{{TABLE_NAME_SHORT_PASCAL_CASE}} = {
+{{#each TYPE_VALIDATION}}
+    {{#SKIP_COLUMN_IN_POST}}{{COLUMN_NAME}}: {{#TYPESCRIPT_TYPE_IS_STRING}}fillString.substring(0, {{MAX_LENGTH}}){{/TYPESCRIPT_TYPE_IS_STRING}}{{#TYPESCRIPT_TYPE_IS_NUMBER}}randomInt,{{/TYPESCRIPT_TYPE_IS_NUMBER}}{{/SKIP_COLUMN_IN_POST}}
+{{/each}}
+}
+
+export default Test_Data;
+
+xdescribe('REST {{TABLE_NAME_SHORT_PASCAL_CASE}} api', () => {
+
+    let testData = Test_Data;
+
+    test('GET POST PUT DELETE', async () => {
+
+        await act(async () => {
+
+            let selectAllResponse = await {{TABLE_NAME_SHORT}}.Get({})
+
+            if ('function' === typeof selectAllResponse) {
+                throw Error('selectAllResponse is a promise, this typically means this specific get request has already run during test setup.');
+            }
+
+            // We don't care if it is filled or not, just that the request can be made.
+            expect(selectAllResponse?.data?.rest).not.toBeUndefined();
+
+            const postResponse = await {{TABLE_NAME_SHORT}}.Post(testData);
+
+            console.log('postResponse', postResponse?.data)
+
+            expect(postResponse?.data?.created).not.toBeUndefined();
+
+            const primaryKey = {{TABLE_NAME_SHORT}}.PRIMARY_SHORT[0];
+
+            const postID = postResponse?.data?.created
+
+            const singleRowSelect = await {{TABLE_NAME_SHORT}}.Get({
+                [C6.WHERE]: {
+                    [{{TABLE_NAME_SHORT}}[primaryKey.toUpperCase()]]: postID,
+                }
+            })
+
+            if ('function' === typeof singleRowSelect) {
+                throw Error('singleRowSelect is a promise, this is unexpected.');
+            }
+
+            console.log('singleRowSelect', singleRowSelect?.data)
+
+            // Ensure the expected response datastructure is returned
+            expect(singleRowSelect?.data?.rest).not.toBeUndefined();
+
+            // Make sure the previously created post is now returned
+            expect(typeof singleRowSelect?.data?.rest).toEqual('object');
+
+            // todo - make this work correctly with multiple primary keys
+            const selectedPostId = singleRowSelect?.data?.rest[0][primaryKey]
+
+            expect(selectedPostId).toEqual(postID);
+
+            const multipleRowSelect = await {{TABLE_NAME_SHORT}}.Get({
+                [C6.WHERE]: {
+                    [{{TABLE_NAME_SHORT}}[primaryKey.toUpperCase()]]: [C6.IN, [0, postID]],
+                }
+            })
+
+            if ('function' === typeof multipleRowSelect) {
+                throw Error('singleRowSelect is a promise, this is unexpected.');
+            }
+
+            console.log('singleRowSelect', multipleRowSelect?.data)
+
+            // Ensure the expected response datastructure is returned
+            expect(multipleRowSelect?.data?.rest).not.toBeUndefined();
+
+            // Make sure the previously created post is now returned
+            expect(typeof multipleRowSelect?.data?.rest).toEqual('object');
+
+            testData[primaryKey] = postID
+
+            {{#each TYPE_VALIDATION}}
+            testData.{{@key}} = {{#TYPESCRIPT_TYPE_IS_STRING}}fillString.substring(0, {{TYPE_VALIDATION.MAX_LENGTH}}){{/TYPESCRIPT_TYPE_IS_STRING}}{{#TYPESCRIPT_TYPE_IS_NUMBER}}randomInt{{/TYPESCRIPT_TYPE_IS_NUMBER}};
+            {{/each}}
+
+            // wait for the global state to be updated
+            expect(CarbonReact.getState<iRestfulObjectArrayTypes>().{{TABLE_NAME_SHORT}}).not.toBeUndefined();
+
+            const updateResponse = await {{TABLE_NAME_SHORT}}.Put(testData)
+
+            expect(updateResponse?.data?.updated).not.toBeUndefined();
+
+            const deleteResponse = await {{TABLE_NAME_SHORT}}.Delete({
+                [primaryKey]: postID
+            })
+
+            console.log('deleteResponse', deleteResponse?.data)
+
+            expect(deleteResponse?.data?.deleted).not.toBeUndefined();
+
+            await waitFor(async () => {
+                expect(checkAllRequestsComplete()).toEqual(true);
+            }, {timeout: 10000, interval: 1000});
+
+        })
+
+    }, 100000);
+
+})
+

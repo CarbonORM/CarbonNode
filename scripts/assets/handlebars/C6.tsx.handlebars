@@ -55,7 +55,21 @@ export const {{TABLE_NAME_SHORT}}: C6RestfulModel & iDefine{{TABLE_NAME_SHORT_PA
     {{#each REGEX_VALIDATION}}
         '{{@key}}': '{{this}}',
     {{/each}}
-    }
+    },
+    TABLE_REFERENCES: {
+        {{#each TABLE_REFERENCES}}'{{@key}}': [{{#this}}{
+            TABLE: '{{TABLE}}',
+            COLUMN: '{{COLUMN}}',
+            CONSTRAINT: '{{CONSTRAINT}}',
+        },{{/this}}],{{/each}}
+    },
+    TABLE_REFERENCED_BY: {
+        {{#each TABLE_REFERENCED_BY}}'{{@key}}': [{{#this}}{
+            TABLE: '{{TABLE}}',
+            COLUMN: '{{COLUMN}}',
+            CONSTRAINT: '{{CONSTRAINT}}',
+        },{{/this}}],{{/each}}
+    },
 }
 {{/TABLES}}
 

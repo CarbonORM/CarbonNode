@@ -18,6 +18,9 @@ var argMap = {};
 for (var i = 0; i < args.length; i += 2) {
     argMap[args[i]] = args[i + 1];
 }
+var createDirIfNotExists = function (dir) {
+    return !fs.existsSync(dir) ? fs.mkdirSync(dir) : undefined;
+};
 var MySQLDump = /** @class */ (function () {
     function MySQLDump() {
     }
@@ -91,8 +94,12 @@ var MySQLDump = /** @class */ (function () {
     MySQLDump.DB_PORT = argMap['--port'] || '3306';
     MySQLDump.DB_NAME = argMap['--dbname'] || 'carbonPHP';
     MySQLDump.DB_PREFIX = argMap['--prefix'] || 'carbon_';
+    MySQLDump.RELATIVE_OUTPUT_DIR = argMap['--output'] || '/src/api/rest';
+    MySQLDump.OUTPUT_DIR = path.join(process.cwd(), MySQLDump.RELATIVE_OUTPUT_DIR);
     return MySQLDump;
 }());
+createDirIfNotExists(MySQLDump.OUTPUT_DIR);
+var pathRuntimeReference = MySQLDump.RELATIVE_OUTPUT_DIR.replace(/(^\/(src\/)?)|(\/+$)/g, '');
 // Usage example
 var dumpFileLocation = MySQLDump.MySQLDump();
 function capitalizeFirstLetter(string) {
@@ -124,14 +131,15 @@ function determineTypeScriptType(mysqlType) {
     }
 }
 var parseSQLToTypeScript = function (sql) {
-    var e_1, _a;
+    var e_1, _a, e_2, _b;
     var tableMatches = sql.matchAll(/CREATE\s+TABLE\s+`?(\w+)`?\s+\(((.|\n)+?)\)\s*(ENGINE=.+?);/gm);
-    var tableData = [];
+    var tableData = {};
+    var references = [];
     var _loop_1 = function (tableMatch) {
-        var tableName = tableMatch[1]; // Previously tableMatch.groups.TableName
-        var columnDefinitions = tableMatch[2]; // Previously tableMatch.groups.ColumnDefinitions
+        var tableName = tableMatch[1];
+        var columnDefinitions = tableMatch[2];
         var columns = {};
-        var columnRegex = /`(\w+)` (\w+)(?:\((\d+)\))?( NOT NULL)?( AUTO_INCREMENT)?(?: DEFAULT '(\w+)')?/g;
+        var columnRegex = /^\s*`(\w+)` (\w+)(?:\((\d+)\))?( NOT NULL)?( AUTO_INCREMENT)?(?: DEFAULT '(\w+)')?/g;
         var columnMatch = void 0;
         while ((columnMatch = columnRegex.exec(columnDefinitions))) {
             columns[columnMatch[1]] = {
@@ -142,12 +150,35 @@ var parseSQLToTypeScript = function (sql) {
                 defaultValue: columnMatch[6] || '',
             };
         }
+        // Extract primary keys
         var primaryKeyMatch = columnDefinitions.match(/PRIMARY KEY \(([^)]+)\)/i);
         var primaryKeys = primaryKeyMatch
             ? primaryKeyMatch[1].split(',').map(function (key) { return key.trim().replace(/`/g, ''); })
             : [];
-        var tsModel_1 = {
+        // Extract foreign keys
+        var foreignKeyRegex = /CONSTRAINT `([^`]+)` FOREIGN KEY \(`([^`]+)`\) REFERENCES `([^`]+)` \(`([^`]+)`\)( ON DELETE (\w+))?( ON UPDATE (\w+))?/g;
+        var foreignKeyMatch = void 0;
+        while ((foreignKeyMatch = foreignKeyRegex.exec(columnDefinitions))) {
+            var constraintName = foreignKeyMatch[1];
+            var localColumn = foreignKeyMatch[2];
+            var foreignTable = foreignKeyMatch[3];
+            var foreignColumn = foreignKeyMatch[4];
+            var onDeleteAction = foreignKeyMatch[6] || null;
+            var onUpdateAction = foreignKeyMatch[8] || null;
+            references.push({
+                TABLE: tableName,
+                CONSTRAINT: constraintName,
+                FOREIGN_KEY: localColumn,
+                REFERENCES: "".concat(foreignTable, ".").concat(foreignColumn),
+                ON_DELETE: onDeleteAction,
+                ON_UPDATE: onUpdateAction
+            });
+        }
+        var tsModel = {
+            RELATIVE_OUTPUT_DIR: pathRuntimeReference,
             TABLE_NAME: tableName,
+            TABLE_DEFINITION: tableMatch[0],
+            TABLE_CONSTRAINT: references,
             TABLE_NAME_SHORT: tableName.replace(MySQLDump.DB_PREFIX, ''),
             TABLE_NAME_LOWER: tableName.toLowerCase(),
             TABLE_NAME_UPPER: tableName.toUpperCase(),
@@ -159,20 +190,25 @@ var parseSQLToTypeScript = function (sql) {
             COLUMNS_UPPERCASE: {},
             TYPE_VALIDATION: {},
             REGEX_VALIDATION: {},
+            TABLE_REFERENCES: {},
+            TABLE_REFERENCED_BY: {},
         };
         for (var colName in columns) {
-            tsModel_1.COLUMNS["".concat(tableName, ".").concat(colName)] = colName;
-            tsModel_1.COLUMNS_UPPERCASE[colName.toUpperCase()] = tableName + '.' + colName;
-            tsModel_1.TYPE_VALIDATION["".concat(tableName, ".").concat(colName)] = {
+            tsModel.COLUMNS["".concat(tableName, ".").concat(colName)] = colName;
+            tsModel.COLUMNS_UPPERCASE[colName.toUpperCase()] = tableName + '.' + colName;
+            var typescript_type = determineTypeScriptType(columns[colName].type.toLowerCase()) === "number" ? "number" : "string";
+            tsModel.TYPE_VALIDATION["".concat(tableName, ".").concat(colName)] = {
                 COLUMN_NAME: colName,
                 MYSQL_TYPE: columns[colName].type.toLowerCase(),
-                TYPESCRIPT_TYPE: determineTypeScriptType(columns[colName].type.toLowerCase()) === "number" ? "number" : "string",
+                TYPESCRIPT_TYPE: typescript_type,
+                TYPESCRIPT_TYPE_IS_STRING: 'string' === typescript_type,
+                TYPESCRIPT_TYPE_IS_NUMBER: 'number' === typescript_type,
                 MAX_LENGTH: columns[colName].length,
                 AUTO_INCREMENT: columns[colName].autoIncrement,
                 SKIP_COLUMN_IN_POST: !columns[colName].notNull && !columns[colName].defaultValue,
             };
         }
-        tableData.push(tsModel_1);
+        tableData[tableName] = tsModel;
     };
     try {
         // @ts-ignore
@@ -188,18 +224,68 @@ var parseSQLToTypeScript = function (sql) {
         }
         finally { if (e_1) throw e_1.error; }
     }
-    return tableData;
+    try {
+        for (var references_1 = __values(references), references_1_1 = references_1.next(); !references_1_1.done; references_1_1 = references_1.next()) {
+            var ref = references_1_1.value;
+            var foreignTable = ref.REFERENCES.split('.')[0];
+            var foreignColumn = ref.REFERENCES.split('.')[1];
+            var tableName = ref.TABLE;
+            var columnName = ref.FOREIGN_KEY;
+            var constraintName = ref.CONSTRAINT;
+            if (!tableData[foreignTable]) {
+                console.log("Foreign table ".concat(foreignTable, " not found for ").concat(ref.TABLE, ".").concat(ref.CONSTRAINT));
+                continue;
+            }
+            if (!tableData[foreignTable].TABLE_REFERENCED_BY) {
+                tableData[foreignTable].TABLE_REFERENCED_BY = {};
+            }
+            if (!tableData[foreignTable].TABLE_REFERENCED_BY[foreignColumn]) {
+                tableData[foreignTable].TABLE_REFERENCED_BY[foreignColumn] = [];
+            }
+            tableData[foreignTable].TABLE_REFERENCED_BY[foreignColumn].push({
+                TABLE: tableName,
+                COLUMN: columnName,
+                CONSTRAINT: constraintName
+            });
+            if (!tableData[tableName].TABLE_REFERENCES) {
+                tableData[tableName].TABLE_REFERENCES = {};
+            }
+            if (!tableData[tableName].TABLE_REFERENCES[columnName]) {
+                tableData[tableName].TABLE_REFERENCES[columnName] = [];
+            }
+            tableData[tableName].TABLE_REFERENCES[columnName].push({
+                TABLE: foreignTable,
+                COLUMN: foreignColumn,
+                CONSTRAINT: constraintName
+            });
+        }
+    }
+    catch (e_2_1) { e_2 = { error: e_2_1 }; }
+    finally {
+        try {
+            if (references_1_1 && !references_1_1.done && (_b = references_1.return)) _b.call(references_1);
+        }
+        finally { if (e_2) throw e_2.error; }
+    }
+    var tables = Object.values(tableData);
+    return {
+        TABLES: tables,
+        RestTableNames: tables.map(function (table) { return "'" + table.TABLE_NAME + "'"; }).join('\n | '),
+        RestShortTableNames: tables.map(function (table) { return "'" + table.TABLE_NAME_SHORT + "'"; }).join('\n | '),
+        RestTableInterfaces: tables.map(function (table) { return 'i' + table.TABLE_NAME_SHORT_PASCAL_CASE; }).join('\n | '),
+    };
 };
 // use dumpFileLocation to get sql
 var sql = fs.readFileSync(dumpFileLocation, 'utf-8');
-var tsModel = parseSQLToTypeScript(sql);
+var tableData = parseSQLToTypeScript(sql);
 // write to file
-fs.writeFileSync(path.join(process.cwd(), 'C6MySqlDump.json'), JSON.stringify(tsModel));
+fs.writeFileSync(path.join(process.cwd(), 'C6MySqlDump.json'), JSON.stringify(tableData));
 // import this file  src/assets/handlebars/C6.tsx.handlebars for a mustache template
 var template = fs.readFileSync(path.resolve(__dirname, 'assets/handlebars/C6.tsx.handlebars'), 'utf-8');
-fs.writeFileSync(path.join(process.cwd(), 'C6.tsx'), Handlebars.compile(template)({
-    TABLES: tsModel,
-    RestTableNames: tsModel.map(function (table) { return "'" + table.TABLE_NAME_PASCAL_CASE + "'"; }).join('\n | '),
-    RestShortTableNames: tsModel.map(function (table) { return "'" + table.TABLE_NAME_SHORT_PASCAL_CASE + "'"; }).join('\n | '),
-    RestTableInterfaces: tsModel.map(function (table) { return 'i' + table.TABLE_NAME_SHORT_PASCAL_CASE; }).join('\n | '),
-}));
+fs.writeFileSync(path.join(MySQLDump.OUTPUT_DIR, 'C6.tsx'), Handlebars.compile(template)(tableData));
+var testTemplate = fs.readFileSync(path.resolve(__dirname, 'assets/handlebars/Tests.tsx.handlebars'), 'utf-8');
+Object.values(tableData.TABLES).map(function (tableData, key) {
+    var tableName = tableData.TABLE_NAME_SHORT;
+    fs.writeFileSync(path.join(MySQLDump.OUTPUT_DIR, tableName + '.tsx'), Handlebars.compile(testTemplate)(tableData));
+});
+console.log('Successfully created CarbonORM bindings!');
