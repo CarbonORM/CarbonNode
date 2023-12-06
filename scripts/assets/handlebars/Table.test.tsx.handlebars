@@ -3,6 +3,7 @@ import {CarbonReact} from "@carbonorm/carbonreact";
 import {checkAllRequestsComplete} from "@carbonorm/carbonnode";
 import {act, waitFor} from '@testing-library/react';
 import {C6, iRestfulObjectArrayTypes, i{{TABLE_NAME_SHORT_PASCAL_CASE}}, {{TABLE_NAME_SHORT}} } from "{{RELATIVE_OUTPUT_DIR}}/C6";
+import {{TABLE_NAME_SHORT_PASCAL_CASE}} from "./{{TABLE_NAME_SHORT_PASCAL_CASE}}";
 
 const randomString = Math.random().toString(36).substring(7);
 const randomInt = Math.floor(Math.random() * 1000000);
@@ -28,7 +29,7 @@ xdescribe('REST {{TABLE_NAME_SHORT_PASCAL_CASE}} api', () => {
 
         await act(async () => {
 
-            let selectAllResponse = await {{TABLE_NAME_SHORT}}.Get({})
+            let selectAllResponse = await {{TABLE_NAME_SHORT_PASCAL_CASE}}.Get({})
 
             if ('function' === typeof selectAllResponse) {
                 throw Error('selectAllResponse is a promise, this typically means this specific get request has already run during test setup.');
@@ -37,7 +38,7 @@ xdescribe('REST {{TABLE_NAME_SHORT_PASCAL_CASE}} api', () => {
             // We don't care if it is filled or not, just that the request can be made.
             expect(selectAllResponse?.data?.rest).not.toBeUndefined();
 
-            const postResponse = await {{TABLE_NAME_SHORT}}.Post(testData);
+            const postResponse = await {{TABLE_NAME_SHORT_PASCAL_CASE}}.Post(testData);
 
             console.log('postResponse', postResponse?.data)
 
@@ -47,7 +48,7 @@ xdescribe('REST {{TABLE_NAME_SHORT_PASCAL_CASE}} api', () => {
 
             const postID = postResponse?.data?.created
 
-            const singleRowSelect = await {{TABLE_NAME_SHORT}}.Get({
+            const singleRowSelect = await {{TABLE_NAME_SHORT_PASCAL_CASE}}.Get({
                 [C6.WHERE]: {
                     [{{TABLE_NAME_SHORT}}[primaryKey.toUpperCase()]]: postID,
                 }
@@ -70,7 +71,7 @@ xdescribe('REST {{TABLE_NAME_SHORT_PASCAL_CASE}} api', () => {
 
             expect(selectedPostId).toEqual(postID);
 
-            const multipleRowSelect = await {{TABLE_NAME_SHORT}}.Get({
+            const multipleRowSelect = await {{TABLE_NAME_SHORT_PASCAL_CASE}}.Get({
                 [C6.WHERE]: {
                     [{{TABLE_NAME_SHORT}}[primaryKey.toUpperCase()]]: [C6.IN, [0, postID]],
                 }
@@ -91,17 +92,17 @@ xdescribe('REST {{TABLE_NAME_SHORT_PASCAL_CASE}} api', () => {
             testData[primaryKey] = postID
 
             {{#each TYPE_VALIDATION}}
-            testData.{{@key}} = {{#TYPESCRIPT_TYPE_IS_STRING}}fillString.substring(0, {{TYPE_VALIDATION.MAX_LENGTH}}){{/TYPESCRIPT_TYPE_IS_STRING}}{{#TYPESCRIPT_TYPE_IS_NUMBER}}randomInt{{/TYPESCRIPT_TYPE_IS_NUMBER}};
+            testData.{{COLUMN_NAME}} = {{#TYPESCRIPT_TYPE_IS_STRING}}fillString.substring(0, {{MAX_LENGTH}}){{/TYPESCRIPT_TYPE_IS_STRING}}{{#TYPESCRIPT_TYPE_IS_NUMBER}}randomInt{{/TYPESCRIPT_TYPE_IS_NUMBER}};
             {{/each}}
 
             // wait for the global state to be updated
             expect(CarbonReact.getState<iRestfulObjectArrayTypes>().{{TABLE_NAME_SHORT}}).not.toBeUndefined();
 
-            const updateResponse = await {{TABLE_NAME_SHORT}}.Put(testData)
+            const updateResponse = await {{TABLE_NAME_SHORT_PASCAL_CASE}}.Put(testData)
 
             expect(updateResponse?.data?.updated).not.toBeUndefined();
 
-            const deleteResponse = await {{TABLE_NAME_SHORT}}.Delete({
+            const deleteResponse = await {{TABLE_NAME_SHORT_PASCAL_CASE}}.Delete({
                 [primaryKey]: postID
             })
 

@@ -13,7 +13,7 @@ import {
 import {AxiosResponse} from "axios";
 import {iAPI, Modify} from "restRequest";
 import {deleteRestfulObjectArrays, updateRestfulObjectArrays} from "@carbonorm/carbonreact";
-import {C6, i{{TABLE_NAME_SHORT_PASCAL_CASE}}, {{TABLE_NAME_SHORT}}, RestShortTableNames} from "./C6";
+import {C6, i{{TABLE_NAME_SHORT_PASCAL_CASE}}, {{TABLE_NAME_SHORT}}, RestTableNames} from "./C6";
 
 /**
 {{{TABLE_DEFINITION}}}
@@ -24,7 +24,7 @@ type GetCustomAndRequiredFields = {}
 type GetRequestTableOverrides = {}
 
 // required parameters, optional parameters, parameter type overrides, response, and table names
-export const Get = restRequest<GetCustomAndRequiredFields, i{{TABLE_NAME_SHORT_PASCAL_CASE}}, GetRequestTableOverrides, iGetC6RestResponse<i{{TABLE_NAME_SHORT_PASCAL_CASE}}>, RestShortTableNames>({
+export const Get = restRequest<GetCustomAndRequiredFields, i{{TABLE_NAME_SHORT_PASCAL_CASE}}, GetRequestTableOverrides, iGetC6RestResponse<i{{TABLE_NAME_SHORT_PASCAL_CASE}}>, RestTableNames>({
     C6: C6,
     tableName: {{TABLE_NAME_SHORT}}.TABLE_NAME,
     requestMethod: GET,
@@ -51,7 +51,7 @@ export function putState{{TABLE_NAME_SHORT_PASCAL_CASE}}(response : AxiosRespons
     ], "{{TABLE_NAME_SHORT}}", {{TABLE_NAME_SHORT}}.PRIMARY_SHORT as (keyof i{{TABLE_NAME_SHORT_PASCAL_CASE}})[])
 }
 
-export const Put = restRequest<PutCustomAndRequiredFields, i{{TABLE_NAME_SHORT_PASCAL_CASE}}, PutRequestTableOverrides, iPutC6RestResponse<i{{TABLE_NAME_SHORT_PASCAL_CASE}}>, RestShortTableNames>({
+export const Put = restRequest<PutCustomAndRequiredFields, i{{TABLE_NAME_SHORT_PASCAL_CASE}}, PutRequestTableOverrides, iPutC6RestResponse<i{{TABLE_NAME_SHORT_PASCAL_CASE}}>, RestTableNames>({
     C6: C6,
     tableName: {{TABLE_NAME_SHORT}}.TABLE_NAME,
     requestMethod: PUT,
@@ -94,7 +94,7 @@ export function postState{{TABLE_NAME_SHORT_PASCAL_CASE}}(response : AxiosRespon
     )
 }
 
-export const Post = restRequest<PostCustomAndRequiredFields, i{{TABLE_NAME_SHORT_PASCAL_CASE}}, PostRequestTableOverrides, iPostC6RestResponse<i{{TABLE_NAME_SHORT_PASCAL_CASE}}>, RestShortTableNames>({
+export const Post = restRequest<PostCustomAndRequiredFields, i{{TABLE_NAME_SHORT_PASCAL_CASE}}, PostRequestTableOverrides, iPostC6RestResponse<i{{TABLE_NAME_SHORT_PASCAL_CASE}}>, RestTableNames>({
     C6: C6,
     tableName: {{TABLE_NAME_SHORT}}.TABLE_NAME,
     requestMethod: POST,
@@ -116,7 +116,7 @@ export function deleteState{{TABLE_NAME_SHORT_PASCAL_CASE}}(_response : AxiosRes
     ], "{{TABLE_NAME_SHORT}}", {{TABLE_NAME_SHORT}}.PRIMARY_SHORT as (keyof i{{TABLE_NAME_SHORT_PASCAL_CASE}})[])
 }
 
-export const Delete = restRequest<DeleteCustomAndRequiredFields, i{{TABLE_NAME_SHORT_PASCAL_CASE}}, DeleteRequestTableOverrides, iDeleteC6RestResponse<i{{TABLE_NAME_SHORT_PASCAL_CASE}}>, RestShortTableNames>({
+export const Delete = restRequest<DeleteCustomAndRequiredFields, i{{TABLE_NAME_SHORT_PASCAL_CASE}}, DeleteRequestTableOverrides, iDeleteC6RestResponse<i{{TABLE_NAME_SHORT_PASCAL_CASE}}>, RestTableNames>({
     C6: C6,
     tableName: {{TABLE_NAME_SHORT}}.TABLE_NAME,
     requestMethod: DELETE,

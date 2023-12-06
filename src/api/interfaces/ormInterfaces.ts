@@ -28,6 +28,8 @@ export interface iConstraint {
     CONSTRAINT: string
 }
 
+export type tC6Tables = { [key: string]: (C6RestfulModel & { [key: string]: any }) }
+
 export interface C6RestfulModel<RestShortTableNames extends string = string> {
     TABLE_NAME: RestShortTableNames,
     PRIMARY: string[],

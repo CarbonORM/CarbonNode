@@ -1,11 +1,11 @@
 import {
     C6RestfulModel,
-    C6Constants
+    C6Constants,
+    tC6Tables
 } from "@carbonorm/carbonnode";
 {{#TABLES}}
-import {{TABLE_NAME_SHORT_PASCAL_CASE}} from "./{{TABLE_NAME_SHORT_PASCAL_CASE}}";
+import { putState{{TABLE_NAME_SHORT_PASCAL_CASE}}, postState{{TABLE_NAME_SHORT_PASCAL_CASE}}, deleteState{{TABLE_NAME_SHORT_PASCAL_CASE}} } from "./{{TABLE_NAME_SHORT_PASCAL_CASE}}";
 {{/TABLES}}
-
 
 export type RestTableNames = {{{RestTableNames}}};
 
@@ -25,7 +25,7 @@ interface iDefine{{TABLE_NAME_SHORT_PASCAL_CASE}} {
 {{/each}}
 }
 
-export const {{TABLE_NAME_SHORT}}: C6RestfulModel & iDefine{{TABLE_NAME_SHORT_PASCAL_CASE}} = {
+export const {{TABLE_NAME_SHORT}}: C6RestfulModel<RestTableNames> & iDefine{{TABLE_NAME_SHORT_PASCAL_CASE}} = {
     TABLE_NAME: '{{TABLE_NAME}}',
     {{#each COLUMNS_UPPERCASE}}
     {{@key}}: '{{this}}',
@@ -75,20 +75,21 @@ export const {{TABLE_NAME_SHORT}}: C6RestfulModel & iDefine{{TABLE_NAME_SHORT_PA
         },{{/this}}],{{/each}}
     },
     REST_STATE_OPERATIONS: {
-        PUT: {{TABLE_NAME_SHORT_PASCAL_CASE}}.putState{{TABLE_NAME_SHORT_PASCAL_CASE}},
-        POST: {{TABLE_NAME_SHORT_PASCAL_CASE}}.postState{{TABLE_NAME_SHORT_PASCAL_CASE}},
-        DELETE: {{TABLE_NAME_SHORT_PASCAL_CASE}}.deleteState{{TABLE_NAME_SHORT_PASCAL_CASE}},
+        PUT: putState{{TABLE_NAME_SHORT_PASCAL_CASE}},
+        POST: postState{{TABLE_NAME_SHORT_PASCAL_CASE}},
+        DELETE: deleteState{{TABLE_NAME_SHORT_PASCAL_CASE}},
     },
 }
 {{/TABLES}}
 
-export const TABLES = {
+
+export const TABLES: tC6Tables = {
 {{#TABLES}}
     {{TABLE_NAME_SHORT}}: {{TABLE_NAME_SHORT}},
 {{/TABLES}}
 };
 
-export const C6 : { TABLES: { [key: string]: (C6RestfulModel & { [key: string]: any }) } }
+export const C6 : { TABLES: tC6Tables }
 & { [key: string]: any } = {
     ...C6Constants,
     TABLES: TABLES,
