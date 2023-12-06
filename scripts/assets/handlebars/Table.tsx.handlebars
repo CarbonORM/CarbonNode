@@ -10,97 +10,128 @@ import {
     iPutC6RestResponse,
     removeInvalidKeys
 } from "@carbonorm/carbonnode";
+import {AxiosResponse} from "axios";
+import {iAPI, Modify} from "restRequest";
 import {deleteRestfulObjectArrays, updateRestfulObjectArrays} from "@carbonorm/carbonreact";
-import {C6, i{{ucEachTableName}}, {{noPrefix}}, RestShortTableNames} from "./C6";
+import {C6, i{{TABLE_NAME_SHORT_PASCAL_CASE}}, {{TABLE_NAME_SHORT}}, RestShortTableNames} from "./C6";
 
+/**
+{{{TABLE_DEFINITION}}}
+**/
 
-export const Get = restRequest<{}, i{{ucEachTableName}}, {}, iGetC6RestResponse<i{{ucEachTableName}}>,
-    RestShortTableNames>({
+type GetCustomAndRequiredFields = {}
+
+type GetRequestTableOverrides = {}
+
+// required parameters, optional parameters, parameter type overrides, response, and table names
+export const Get = restRequest<GetCustomAndRequiredFields, i{{TABLE_NAME_SHORT_PASCAL_CASE}}, GetRequestTableOverrides, iGetC6RestResponse<i{{TABLE_NAME_SHORT_PASCAL_CASE}}>, RestShortTableNames>({
     C6: C6,
-    tableName: {{noPrefix}}.TABLE_NAME,
+    tableName: {{TABLE_NAME_SHORT}}.TABLE_NAME,
     requestMethod: GET,
     queryCallback: (request) => {
-    request.success ??= 'Successfully received {{noPrefixReplaced}}!'
-    request.error ??= 'An unknown issue occurred creating the {{noPrefixReplaced}}!'
-    return request
+        request.success ??= 'Successfully received {{TABLE_NAME_SHORT}}!'
+        request.error ??= 'An unknown issue occurred creating the {{TABLE_NAME_SHORT}}!'
+        return request
     },
     responseCallback: (response, _request) => {
-        updateRestfulObjectArrays<i{{ucEachTableName}}>(response?.data?.rest, "{{noPrefix}}", C6.{{noPrefix}}.PRIMARY_SHORT as (keyof i{{ucEachTableName}})[])
-    }
-})
-
-export const Put = restRequest<{}, i{{ucEachTableName}}, {}, iPutC6RestResponse<i{{ucEachTableName}}>, RestShortTableNames>({
-    C6: C6,
-    tableName: {{noPrefix}}.TABLE_NAME,
-    requestMethod: PUT,
-    queryCallback: (request) => {
-        request.success ??= 'Successfully updated {{noPrefixReplaced}}!'
-        request.error ??= 'An unknown issue occurred updating the {{noPrefixReplaced}}!'
-        return request
-    },
-    responseCallback: (response, request) => {
-        updateRestfulObjectArrays<i{{ucEachTableName}}>([
-            removeInvalidKeys<i{{ucEachTableName}}>({
-                ...request,
-                ...response?.data?.rest,
-            }, C6.TABLES)
-        ], "{{noPrefix}}", {{noPrefix}}.PRIMARY_SHORT as (keyof i{{ucEachTableName}})[])
-    }
-})
-
-
-export const Post = restRequest<{}, i{{ucEachTableName}}, {}, iPostC6RestResponse<i{{ucEachTableName}}>, RestShortTableNames>({
-    C6: C6,
-    tableName: {{noPrefix}}.TABLE_NAME,
-    requestMethod: POST,
-    queryCallback: (request) => {
-        request.success ??= 'Successfully created the {{noPrefixReplaced}}!'
-        request.error ??= 'An unknown issue occurred creating the {{noPrefixReplaced}}!'
-        return request
-    },
-    responseCallback: (response, request, id) => {
-        if ('number' === typeof id || 'string' === typeof id) {
-            if (1 !== {{noPrefix}}.PRIMARY_SHORT.length) {
-                console.error("C6 received unexpected result's given the primary key length");
-            } else {
-                request[{{noPrefix}}.PRIMARY_SHORT[0]] = id
-            }
-        }
-        updateRestfulObjectArrays<i{{ucEachTableName}}>(
-            undefined !== request.dataInsertMultipleRows
-                ? request.dataInsertMultipleRows.map((request, index) => {
-                    return removeInvalidKeys<i{{ucEachTableName}}>({
-                        ...request,
-                        ...(index === 0 ? response?.data?.rest : {}),
-                        }, C6.TABLES)
-                    })
-                : [
-                    removeInvalidKeys<i{{ucEachTableName}}>({
-                        ...request,
-                        ...response?.data?.rest,
-                    }, C6.TABLES)
-                ], "{{noPrefix}}", {{noPrefix}}.PRIMARY_SHORT as (keyof i{{ucEachTableName}})[])
-    }
-})
-
-export const Delete = restRequest<{}, i{{ucEachTableName}}, {}, iDeleteC6RestResponse<i{{ucEachTableName}}>, RestShortTableNames>({
-    C6: C6,
-    tableName: {{noPrefix}}.TABLE_NAME,
-    requestMethod: DELETE,
-    queryCallback: (request) => {
-        request.success ??= 'Successfully removed the {{noPrefixReplaced}}!'
-        request.error ??= 'An unknown issue occurred removing the {{noPrefixReplaced}}!'
-        return request
-    },
-    responseCallback: (_response, request) => {
-        // todo - request . where
-        deleteRestfulObjectArrays<i{{ucEachTableName}}>([
-            request
-        ], "{{noPrefix}}", {{noPrefix}}.PRIMARY_SHORT as (keyof i{{ucEachTableName}})[])
+        updateRestfulObjectArrays<i{{TABLE_NAME_SHORT_PASCAL_CASE}}>(response?.data?.rest, "{{TABLE_NAME_SHORT}}", C6.{{TABLE_NAME_SHORT}}.PRIMARY_SHORT as (keyof i{{TABLE_NAME_SHORT_PASCAL_CASE}})[])
     }
 });
 
+type PutCustomAndRequiredFields = {}
+
+type PutRequestTableOverrides = {}
+
+export function putState{{TABLE_NAME_SHORT_PASCAL_CASE}}(response : AxiosResponse<iPutC6RestResponse<i{{TABLE_NAME_SHORT_PASCAL_CASE}}>>, request : iAPI<Modify<i{{TABLE_NAME_SHORT_PASCAL_CASE}}, PutRequestTableOverrides>> & PutCustomAndRequiredFields) {
+    updateRestfulObjectArrays<i{{TABLE_NAME_SHORT_PASCAL_CASE}}>([
+        removeInvalidKeys<i{{TABLE_NAME_SHORT_PASCAL_CASE}}>({
+            ...request,
+            ...response?.data?.rest,
+        }, C6.TABLES)
+    ], "{{TABLE_NAME_SHORT}}", {{TABLE_NAME_SHORT}}.PRIMARY_SHORT as (keyof i{{TABLE_NAME_SHORT_PASCAL_CASE}})[])
+}
+
+export const Put = restRequest<PutCustomAndRequiredFields, i{{TABLE_NAME_SHORT_PASCAL_CASE}}, PutRequestTableOverrides, iPutC6RestResponse<i{{TABLE_NAME_SHORT_PASCAL_CASE}}>, RestShortTableNames>({
+    C6: C6,
+    tableName: {{TABLE_NAME_SHORT}}.TABLE_NAME,
+    requestMethod: PUT,
+    queryCallback: (request) => {
+        request.success ??= 'Successfully updated {{TABLE_NAME_SHORT}} data!'
+        request.error ??= 'An unknown issue occurred updating the {{TABLE_NAME_SHORT}} data!'
+        return request
+    },
+    responseCallback: putState{{TABLE_NAME_SHORT_PASCAL_CASE}}
+});
+
+type PostCustomAndRequiredFields = {}
+
+type PostRequestTableOverrides = {}
+
+export function postState{{TABLE_NAME_SHORT_PASCAL_CASE}}(response : AxiosResponse<iPostC6RestResponse<i{{TABLE_NAME_SHORT_PASCAL_CASE}}>>, request : iAPI<Modify<i{{TABLE_NAME_SHORT_PASCAL_CASE}}, PostRequestTableOverrides>> & PostCustomAndRequiredFields, id: string | number | boolean) {
+    if ('number' === typeof id || 'string' === typeof id) {
+        if (1 !== {{TABLE_NAME_SHORT}}.PRIMARY_SHORT.length) {
+            console.error("C6 received unexpected result's given the primary key length");
+        } else {
+            request[{{TABLE_NAME_SHORT}}.PRIMARY_SHORT[0]] = id
+        }
+    }
+    updateRestfulObjectArrays<i{{TABLE_NAME_SHORT_PASCAL_CASE}}>(
+        undefined !== request.dataInsertMultipleRows
+            ? request.dataInsertMultipleRows.map((request, index) => {
+                return removeInvalidKeys<i{{TABLE_NAME_SHORT_PASCAL_CASE}}>({
+                    ...request,
+                    ...(index === 0 ? response?.data?.rest : {}),
+                }, C6.TABLES)
+            })
+            : [
+                removeInvalidKeys<i{{TABLE_NAME_SHORT_PASCAL_CASE}}>({
+                    ...request,
+                    ...response?.data?.rest,
+                    }, C6.TABLES)
+            ],
+        "{{TABLE_NAME_SHORT}}",
+        {{TABLE_NAME_SHORT}}.PRIMARY_SHORT as (keyof i{{TABLE_NAME_SHORT_PASCAL_CASE}})[]
+    )
+}
+
+export const Post = restRequest<PostCustomAndRequiredFields, i{{TABLE_NAME_SHORT_PASCAL_CASE}}, PostRequestTableOverrides, iPostC6RestResponse<i{{TABLE_NAME_SHORT_PASCAL_CASE}}>, RestShortTableNames>({
+    C6: C6,
+    tableName: {{TABLE_NAME_SHORT}}.TABLE_NAME,
+    requestMethod: POST,
+    queryCallback: (request) => {
+        request.success ??= 'Successfully created the {{TABLE_NAME_SHORT}} data!'
+        request.error ??= 'An unknown issue occurred creating the {{TABLE_NAME_SHORT}} data!'
+        return request
+    },
+    responseCallback: postState{{TABLE_NAME_SHORT_PASCAL_CASE}}
+});
+
+type DeleteCustomAndRequiredFields = {}
+
+type DeleteRequestTableOverrides = {}
+
+export function deleteState{{TABLE_NAME_SHORT_PASCAL_CASE}}(_response : AxiosResponse<iDeleteC6RestResponse<i{{TABLE_NAME_SHORT_PASCAL_CASE}}>>, request : iAPI<Modify<i{{TABLE_NAME_SHORT_PASCAL_CASE}}, DeleteRequestTableOverrides>> & DeleteCustomAndRequiredFields) {
+    deleteRestfulObjectArrays<i{{TABLE_NAME_SHORT_PASCAL_CASE}}>([
+        request
+    ], "{{TABLE_NAME_SHORT}}", {{TABLE_NAME_SHORT}}.PRIMARY_SHORT as (keyof i{{TABLE_NAME_SHORT_PASCAL_CASE}})[])
+}
+
+export const Delete = restRequest<DeleteCustomAndRequiredFields, i{{TABLE_NAME_SHORT_PASCAL_CASE}}, DeleteRequestTableOverrides, iDeleteC6RestResponse<i{{TABLE_NAME_SHORT_PASCAL_CASE}}>, RestShortTableNames>({
+    C6: C6,
+    tableName: {{TABLE_NAME_SHORT}}.TABLE_NAME,
+    requestMethod: DELETE,
+    queryCallback: (request) => {
+        request.success ??= 'Successfully removed the {{TABLE_NAME_SHORT}} data!'
+        request.error ??= 'An unknown issue occurred removing the {{TABLE_NAME_SHORT}} data!'
+        return request
+    },
+    responseCallback: deleteState{{TABLE_NAME_SHORT_PASCAL_CASE}}
+});
 
 export default {
-    Get, Post, Put, Delete
+    // Export all GET, POST, PUT, DELETE functions for each table
+    Get,
+    Post,
+    Put,
+    Delete,
 }

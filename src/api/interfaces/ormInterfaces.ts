@@ -36,5 +36,6 @@ export interface C6RestfulModel<RestShortTableNames extends string = string> {
     REGEX_VALIDATION: RegExpMap,
     TYPE_VALIDATION: {[key: string]: iTypeValidation},
     TABLE_REFERENCES: {[columnName: string]: iConstraint[]},
-    TABLE_REFERENCED_BY: {[columnName: string]: iConstraint[]}
+    TABLE_REFERENCED_BY: {[columnName: string]: iConstraint[]},
+    REST_STATE_OPERATIONS: { PUT: Function, POST: Function, DELETE: Function },
 }

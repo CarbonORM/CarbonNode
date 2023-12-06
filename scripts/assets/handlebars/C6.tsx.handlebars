@@ -2,6 +2,10 @@ import {
     C6RestfulModel,
     C6Constants
 } from "@carbonorm/carbonnode";
+{{#TABLES}}
+import {{TABLE_NAME_SHORT_PASCAL_CASE}} from "./{{TABLE_NAME_SHORT_PASCAL_CASE}}";
+{{/TABLES}}
+
 
 export type RestTableNames = {{{RestTableNames}}};
 
@@ -69,6 +73,11 @@ export const {{TABLE_NAME_SHORT}}: C6RestfulModel & iDefine{{TABLE_NAME_SHORT_PA
             COLUMN: '{{COLUMN}}',
             CONSTRAINT: '{{CONSTRAINT}}',
         },{{/this}}],{{/each}}
+    },
+    REST_STATE_OPERATIONS: {
+        PUT: {{TABLE_NAME_SHORT_PASCAL_CASE}}.putState{{TABLE_NAME_SHORT_PASCAL_CASE}},
+        POST: {{TABLE_NAME_SHORT_PASCAL_CASE}}.postState{{TABLE_NAME_SHORT_PASCAL_CASE}},
+        DELETE: {{TABLE_NAME_SHORT_PASCAL_CASE}}.deleteState{{TABLE_NAME_SHORT_PASCAL_CASE}},
     },
 }
 {{/TABLES}}

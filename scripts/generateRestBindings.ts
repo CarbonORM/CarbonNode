@@ -375,11 +375,11 @@ const testTemplate = fs.readFileSync(path.resolve(__dirname, 'assets/handlebars/
 
 Object.values(tableData.TABLES).map((tableData, key) => {
 
-    const tableName = tableData.TABLE_NAME_SHORT
+    const tableName = tableData.TABLE_NAME_SHORT_PASCAL_CASE
 
     fs.writeFileSync(path.join(MySQLDump.OUTPUT_DIR, tableName + '.tsx'), Handlebars.compile(template)(tableData));
 
-    fs.writeFileSync(path.join(MySQLDump.OUTPUT_DIR, tableName + '.text.tsx'), Handlebars.compile(testTemplate)(tableData));
+    fs.writeFileSync(path.join(MySQLDump.OUTPUT_DIR, tableName + '.test.tsx'), Handlebars.compile(testTemplate)(tableData));
 
 })
 
