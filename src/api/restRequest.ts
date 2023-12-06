@@ -395,6 +395,12 @@ export default function restApi<
 
     return (request: iAPI<Modify<RestTableInterfaces, RequestTableOverrides>> & CustomAndRequiredFields = {} as iAPI<Modify<RestTableInterfaces, RequestTableOverrides>> & CustomAndRequiredFields) => {
 
+        console.groupCollapsed('%c API: (' + requestMethod + ') Request for (' + operatingTable + ')', 'color: #0c0')
+
+        console.log('request', request)
+
+        console.groupEnd()
+
         // an undefined query would indicate queryCallback returned undefined,
         // thus the request shouldn't fire as is in custom cache
         let query: RequestQueryBody<Modify<RestTableInterfaces, RequestTableOverrides>> | undefined | null;

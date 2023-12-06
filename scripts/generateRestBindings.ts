@@ -365,17 +365,21 @@ fs.writeFileSync(path.join(process.cwd(), 'C6MySqlDump.json'), JSON.stringify(ta
 
 // import this file  src/assets/handlebars/C6.tsx.handlebars for a mustache template
 
-const template = fs.readFileSync(path.resolve(__dirname, 'assets/handlebars/C6.tsx.handlebars'), 'utf-8');
+const c6Template = fs.readFileSync(path.resolve(__dirname, 'assets/handlebars/C6.tsx.handlebars'), 'utf-8');
 
-fs.writeFileSync(path.join(MySQLDump.OUTPUT_DIR, 'C6.tsx'), Handlebars.compile(template)(tableData));
+fs.writeFileSync(path.join(MySQLDump.OUTPUT_DIR, 'C6.tsx'), Handlebars.compile(c6Template)(tableData));
 
-const testTemplate = fs.readFileSync(path.resolve(__dirname, 'assets/handlebars/Tests.tsx.handlebars'), 'utf-8');
+const template = fs.readFileSync(path.resolve(__dirname, 'assets/handlebars/Table.tsx.handlebars'), 'utf-8');
+
+const testTemplate = fs.readFileSync(path.resolve(__dirname, 'assets/handlebars/Table.test.tsx.handlebars'), 'utf-8');
 
 Object.values(tableData.TABLES).map((tableData, key) => {
 
     const tableName = tableData.TABLE_NAME_SHORT
 
-    fs.writeFileSync(path.join(MySQLDump.OUTPUT_DIR, tableName + '.tsx'), Handlebars.compile(testTemplate)(tableData));
+    fs.writeFileSync(path.join(MySQLDump.OUTPUT_DIR, tableName + '.tsx'), Handlebars.compile(template)(tableData));
+
+    fs.writeFileSync(path.join(MySQLDump.OUTPUT_DIR, tableName + '.text.tsx'), Handlebars.compile(testTemplate)(tableData));
 
 })
 

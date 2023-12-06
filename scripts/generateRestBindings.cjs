@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 var __values = (this && this.__values) || function(o) {
     var s = typeof Symbol === "function" && Symbol.iterator, m = s && o[s], i = 0;
     if (m) return m.call(o);
@@ -19,7 +20,7 @@ for (var i = 0; i < args.length; i += 2) {
     argMap[args[i]] = args[i + 1];
 }
 var createDirIfNotExists = function (dir) {
-    return !fs.existsSync(dir) ? fs.mkdirSync(dir) : undefined;
+    return !fs.existsSync(dir) ? fs.mkdirSync(dir, { recursive: true }) : undefined;
 };
 var MySQLDump = /** @class */ (function () {
     function MySQLDump() {
@@ -281,11 +282,13 @@ var tableData = parseSQLToTypeScript(sql);
 // write to file
 fs.writeFileSync(path.join(process.cwd(), 'C6MySqlDump.json'), JSON.stringify(tableData));
 // import this file  src/assets/handlebars/C6.tsx.handlebars for a mustache template
-var template = fs.readFileSync(path.resolve(__dirname, 'assets/handlebars/C6.tsx.handlebars'), 'utf-8');
-fs.writeFileSync(path.join(MySQLDump.OUTPUT_DIR, 'C6.tsx'), Handlebars.compile(template)(tableData));
-var testTemplate = fs.readFileSync(path.resolve(__dirname, 'assets/handlebars/Tests.tsx.handlebars'), 'utf-8');
+var c6Template = fs.readFileSync(path.resolve(__dirname, 'assets/handlebars/C6.tsx.handlebars'), 'utf-8');
+fs.writeFileSync(path.join(MySQLDump.OUTPUT_DIR, 'C6.tsx'), Handlebars.compile(c6Template)(tableData));
+var template = fs.readFileSync(path.resolve(__dirname, 'assets/handlebars/Table.tsx.handlebars'), 'utf-8');
+var testTemplate = fs.readFileSync(path.resolve(__dirname, 'assets/handlebars/Table.test.tsx.handlebars'), 'utf-8');
 Object.values(tableData.TABLES).map(function (tableData, key) {
     var tableName = tableData.TABLE_NAME_SHORT;
-    fs.writeFileSync(path.join(MySQLDump.OUTPUT_DIR, tableName + '.tsx'), Handlebars.compile(testTemplate)(tableData));
+    fs.writeFileSync(path.join(MySQLDump.OUTPUT_DIR, tableName + '.tsx'), Handlebars.compile(template)(tableData));
+    fs.writeFileSync(path.join(MySQLDump.OUTPUT_DIR, tableName + '.text.tsx'), Handlebars.compile(testTemplate)(tableData));
 });
 console.log('Successfully created CarbonORM bindings!');
