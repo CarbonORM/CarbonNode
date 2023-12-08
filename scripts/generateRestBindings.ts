@@ -211,19 +211,30 @@ const parseSQLToTypeScript = (sql: string) => {
         const tableName = tableMatch[1];
         const columnDefinitions = tableMatch[2];
 
-        let columns: any = {};
-        const columnRegex: RegExp = /^\s*`(\w+)` (\w+)(?:\((\d+)\))?( NOT NULL)?( AUTO_INCREMENT)?(?: DEFAULT '(\w+)')?/g;
-        let columnMatch: RegExpExecArray | null;
+        let columns = {};
 
-        while ((columnMatch = columnRegex.exec(columnDefinitions))) {
-            columns[columnMatch[1]] = {
-                type: columnMatch[2],
-                length: columnMatch[3] || '',
-                notNull: !!columnMatch[4],
-                autoIncrement: !!columnMatch[5],
-                defaultValue: columnMatch[6] || '',
-            };
-        }
+        // Improved regular expression to match column definitions
+        const columnRegex = /\s*`([^`]*)`\s+(\w+)(?:\(([^)]+)\))?\s*(NOT NULL)?\s*(AUTO_INCREMENT)?\s*(DEFAULT\s+'.*?'|DEFAULT\s+\S+)?/gm;
+
+        let columnMatch;
+
+
+
+        const columnDefinitionsLines = columnDefinitions.split('\n');
+
+        columnDefinitionsLines.forEach(line => {
+            if (!line.match(/(PRIMARY KEY|UNIQUE KEY|CONSTRAINT)/)) {
+                while ((columnMatch = columnRegex.exec(line))) {
+                    columns[columnMatch[1]] = {
+                        type: columnMatch[2],
+                        length: columnMatch[3] || '',
+                        notNull: !!columnMatch[4],
+                        autoIncrement: !!columnMatch[5],
+                        defaultValue: columnMatch[6] ? columnMatch[6].replace(/^DEFAULT\s+/i, '') : ''
+                    };
+                }
+            }
+        });
 
         // Extract primary keys
         const primaryKeyMatch = columnDefinitions.match(/PRIMARY KEY \(([^)]+)\)/i);
@@ -234,6 +245,7 @@ const parseSQLToTypeScript = (sql: string) => {
         // Extract foreign keys
         const foreignKeyRegex: RegExp = /CONSTRAINT `([^`]+)` FOREIGN KEY \(`([^`]+)`\) REFERENCES `([^`]+)` \(`([^`]+)`\)( ON DELETE (\w+))?( ON UPDATE (\w+))?/g;
         let foreignKeyMatch: RegExpExecArray | null;
+
 
         while ((foreignKeyMatch = foreignKeyRegex.exec(columnDefinitions))) {
             const constraintName = foreignKeyMatch[1];

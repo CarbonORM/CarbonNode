@@ -140,17 +140,23 @@ var parseSQLToTypeScript = function (sql) {
         var tableName = tableMatch[1];
         var columnDefinitions = tableMatch[2];
         var columns = {};
-        var columnRegex = /^\s*`(\w+)` (\w+)(?:\((\d+)\))?( NOT NULL)?( AUTO_INCREMENT)?(?: DEFAULT '(\w+)')?/g;
-        var columnMatch = void 0;
-        while ((columnMatch = columnRegex.exec(columnDefinitions))) {
-            columns[columnMatch[1]] = {
-                type: columnMatch[2],
-                length: columnMatch[3] || '',
-                notNull: !!columnMatch[4],
-                autoIncrement: !!columnMatch[5],
-                defaultValue: columnMatch[6] || '',
-            };
-        }
+        // Improved regular expression to match column definitions
+        var columnRegex = /\s*`([^`]*)`\s+(\w+)(?:\(([^)]+)\))?\s*(NOT NULL)?\s*(AUTO_INCREMENT)?\s*(DEFAULT\s+'.*?'|DEFAULT\s+\S+)?/gm;
+        var columnMatch;
+        var columnDefinitionsLines = columnDefinitions.split('\n');
+        columnDefinitionsLines.forEach(function (line) {
+            if (!line.match(/(PRIMARY KEY|UNIQUE KEY|CONSTRAINT)/)) {
+                while ((columnMatch = columnRegex.exec(line))) {
+                    columns[columnMatch[1]] = {
+                        type: columnMatch[2],
+                        length: columnMatch[3] || '',
+                        notNull: !!columnMatch[4],
+                        autoIncrement: !!columnMatch[5],
+                        defaultValue: columnMatch[6] ? columnMatch[6].replace(/^DEFAULT\s+/i, '') : ''
+                    };
+                }
+            }
+        });
         // Extract primary keys
         var primaryKeyMatch = columnDefinitions.match(/PRIMARY KEY \(([^)]+)\)/i);
         var primaryKeys = primaryKeyMatch
