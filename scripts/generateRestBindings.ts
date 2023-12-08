@@ -381,6 +381,10 @@ const c6Template = fs.readFileSync(path.resolve(__dirname, 'assets/handlebars/C6
 
 fs.writeFileSync(path.join(MySQLDump.OUTPUT_DIR, 'C6.tsx'), Handlebars.compile(c6Template)(tableData));
 
+const wsLiveUpdatesTemplate = fs.readFileSync(path.resolve(__dirname, 'assets/handlebars/WsLiveUpdates.tsx.handlebars'), 'utf-8');
+
+fs.writeFileSync(path.join(MySQLDump.OUTPUT_DIR, 'WsLiveUpdates.tsx'), Handlebars.compile(wsLiveUpdatesTemplate)(tableData));
+
 const template = fs.readFileSync(path.resolve(__dirname, 'assets/handlebars/Table.tsx.handlebars'), 'utf-8');
 
 const testTemplate = fs.readFileSync(path.resolve(__dirname, 'assets/handlebars/Table.test.tsx.handlebars'), 'utf-8');

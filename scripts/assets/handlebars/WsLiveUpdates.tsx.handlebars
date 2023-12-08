@@ -1,0 +1,22 @@
+import {
+    tWsLiveUpdate
+} from "@carbonorm/carbonnode";
+
+{{#TABLES}}
+import { putState{{TABLE_NAME_SHORT_PASCAL_CASE}}, postState{{TABLE_NAME_SHORT_PASCAL_CASE}}, deleteState{{TABLE_NAME_SHORT_PASCAL_CASE}} } from "./{{TABLE_NAME_SHORT_PASCAL_CASE}}";
+{{/TABLES}}
+
+const wsLiveUpdates: tWsLiveUpdate = {
+{{#TABLES}}
+    {{TABLE_NAME_SHORT}}: {
+        PUT: putState{{TABLE_NAME_SHORT_PASCAL_CASE}},
+        POST: postState{{TABLE_NAME_SHORT_PASCAL_CASE}},
+        DELETE: deleteState{{TABLE_NAME_SHORT_PASCAL_CASE}},
+    },
+{{/TABLES}}
+};
+
+
+export default wsLiveUpdates;
+
+

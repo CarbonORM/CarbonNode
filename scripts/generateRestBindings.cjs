@@ -290,6 +290,8 @@ fs.writeFileSync(path.join(process.cwd(), 'C6MySqlDump.json'), JSON.stringify(ta
 // import this file  src/assets/handlebars/C6.tsx.handlebars for a mustache template
 var c6Template = fs.readFileSync(path.resolve(__dirname, 'assets/handlebars/C6.tsx.handlebars'), 'utf-8');
 fs.writeFileSync(path.join(MySQLDump.OUTPUT_DIR, 'C6.tsx'), Handlebars.compile(c6Template)(tableData));
+var wsLiveUpdatesTemplate = fs.readFileSync(path.resolve(__dirname, 'assets/handlebars/WsLiveUpdates.tsx.handlebars'), 'utf-8');
+fs.writeFileSync(path.join(MySQLDump.OUTPUT_DIR, 'WsLiveUpdates.tsx'), Handlebars.compile(wsLiveUpdatesTemplate)(tableData));
 var template = fs.readFileSync(path.resolve(__dirname, 'assets/handlebars/Table.tsx.handlebars'), 'utf-8');
 var testTemplate = fs.readFileSync(path.resolve(__dirname, 'assets/handlebars/Table.test.tsx.handlebars'), 'utf-8');
 Object.values(tableData.TABLES).map(function (tableData, key) {

@@ -14,9 +14,9 @@ const fillString = 'string' + randomString + randomInt;
 **/
 
 const Test_Data: i{{TABLE_NAME_SHORT_PASCAL_CASE}} = {
-{{#each TYPE_VALIDATION}}
-    {{#SKIP_COLUMN_IN_POST}}{{COLUMN_NAME}}: {{#TYPESCRIPT_TYPE_IS_STRING}}fillString.substring(0, {{MAX_LENGTH}}){{/TYPESCRIPT_TYPE_IS_STRING}}{{#TYPESCRIPT_TYPE_IS_NUMBER}}randomInt,{{/TYPESCRIPT_TYPE_IS_NUMBER}}{{/SKIP_COLUMN_IN_POST}}
-{{/each}}
+{{#each TYPE_VALIDATION}}{{#SKIP_COLUMN_IN_POST}}
+    {{COLUMN_NAME}}: {{#TYPESCRIPT_TYPE_IS_STRING}}fillString{{#MAX_LENGTH}}.substring(0, {{MAX_LENGTH}}){{/MAX_LENGTH}}{{/TYPESCRIPT_TYPE_IS_STRING}}{{#TYPESCRIPT_TYPE_IS_NUMBER}}randomInt{{/TYPESCRIPT_TYPE_IS_NUMBER}},
+{{/SKIP_COLUMN_IN_POST}}{{/each}}
 }
 
 export default Test_Data;
