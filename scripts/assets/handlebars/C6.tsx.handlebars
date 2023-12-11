@@ -3,9 +3,8 @@ import {
     C6Constants,
     tC6Tables
 } from "@carbonorm/carbonnode";
-{{#TABLES}}
-import { putState{{TABLE_NAME_SHORT_PASCAL_CASE}}, postState{{TABLE_NAME_SHORT_PASCAL_CASE}}, deleteState{{TABLE_NAME_SHORT_PASCAL_CASE}} } from "./{{TABLE_NAME_SHORT_PASCAL_CASE}}";
-{{/TABLES}}
+
+export type RestTablePrefix = {{{RestTableNames}}};
 
 export type RestTableNames = {{{RestTableNames}}};
 
@@ -73,12 +72,7 @@ export const {{TABLE_NAME_SHORT}}: C6RestfulModel<RestTableNames> & iDefine{{TAB
             COLUMN: '{{COLUMN}}',
             CONSTRAINT: '{{CONSTRAINT}}',
         },{{/this}}],{{/each}}
-    },
-    REST_STATE_OPERATIONS: {
-        PUT: putState{{TABLE_NAME_SHORT_PASCAL_CASE}},
-        POST: postState{{TABLE_NAME_SHORT_PASCAL_CASE}},
-        DELETE: deleteState{{TABLE_NAME_SHORT_PASCAL_CASE}},
-    },
+    }
 }
 {{/TABLES}}
 

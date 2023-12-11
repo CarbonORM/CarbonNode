@@ -1,4 +1,5 @@
 import {C6Constants} from "api/C6Constants";
+import {C6RestfulModel} from "api/interfaces/ormInterfaces";
 import {C6Object} from "api/restRequest";
 
 
@@ -8,24 +9,25 @@ export default function <RestTableInterfaces extends { [key:string] : any }>(res
 
     const tableNames = Array.isArray(tableName) ? tableName : [tableName];
 
-    tableNames.forEach((table) => {
+    let tableDefinitions : (C6RestfulModel & any)[] = [];
 
-        if (!(table in C6)) {
+    tableNames.forEach((tableName) => {
 
-            console.error(`Table name (${table}) is not found in the C6 object.`, C6);
+        let tableDefinition = Object.values(C6.TABLES).find((tableDefinition) => tableDefinition.TABLE_NAME === tableName);
 
-            throw new Error(`Table name (${table}) is not found in the C6 object.`);
+        if (undefined === tableDefinition) {
 
-        }
+            console.error(`Table name (${tableName}) is not found in the C6.TABLES object.`, C6.TABLES);
 
-        if (undefined === C6[table]) {
-
-            console.log(`Table name (${table}) exists but is undefined in the C6 object. This is unexpected.`)
-
-            throw new Error(`Table name (${table}) exists but is undefined in the C6 object. This is unexpected.`);
+            throw new Error(`Table name (${tableName}) is not found in the C6.TABLES object.`);
 
         }
 
+        tableDefinitions.push(tableDefinition);
+
+    })
+
+    tableDefinitions.forEach((tableDefinition) => {
 
         Object.keys(restfulObject).forEach(value => {
 
@@ -53,13 +55,13 @@ export default function <RestTableInterfaces extends { [key:string] : any }>(res
                 default:
             }
 
-            if (shortReference in C6[table]) {
+            if (shortReference in tableDefinition) {
 
-                const longName = C6[table][shortReference];
+                const longName = tableDefinition[shortReference];
 
                 payload[longName] = restfulObject[value]
 
-                const regexValidations = C6[table].REGEX_VALIDATION[longName]
+                const regexValidations = tableDefinition.REGEX_VALIDATION[longName]
 
                 if (regexValidations instanceof RegExp) {
 
