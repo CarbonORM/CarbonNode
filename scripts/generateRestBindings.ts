@@ -151,6 +151,9 @@ function capitalizeFirstLetter(string) {
 }
 
 function determineTypeScriptType(mysqlType) {
+
+    console.log(mysqlType)
+
     switch (mysqlType.toLowerCase()) {
         case 'varchar':
         case 'text':
@@ -165,9 +168,9 @@ function determineTypeScriptType(mysqlType) {
         case 'decimal':
         case 'float':
         case 'double':
+        case 'tinyint':
             return 'number';
         case 'boolean':
-        case 'tinyint(1)':
             return 'boolean';
         case 'json':
             return 'any';  // or 'object' based on usage
