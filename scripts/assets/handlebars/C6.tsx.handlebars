@@ -1,10 +1,11 @@
 import {
-    C6RestfulModel,
+    iC6RestfulModel,
     C6Constants,
+    iC6Object,
     tC6Tables
 } from "@carbonorm/carbonnode";
 
-export type RestTablePrefix = {{{RestTableNames}}};
+export const RestTablePrefix = {{{PREFIX}}};
 
 export type RestTableNames = {{{RestTableNames}}};
 
@@ -24,7 +25,7 @@ interface iDefine{{TABLE_NAME_SHORT_PASCAL_CASE}} {
 {{/each}}
 }
 
-export const {{TABLE_NAME_SHORT}}: C6RestfulModel<RestTableNames> & iDefine{{TABLE_NAME_SHORT_PASCAL_CASE}} = {
+export const {{TABLE_NAME_SHORT}}: iC6RestfulModel<RestTableNames> & iDefine{{TABLE_NAME_SHORT_PASCAL_CASE}} = {
     TABLE_NAME: '{{TABLE_NAME}}',
     {{#each COLUMNS_UPPERCASE}}
     {{@key}}: '{{this}}',
@@ -83,9 +84,9 @@ export const TABLES: tC6Tables = {
 {{/TABLES}}
 };
 
-export const C6 : { TABLES: tC6Tables }
-& { [key: string]: any } = {
+export const C6 : C6Object = {
     ...C6Constants,
+    PREFIX: RestTablePrefix,
     TABLES: TABLES,
     ...TABLES
 };

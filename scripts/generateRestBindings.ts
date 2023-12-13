@@ -361,6 +361,7 @@ const parseSQLToTypeScript = (sql: string) => {
 
 
     return {
+        PREFIX: MySQLDump.DB_PREFIX,
         TABLES: tables,
         RestTableNames: tables.map(table => "'" + table.TABLE_NAME + "'").join('\n | '),
         RestShortTableNames: tables.map(table => "'" + table.TABLE_NAME_SHORT + "'").join('\n | '),

@@ -1,6 +1,6 @@
 import axiosInstance from "api/axiosInstance";
 import convertForRequestBody from "api/convertForRequestBody";
-import {C6RestfulModel} from "api/interfaces/ormInterfaces";
+import {iC6RestfulModel} from "api/interfaces/ormInterfaces";
 import {AxiosInstance, AxiosPromise, AxiosResponse} from "axios";
 
 import {toast} from "react-toastify";
@@ -44,7 +44,7 @@ export function TestRestfulResponse(response: AxiosResponse | any, success: ((r:
 
 }
 
-export function removeInvalidKeys<iRestObject>(request: any, c6Tables: { [key: string]: (C6RestfulModel & { [key: string]: any }) }): iRestObject {
+export function removeInvalidKeys<iRestObject>(request: any, c6Tables: { [key: string]: (iC6RestfulModel & { [key: string]: any }) }): iRestObject {
 
     let intersection: iRestObject = {} as iRestObject
 
@@ -304,12 +304,12 @@ export interface iPutC6RestResponse<RestData = any, RequestData = any> extends i
     updated: boolean | number | string | RequestData,
 }
 
-export interface C6Object {
+export interface iC6Object {
     TABLES: {
-        [key: string]: C6RestfulModel &
+        [key: string]: iC6RestfulModel &
             { [key: string]: string | number }
     },
-
+    PREFIX: string,
     [key: string]: any
 }
 
@@ -321,7 +321,7 @@ interface iRest<CustomAndRequiredFields extends { [key: string]: any }, RestTabl
     [key in keyof RestTableInterfaces]: any
 }, ResponseDataType = any,
     RestShortTableNames extends string = any> {
-    C6: C6Object,
+    C6: iC6Object,
     axios?: AxiosInstance,
     restURL?: string,
     tableName: RestShortTableNames | RestShortTableNames[],
@@ -373,7 +373,9 @@ export default function restApi<
 
     const fullTableList = Array.isArray(tableName) ? tableName : [tableName];
 
-    const operatingTable = fullTableList[0];
+    const operatingTableFullName = fullTableList[0];
+
+    const operatingTable = operatingTableFullName;
 
     const tables = fullTableList.join(',')
 

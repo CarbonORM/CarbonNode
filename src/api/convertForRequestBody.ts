@@ -1,15 +1,15 @@
 import {C6Constants} from "api/C6Constants";
-import {C6RestfulModel} from "api/interfaces/ormInterfaces";
-import {C6Object} from "api/restRequest";
+import {iC6RestfulModel} from "api/interfaces/ormInterfaces";
+import {iC6Object} from "api/restRequest";
 
 
-export default function <RestTableInterfaces extends { [key:string] : any }>(restfulObject: RestTableInterfaces, tableName: string | string[], C6: C6Object, regexErrorHandler: (message:string) => void = alert) {
+export default function <RestTableInterfaces extends { [key:string] : any }>(restfulObject: RestTableInterfaces, tableName: string | string[], C6: iC6Object, regexErrorHandler: (message:string) => void = alert) {
 
     let payload = {};
 
     const tableNames = Array.isArray(tableName) ? tableName : [tableName];
 
-    let tableDefinitions : (C6RestfulModel & any)[] = [];
+    let tableDefinitions : (iC6RestfulModel & any)[] = [];
 
     tableNames.forEach((tableName) => {
 

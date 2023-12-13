@@ -27,11 +27,7 @@ export interface iConstraint {
     CONSTRAINT: string
 }
 
-export type tC6Tables = { [key: string]: (C6RestfulModel & { [key: string]: any }) }
-
-export type tWsLiveUpdate = { [key: string]: { PUT: Function, POST: Function, DELETE: Function } };
-
-export interface C6RestfulModel<RestShortTableNames extends string = string> {
+export interface iC6RestfulModel<RestShortTableNames extends string = string> {
     TABLE_NAME: RestShortTableNames,
     PRIMARY: string[],
     PRIMARY_SHORT: string[],
@@ -41,3 +37,9 @@ export interface C6RestfulModel<RestShortTableNames extends string = string> {
     TABLE_REFERENCES: { [columnName: string]: iConstraint[] },
     TABLE_REFERENCED_BY: { [columnName: string]: iConstraint[] },
 }
+
+
+export type tC6Tables = { [key: string]: (iC6RestfulModel & { [key: string]: any }) }
+
+export type tWsLiveUpdate = { [key: string]: { PUT: Function, POST: Function, DELETE: Function } };
+

@@ -277,6 +277,7 @@ var parseSQLToTypeScript = function (sql) {
     }
     var tables = Object.values(tableData);
     return {
+        PREFIX: MySQLDump.DB_PREFIX,
         TABLES: tables,
         RestTableNames: tables.map(function (table) { return "'" + table.TABLE_NAME + "'"; }).join('\n | '),
         RestShortTableNames: tables.map(function (table) { return "'" + table.TABLE_NAME_SHORT + "'"; }).join('\n | '),
