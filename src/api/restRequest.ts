@@ -375,7 +375,7 @@ export default function restApi<
 
     const operatingTableFullName = fullTableList[0];
 
-    const operatingTable = operatingTableFullName;
+    const operatingTable = operatingTableFullName.replace(C6.PREFIX, '');
 
     const tables = fullTableList.join(',')
 
