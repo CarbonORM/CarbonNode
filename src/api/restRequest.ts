@@ -600,7 +600,7 @@ export default function restApi<
 
                         console.error(query)
 
-                        throw Error('Failed to parse primary key information(' + JSON.stringify(query) + JSON.stringify(primaryKey) + ')' + JSON.stringify(TABLES[operatingTable]?.PRIMARY) + ' for table (' + operatingTable + ').')
+                        throw Error('Failed to parse primary key information. Query: (' + JSON.stringify(query) + ') Primary Key: (' + JSON.stringify(primaryKey) + ') TABLES[operatingTable]?.PRIMARY: (' + JSON.stringify(TABLES[operatingTable]?.PRIMARY) + ') for operatingTable (' + operatingTable + ').')
 
                     }
 
