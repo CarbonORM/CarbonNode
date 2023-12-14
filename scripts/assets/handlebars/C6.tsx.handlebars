@@ -1,11 +1,11 @@
 import {
-    iC6RestfulModel,
     C6Constants,
     iC6Object,
-    tC6Tables
+    iC6RestfulModel,
+    tC6Tables,
 } from "@carbonorm/carbonnode";
 
-export const RestTablePrefix = {{{PREFIX}}};
+export const RestTablePrefix = '{{{PREFIX}}}';
 
 export type RestTableNames = {{{RestTableNames}}};
 
@@ -84,7 +84,7 @@ export const TABLES: tC6Tables = {
 {{/TABLES}}
 };
 
-export const C6 : C6Object = {
+export const C6 : iC6Object = {
     ...C6Constants,
     PREFIX: RestTablePrefix,
     TABLES: TABLES,

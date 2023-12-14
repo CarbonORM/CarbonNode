@@ -107,7 +107,6 @@ function capitalizeFirstLetter(string) {
     return string.charAt(0).toUpperCase() + string.slice(1);
 }
 function determineTypeScriptType(mysqlType) {
-    console.log(mysqlType);
     switch (mysqlType.toLowerCase()) {
         case 'varchar':
         case 'text':
