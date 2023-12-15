@@ -212,6 +212,7 @@ var parseSQLToTypeScript = function (sql) {
                 TYPESCRIPT_TYPE_IS_NUMBER: 'number' === typescript_type,
                 MAX_LENGTH: columns[colName].length,
                 AUTO_INCREMENT: columns[colName].autoIncrement,
+                NOT_NULL: columns[colName].notNull,
                 SKIP_COLUMN_IN_POST: !columns[colName].notNull && !columns[colName].defaultValue,
             };
         }

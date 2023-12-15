@@ -9,6 +9,8 @@ export { default as convertForRequestBody } from "./api/convertForRequestBody";
 export * from "./api/convertForRequestBody";
 export { default as restRequest } from "./api/restRequest";
 export * from "./api/restRequest";
+export { default as timeout } from "./api/timeout";
+export * from "./api/timeout";
 export * from "./api/interfaces/ormInterfaces";
 export { default as isLocal } from "./variables/isLocal";
 export * from "./variables/isLocal";
