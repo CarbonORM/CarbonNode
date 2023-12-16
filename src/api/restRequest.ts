@@ -313,7 +313,7 @@ export interface iC6Object {
     [key: string]: any
 }
 
-export type iGetC6RestResponse<ResponseDataType, ResponseDataOverrides = {}> = iC6RestResponse<Modify<ResponseDataType, ResponseDataOverrides>[]>
+export type iGetC6RestResponse<ResponseDataType, ResponseDataOverrides = {}> = iC6RestResponse<Modify<ResponseDataType, ResponseDataOverrides> | (Modify<ResponseDataType, ResponseDataOverrides>[])>
 
 interface iRest<CustomAndRequiredFields extends { [key: string]: any }, RestTableInterfaces extends {
     [key: string]: any

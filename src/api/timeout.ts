@@ -1,12 +1,3 @@
-
-/**
- * @usage - ensure multiple request do not go off to quickly
- *
- * @param shouldContinueAfterTimeout
- * @param cb
- * @param timeoutMs
- */
-
 export default function timeout(
     shouldContinueAfterTimeout: () => boolean,
     cb: () => void,
@@ -32,5 +23,3 @@ export default function timeout(
 
 
 }
-
-timeout.displayName = 'Timeout';
