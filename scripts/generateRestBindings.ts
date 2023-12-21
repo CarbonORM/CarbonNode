@@ -388,7 +388,7 @@ const wsLiveUpdatesTemplate = fs.readFileSync(path.resolve(__dirname, 'assets/ha
 
 fs.writeFileSync(path.join(MySQLDump.OUTPUT_DIR, 'WsLiveUpdates.tsx'), Handlebars.compile(wsLiveUpdatesTemplate)(tableData));
 
-const template = fs.readFileSync(path.resolve(__dirname, 'assets/handlebars/Table.tsx.handlebars'), 'utf-8');
+const template = fs.readFileSync(path.resolve(__dirname, 'assets/handlebars/Table.ts.handlebars'), 'utf-8');
 
 const testTemplate = fs.readFileSync(path.resolve(__dirname, 'assets/handlebars/Table.test.tsx.handlebars'), 'utf-8');
 
@@ -396,9 +396,9 @@ Object.values(tableData.TABLES).map((tableData, key) => {
 
     const tableName = tableData.TABLE_NAME_SHORT_PASCAL_CASE
 
-    fs.writeFileSync(path.join(MySQLDump.OUTPUT_DIR, tableName + '.tsx'), Handlebars.compile(template)(tableData));
+    fs.writeFileSync(path.join(MySQLDump.OUTPUT_DIR, tableName + '.ts'), Handlebars.compile(template)(tableData));
 
-    fs.writeFileSync(path.join(MySQLDump.OUTPUT_DIR, tableName + '.test.tsx'), Handlebars.compile(testTemplate)(tableData));
+    fs.writeFileSync(path.join(MySQLDump.OUTPUT_DIR, tableName + '.test.ts'), Handlebars.compile(testTemplate)(tableData));
 
 })
 
