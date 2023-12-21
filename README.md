@@ -1,5 +1,4 @@
 ![npm](https://img.shields.io/npm/v/%40carbonorm%2Fcarbonnode)
-![GitHub Release](https://img.shields.io/github/v/release/carbonorm/carbonnode)
 ![License](https://img.shields.io/npm/l/%40carbonorm%2Fcarbonnode)
 ![Size](https://img.shields.io/github/languages/code-size/carbonorm/carbonnode)
 ![Documentation](https://img.shields.io/website?down_color=lightgrey&down_message=Offline&up_color=green&up_message=Online&url=https%3A%2F%2Fcarbonorm.dev)
