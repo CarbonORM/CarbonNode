@@ -243,16 +243,6 @@ export const GET = 'GET';
 export const DELETE = 'DELETE';
 
 
-// returning undefined means no more results are available, thus we've queried everything possible
-// null means the request is currently being executed
-// https://www.typescriptlang.org/docs/handbook/2/conditional-types.html
-export type apiReturn<Response> =
-    null
-    | undefined
-    | AxiosPromise<Response>
-    | (Response extends iGetC6RestResponse<any> ? (() => apiReturn<Response>) : null)
-
-
 export type iRestMethods = 'GET' | 'POST' | 'PUT' | 'DELETE';
 
 
@@ -313,7 +303,17 @@ export interface iC6Object {
     [key: string]: any
 }
 
-export type iGetC6RestResponse<ResponseDataType, ResponseDataOverrides = {}> = iC6RestResponse<Modify<ResponseDataType, ResponseDataOverrides> | (Modify<ResponseDataType, ResponseDataOverrides>[])>
+export type iGetC6RestResponse<ResponseDataType, ResponseDataOverrides = {}> = iC6RestResponse<Modify<ResponseDataType, ResponseDataOverrides> | Modify<ResponseDataType, ResponseDataOverrides>[]>
+
+// returning undefined means no more results are available, thus we've queried everything possible
+// null means the request is currently being executed
+// https://www.typescriptlang.org/docs/handbook/2/conditional-types.html
+export type apiReturn<Response> =
+    null
+    | undefined
+    | AxiosPromise<Response>
+    | (Response extends iPutC6RestResponse | iDeleteC6RestResponse | iPostC6RestResponse ? null : (() => apiReturn<Response>))
+
 
 interface iRest<CustomAndRequiredFields extends { [key: string]: any }, RestTableInterfaces extends {
     [key: string]: any
