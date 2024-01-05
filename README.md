@@ -6,12 +6,18 @@
 ![All Downloads](https://img.shields.io/npm/dt/%40carbonorm%2Fcarbonnode)
 ![Star](https://img.shields.io/github/stars/carbonorm/carbonnode?style=social)
 
-# CarbonNode
+# CarbonNode (Alpha Release)
 
 CarbonNode is a part of the CarbonORM series. It is a NodeJS MySQL ORM that is designed to work with CarbonPHP. This langauge
 will implement the same ORM as CarbonPHP, but will be written in Typescript. Currently only C6 enabled request can be sent 
 using the bindings. Receiving API requests and handling it appropriately is not yet implemented. This is scheduled for 
 early 2023. This repository is in the early stages of development an any support is greatly appreciated.
+
+## Alpha Release
+
+This is an alpha release. The code is not yet ready for production. We are looking for feedback on the API and any bugs.
+Some features are not yet implemented. We are working on the documentation and will be adding more examples. Please 
+check out [any issue](https://github.com/CarbonORM/CarbonWordPress/issues) we have open and feel free to contribute.
 
 ## Installation
 
@@ -55,9 +61,9 @@ database consisting of your GET PUT POST and DELETE methods and a Jest test file
 table information and TypeScript types, and finally a websocket file which contains references to methods that are 
 generate. Here are the templates used to generate the code:
 
-1) [C6.tsx.handlebars](https://github.com/CarbonORM/CarbonNode/blob/main/scripts/assets/handlebars/C6.tsx.handlebars)
-2) [Table.tsx.handlebars](https://github.com/CarbonORM/CarbonNode/blob/main/scripts/assets/handlebars/Table.tsx.handlebars)
-3) [Websocket.tsx.handlebars](https://github.com/CarbonORM/CarbonNode/blob/main/scripts/assets/handlebars/WsLiveUpdates.tsx.handlebars)
+1) [C6.ts.handlebars](https://github.com/CarbonORM/CarbonNode/blob/main/scripts/assets/handlebars/C6.ts.handlebars)
+2) [Table.ts.handlebars](https://github.com/CarbonORM/CarbonNode/blob/main/scripts/assets/handlebars/Table.ts.handlebars)
+3) [Websocket.ts.handlebars](https://github.com/CarbonORM/CarbonNode/blob/main/scripts/assets/handlebars/WsLiveUpdates.ts.handlebars)
 
 
 # Support and Issues

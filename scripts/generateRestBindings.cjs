@@ -290,15 +290,15 @@ var tableData = parseSQLToTypeScript(sql);
 // write to file
 fs.writeFileSync(path.join(process.cwd(), 'C6MySqlDump.json'), JSON.stringify(tableData));
 // import this file  src/assets/handlebars/C6.tsx.handlebars for a mustache template
-var c6Template = fs.readFileSync(path.resolve(__dirname, 'assets/handlebars/C6.tsx.handlebars'), 'utf-8');
-fs.writeFileSync(path.join(MySQLDump.OUTPUT_DIR, 'C6.tsx'), Handlebars.compile(c6Template)(tableData));
-var wsLiveUpdatesTemplate = fs.readFileSync(path.resolve(__dirname, 'assets/handlebars/WsLiveUpdates.tsx.handlebars'), 'utf-8');
-fs.writeFileSync(path.join(MySQLDump.OUTPUT_DIR, 'WsLiveUpdates.tsx'), Handlebars.compile(wsLiveUpdatesTemplate)(tableData));
-var template = fs.readFileSync(path.resolve(__dirname, 'assets/handlebars/Table.tsx.handlebars'), 'utf-8');
-var testTemplate = fs.readFileSync(path.resolve(__dirname, 'assets/handlebars/Table.test.tsx.handlebars'), 'utf-8');
+var c6Template = fs.readFileSync(path.resolve(__dirname, 'assets/handlebars/C6.ts.handlebars'), 'utf-8');
+fs.writeFileSync(path.join(MySQLDump.OUTPUT_DIR, 'C6.ts'), Handlebars.compile(c6Template)(tableData));
+var wsLiveUpdatesTemplate = fs.readFileSync(path.resolve(__dirname, 'assets/handlebars/WsLiveUpdates.ts.handlebars'), 'utf-8');
+fs.writeFileSync(path.join(MySQLDump.OUTPUT_DIR, 'WsLiveUpdates.ts'), Handlebars.compile(wsLiveUpdatesTemplate)(tableData));
+var template = fs.readFileSync(path.resolve(__dirname, 'assets/handlebars/Table.ts.handlebars'), 'utf-8');
+var testTemplate = fs.readFileSync(path.resolve(__dirname, 'assets/handlebars/Table.test.ts.handlebars'), 'utf-8');
 Object.values(tableData.TABLES).map(function (tableData, key) {
     var tableName = tableData.TABLE_NAME_SHORT_PASCAL_CASE;
-    fs.writeFileSync(path.join(MySQLDump.OUTPUT_DIR, tableName + '.tsx'), Handlebars.compile(template)(tableData));
-    fs.writeFileSync(path.join(MySQLDump.OUTPUT_DIR, tableName + '.test.tsx'), Handlebars.compile(testTemplate)(tableData));
+    fs.writeFileSync(path.join(MySQLDump.OUTPUT_DIR, tableName + '.ts'), Handlebars.compile(template)(tableData));
+    fs.writeFileSync(path.join(MySQLDump.OUTPUT_DIR, tableName + '.test.ts'), Handlebars.compile(testTemplate)(tableData));
 });
 console.log('Successfully created CarbonORM bindings!');

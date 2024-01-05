@@ -652,6 +652,12 @@ export default function restApi<
 
                 delete query[primaryKey]
 
+                console.log('query', query, 'primaryKey', primaryKey, 'removedPkValue', removedPkValue)
+
+            } else {
+
+                console.log('query', query)
+
             }
 
             try {
@@ -671,9 +677,6 @@ export default function restApi<
                 const axiosActiveRequest: AxiosPromise<ResponseDataType> = axios[requestMethod.toLowerCase()]<ResponseDataType>(
                     restRequestUri,
                     (() => {
-
-                        // we had removed the value from the request to add to the URI.
-                        addBackPK?.();  // adding back so post-processing methods work
 
                         if (requestMethod === GET) {
 
@@ -720,6 +723,10 @@ export default function restApi<
                     });
 
                 }
+
+                // todo - wip verify this works
+                // we had removed the value from the request to add to the URI.
+                addBackPK?.();  // adding back so post-processing methods work
 
                 // https://rapidapi.com/guides/axios-async-await
                 return axiosActiveRequest.then(response => {
