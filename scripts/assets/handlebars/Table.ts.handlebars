@@ -130,10 +130,12 @@ const Delete = restRequest<DeleteCustomAndRequiredFields, i{{TABLE_NAME_SHORT_PA
     responseCallback: deleteState{{TABLE_NAME_SHORT_PASCAL_CASE}}
 });
 
-export default {
+const {{TABLE_NAME_SHORT}} = {
     // Export all GET, POST, PUT, DELETE functions for each table
     Get,
     Post,
     Put,
     Delete,
 }
+
+export default {{TABLE_NAME_SHORT}};
