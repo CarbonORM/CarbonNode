@@ -9,7 +9,7 @@
 # CarbonNode (Alpha Release)
 
 CarbonNode is a part of the CarbonORM series. It is a NodeJS MySQL ORM that is designed to work with CarbonPHP. This langauge
-will implement the same ORM as CarbonPHP, but will be written in Typescript. Currently only C6 enabled request can be sent 
+will implement the same ORM as CarbonPHP, but will be written in Typescript. Currently only C6 enabled requests can be sent 
 using the bindings. Receiving API requests and handling it appropriately is not yet implemented. This is scheduled for 
 early 2024. This repository is in the early stages of development an any support is greatly appreciated.
 
