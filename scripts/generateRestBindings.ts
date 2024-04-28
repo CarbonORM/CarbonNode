@@ -14,7 +14,7 @@ for (let i = 0; i < args.length; i += 2) {
 }
 
 const createDirIfNotExists = dir =>
-    !fs.existsSync(dir) ? fs.mkdirSync(dir, { recursive: true }) : undefined;
+    !fs.existsSync(dir) ? fs.mkdirSync(dir, {recursive: true}) : undefined;
 
 class MySQLDump {
 
@@ -29,7 +29,7 @@ class MySQLDump {
     static RELATIVE_OUTPUT_DIR = argMap['--output'] || '/src/api/rest';
     static OUTPUT_DIR = path.join(process.cwd(), MySQLDump.RELATIVE_OUTPUT_DIR);
 
-    static buildCNF(cnfFile = null) {
+    static buildCNF(cnfFile: string = '') {
 
         if (this.mysqlcnf !== '') {
 
@@ -46,10 +46,13 @@ class MySQLDump {
             '',
         ];
 
-
         cnf.push(``);
 
-        cnfFile ??= path.join(process.cwd(), '/mysql.cnf');
+        if ('' === cnfFile) {
+
+            cnfFile = path.join(process.cwd(), '/mysql.cnf');
+
+        }
 
         try {
 
@@ -71,10 +74,9 @@ class MySQLDump {
 
     }
 
-    static MySQLDump(mysqldump = null, data = false, schemas = true, outputFile = null, otherOption = '', specificTable = null) {
-        specificTable = specificTable || '';
+    static MySQLDump(mysqldump: string = 'mysqldump', data = false, schemas = true, outputFile = '', otherOption = '', specificTable: string = '') {
 
-        if (outputFile === null) {
+        if (outputFile === '') {
             outputFile = path.join(process.cwd(), 'mysqldump.sql');
         }
 
@@ -88,7 +90,7 @@ class MySQLDump {
 
         const createInfoOption = schemas ? '' : ' --no-create-info ';
 
-        const cmd = `${mysqldump || 'mysqldump'} --defaults-extra-file="${defaultsExtraFile}" ${otherOption} --skip-add-locks --single-transaction --quick ${createInfoOption}${hexBlobOption}${this.DB_NAME} ${specificTable} > '${outputFile}'`;
+        const cmd = `${mysqldump} --defaults-extra-file="${defaultsExtraFile}" ${otherOption} --skip-add-locks --single-transaction --quick ${createInfoOption}${hexBlobOption}${this.DB_NAME} ${specificTable} > '${outputFile}'`;
 
         this.executeAndCheckStatus(cmd);
 
@@ -96,7 +98,7 @@ class MySQLDump {
 
     }
 
-    static executeAndCheckStatus(command, exitOnFailure = true, output = []) {
+    static executeAndCheckStatus(command: string, exitOnFailure = true, output: any[] = []) {
 
         try {
 
@@ -104,17 +106,16 @@ class MySQLDump {
 
             output.push(stdout);
 
-        } catch (error) {
+        } catch (e) {
 
-            console.log(`The command >>  ${command} \n\t returned with a status code (${error.status}). Expecting 0 for success.`);
-
-            console.log(`Command output::\t ${error.stdout}`);
+            console.log(`Command output::`, e);
 
             if (exitOnFailure) {
 
-                process.exit(error.status);
+                process.exit(1);
 
             }
+
 
         }
 
@@ -220,7 +221,6 @@ const parseSQLToTypeScript = (sql: string) => {
         let columnMatch;
 
 
-
         const columnDefinitionsLines = columnDefinitions.split('\n');
 
         columnDefinitionsLines.forEach(line => {
@@ -253,8 +253,8 @@ const parseSQLToTypeScript = (sql: string) => {
             const localColumn = foreignKeyMatch[2];
             const foreignTable = foreignKeyMatch[3];
             const foreignColumn = foreignKeyMatch[4];
-            const onDeleteAction = foreignKeyMatch[6] || null;
-            const onUpdateAction = foreignKeyMatch[8] || null;
+            const onDeleteAction = foreignKeyMatch[6] || '';
+            const onUpdateAction = foreignKeyMatch[8] || '';
 
             references.push({
                 TABLE: tableName,
@@ -272,6 +272,7 @@ const parseSQLToTypeScript = (sql: string) => {
             TABLE_NAME: tableName,
             TABLE_DEFINITION: tableMatch[0],
             TABLE_CONSTRAINT: references,
+            REST_URL_EXPRESSION: argMap['--restUrlExpression'] || '"/rest/"',
             TABLE_NAME_SHORT: tableName.replace(MySQLDump.DB_PREFIX, ''),
             TABLE_NAME_LOWER: tableName.toLowerCase(),
             TABLE_NAME_UPPER: tableName.toUpperCase(),
@@ -284,7 +285,7 @@ const parseSQLToTypeScript = (sql: string) => {
             TYPE_VALIDATION: {},
             REGEX_VALIDATION: {},
             TABLE_REFERENCES: {},
-            TABLE_REFERENCED_BY:{},
+            TABLE_REFERENCED_BY: {},
         };
 
         for (const colName in columns) {
@@ -326,14 +327,17 @@ const parseSQLToTypeScript = (sql: string) => {
             continue;
         }
 
-        if (!tableData[foreignTable].TABLE_REFERENCED_BY) {
+        if (!('TABLE_REFERENCED_BY' in tableData[foreignTable])) {
             tableData[foreignTable].TABLE_REFERENCED_BY = {};
         }
 
+        // @ts-ignore
         if (!tableData[foreignTable].TABLE_REFERENCED_BY[foreignColumn]) {
+            // @ts-ignore
             tableData[foreignTable].TABLE_REFERENCED_BY[foreignColumn] = [];
         }
 
+        // @ts-ignore
         tableData[foreignTable].TABLE_REFERENCED_BY[foreignColumn].push({
             TABLE: tableName,
             COLUMN: columnName,
@@ -344,10 +348,13 @@ const parseSQLToTypeScript = (sql: string) => {
             tableData[tableName].TABLE_REFERENCES = {};
         }
 
+        // @ts-ignore
         if (!tableData[tableName].TABLE_REFERENCES[columnName]) {
+            // @ts-ignore
             tableData[tableName].TABLE_REFERENCES[columnName] = [];
         }
 
+        // @ts-ignore
         tableData[tableName].TABLE_REFERENCES[columnName].push({
             TABLE: foreignTable,
             COLUMN: foreignColumn,
@@ -390,7 +397,7 @@ const template = fs.readFileSync(path.resolve(__dirname, 'assets/handlebars/Tabl
 
 const testTemplate = fs.readFileSync(path.resolve(__dirname, 'assets/handlebars/Table.test.ts.handlebars'), 'utf-8');
 
-Object.values(tableData.TABLES).map((tableData, key) => {
+Object.values(tableData.TABLES).forEach((tableData) => {
 
     const tableName = tableData.TABLE_NAME_SHORT_PASCAL_CASE
 

@@ -26,7 +26,7 @@ var MySQLDump = /** @class */ (function () {
     function MySQLDump() {
     }
     MySQLDump.buildCNF = function (cnfFile) {
-        if (cnfFile === void 0) { cnfFile = null; }
+        if (cnfFile === void 0) { cnfFile = ''; }
         if (this.mysqlcnf !== '') {
             return this.mysqlcnf;
         }
@@ -39,7 +39,9 @@ var MySQLDump = /** @class */ (function () {
             '',
         ];
         cnf.push("");
-        cnfFile !== null && cnfFile !== void 0 ? cnfFile : (cnfFile = path.join(process.cwd(), '/mysql.cnf'));
+        if ('' === cnfFile) {
+            cnfFile = path.join(process.cwd(), '/mysql.cnf');
+        }
         try {
             fs.writeFileSync(cnfFile, cnf.join('\n'));
             fs.chmodSync(cnfFile, 488);
@@ -52,14 +54,13 @@ var MySQLDump = /** @class */ (function () {
         return (this.mysqlcnf = cnfFile);
     };
     MySQLDump.MySQLDump = function (mysqldump, data, schemas, outputFile, otherOption, specificTable) {
-        if (mysqldump === void 0) { mysqldump = null; }
+        if (mysqldump === void 0) { mysqldump = 'mysqldump'; }
         if (data === void 0) { data = false; }
         if (schemas === void 0) { schemas = true; }
-        if (outputFile === void 0) { outputFile = null; }
+        if (outputFile === void 0) { outputFile = ''; }
         if (otherOption === void 0) { otherOption = ''; }
-        if (specificTable === void 0) { specificTable = null; }
-        specificTable = specificTable || '';
-        if (outputFile === null) {
+        if (specificTable === void 0) { specificTable = ''; }
+        if (outputFile === '') {
             outputFile = path.join(process.cwd(), 'mysqldump.sql');
         }
         if (!data && !schemas) {
@@ -68,7 +69,7 @@ var MySQLDump = /** @class */ (function () {
         var defaultsExtraFile = this.buildCNF();
         var hexBlobOption = data ? '--hex-blob ' : '--no-data ';
         var createInfoOption = schemas ? '' : ' --no-create-info ';
-        var cmd = "".concat(mysqldump || 'mysqldump', " --defaults-extra-file=\"").concat(defaultsExtraFile, "\" ").concat(otherOption, " --skip-add-locks --single-transaction --quick ").concat(createInfoOption).concat(hexBlobOption).concat(this.DB_NAME, " ").concat(specificTable, " > '").concat(outputFile, "'");
+        var cmd = "".concat(mysqldump, " --defaults-extra-file=\"").concat(defaultsExtraFile, "\" ").concat(otherOption, " --skip-add-locks --single-transaction --quick ").concat(createInfoOption).concat(hexBlobOption).concat(this.DB_NAME, " ").concat(specificTable, " > '").concat(outputFile, "'");
         this.executeAndCheckStatus(cmd);
         return (this.mysqldump = outputFile);
     };
@@ -79,11 +80,10 @@ var MySQLDump = /** @class */ (function () {
             var stdout = execSync(command, { encoding: 'utf-8' });
             output.push(stdout);
         }
-        catch (error) {
-            console.log("The command >>  ".concat(command, " \n\t returned with a status code (").concat(error.status, "). Expecting 0 for success."));
-            console.log("Command output::\t ".concat(error.stdout));
+        catch (e) {
+            console.log("Command output::", e);
             if (exitOnFailure) {
-                process.exit(error.status);
+                process.exit(1);
             }
         }
     };
@@ -170,8 +170,8 @@ var parseSQLToTypeScript = function (sql) {
             var localColumn = foreignKeyMatch[2];
             var foreignTable = foreignKeyMatch[3];
             var foreignColumn = foreignKeyMatch[4];
-            var onDeleteAction = foreignKeyMatch[6] || null;
-            var onUpdateAction = foreignKeyMatch[8] || null;
+            var onDeleteAction = foreignKeyMatch[6] || '';
+            var onUpdateAction = foreignKeyMatch[8] || '';
             references.push({
                 TABLE: tableName,
                 CONSTRAINT: constraintName,
@@ -186,6 +186,7 @@ var parseSQLToTypeScript = function (sql) {
             TABLE_NAME: tableName,
             TABLE_DEFINITION: tableMatch[0],
             TABLE_CONSTRAINT: references,
+            REST_URL_EXPRESSION: argMap['--restUrlExpression'] || '"/rest/"',
             TABLE_NAME_SHORT: tableName.replace(MySQLDump.DB_PREFIX, ''),
             TABLE_NAME_LOWER: tableName.toLowerCase(),
             TABLE_NAME_UPPER: tableName.toUpperCase(),
@@ -244,12 +245,15 @@ var parseSQLToTypeScript = function (sql) {
                 console.log("Foreign table ".concat(foreignTable, " not found for ").concat(ref.TABLE, ".").concat(ref.CONSTRAINT));
                 continue;
             }
-            if (!tableData[foreignTable].TABLE_REFERENCED_BY) {
+            if (!('TABLE_REFERENCED_BY' in tableData[foreignTable])) {
                 tableData[foreignTable].TABLE_REFERENCED_BY = {};
             }
+            // @ts-ignore
             if (!tableData[foreignTable].TABLE_REFERENCED_BY[foreignColumn]) {
+                // @ts-ignore
                 tableData[foreignTable].TABLE_REFERENCED_BY[foreignColumn] = [];
             }
+            // @ts-ignore
             tableData[foreignTable].TABLE_REFERENCED_BY[foreignColumn].push({
                 TABLE: tableName,
                 COLUMN: columnName,
@@ -258,9 +262,12 @@ var parseSQLToTypeScript = function (sql) {
             if (!tableData[tableName].TABLE_REFERENCES) {
                 tableData[tableName].TABLE_REFERENCES = {};
             }
+            // @ts-ignore
             if (!tableData[tableName].TABLE_REFERENCES[columnName]) {
+                // @ts-ignore
                 tableData[tableName].TABLE_REFERENCES[columnName] = [];
             }
+            // @ts-ignore
             tableData[tableName].TABLE_REFERENCES[columnName].push({
                 TABLE: foreignTable,
                 COLUMN: foreignColumn,
@@ -296,7 +303,7 @@ var wsLiveUpdatesTemplate = fs.readFileSync(path.resolve(__dirname, 'assets/hand
 fs.writeFileSync(path.join(MySQLDump.OUTPUT_DIR, 'WsLiveUpdates.ts'), Handlebars.compile(wsLiveUpdatesTemplate)(tableData));
 var template = fs.readFileSync(path.resolve(__dirname, 'assets/handlebars/Table.ts.handlebars'), 'utf-8');
 var testTemplate = fs.readFileSync(path.resolve(__dirname, 'assets/handlebars/Table.test.ts.handlebars'), 'utf-8');
-Object.values(tableData.TABLES).map(function (tableData, key) {
+Object.values(tableData.TABLES).forEach(function (tableData) {
     var tableName = tableData.TABLE_NAME_SHORT_PASCAL_CASE;
     fs.writeFileSync(path.join(MySQLDump.OUTPUT_DIR, tableName + '.ts'), Handlebars.compile(template)(tableData));
     fs.writeFileSync(path.join(MySQLDump.OUTPUT_DIR, tableName + '.test.ts'), Handlebars.compile(testTemplate)(tableData));

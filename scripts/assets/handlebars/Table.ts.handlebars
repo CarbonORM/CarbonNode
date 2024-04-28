@@ -27,6 +27,7 @@ type GetRequestTableOverrides = {}
 // required parameters, optional parameters, parameter type overrides, response, and table names
 const Get = restRequest<GetCustomAndRequiredFields, i{{TABLE_NAME_SHORT_PASCAL_CASE}}, GetRequestTableOverrides, iGetC6RestResponse<i{{TABLE_NAME_SHORT_PASCAL_CASE}}>, RestTableNames>({
     C6: C6,
+    restURL: {{{REST_URL_EXPRESSION}}},
     tableName: {{TABLE_NAME_SHORT}}.TABLE_NAME,
     requestMethod: GET,
     queryCallback: (request) => {
@@ -55,6 +56,7 @@ export function putState{{TABLE_NAME_SHORT_PASCAL_CASE}}(response : AxiosRespons
 
 const Put = restRequest<PutCustomAndRequiredFields, i{{TABLE_NAME_SHORT_PASCAL_CASE}}, PutRequestTableOverrides, iPutC6RestResponse<i{{TABLE_NAME_SHORT_PASCAL_CASE}}>, RestTableNames>({
     C6: C6,
+    restURL: {{{REST_URL_EXPRESSION}}},
     tableName: {{TABLE_NAME_SHORT}}.TABLE_NAME,
     requestMethod: PUT,
     queryCallback: (request) => {
@@ -98,6 +100,7 @@ export function postState{{TABLE_NAME_SHORT_PASCAL_CASE}}(response : AxiosRespon
 
 const Post = restRequest<PostCustomAndRequiredFields, i{{TABLE_NAME_SHORT_PASCAL_CASE}}, PostRequestTableOverrides, iPostC6RestResponse<i{{TABLE_NAME_SHORT_PASCAL_CASE}}>, RestTableNames>({
     C6: C6,
+    restURL: {{{REST_URL_EXPRESSION}}},
     tableName: {{TABLE_NAME_SHORT}}.TABLE_NAME,
     requestMethod: POST,
     queryCallback: (request) => {
@@ -120,6 +123,7 @@ export function deleteState{{TABLE_NAME_SHORT_PASCAL_CASE}}(_response : AxiosRes
 
 const Delete = restRequest<DeleteCustomAndRequiredFields, i{{TABLE_NAME_SHORT_PASCAL_CASE}}, DeleteRequestTableOverrides, iDeleteC6RestResponse<i{{TABLE_NAME_SHORT_PASCAL_CASE}}>, RestTableNames>({
     C6: C6,
+    restURL: {{{REST_URL_EXPRESSION}}},
     tableName: {{TABLE_NAME_SHORT}}.TABLE_NAME,
     requestMethod: DELETE,
     queryCallback: (request) => {
