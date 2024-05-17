@@ -44,7 +44,9 @@ export function TestRestfulResponse(response: AxiosResponse | any, success: ((r:
 
 }
 
-export function removeInvalidKeys<iRestObject>(request: any, c6Tables: { [key: string]: (iC6RestfulModel & { [key: string]: any }) }): iRestObject {
+export function removeInvalidKeys<iRestObject>(request: any, c6Tables: {
+    [key: string]: (iC6RestfulModel & { [key: string]: any })
+}): iRestObject {
 
     let intersection: iRestObject = {} as iRestObject
 
@@ -300,6 +302,7 @@ export interface iC6Object {
             { [key: string]: string | number }
     },
     PREFIX: string,
+
     [key: string]: any
 }
 
@@ -324,6 +327,7 @@ interface iRest<CustomAndRequiredFields extends { [key: string]: any }, RestTabl
     C6: iC6Object,
     axios?: AxiosInstance,
     restURL?: string,
+    withCredentials?: boolean,
     tableName: RestShortTableNames | RestShortTableNames[],
     requestMethod: iRestMethods,
     clearCache?: () => void,
@@ -362,6 +366,7 @@ export default function restApi<
       C6,
       axios = axiosInstance,
       restURL = '/rest/',
+    withCredentials = true,
       tableName,
       requestMethod = GET,
       queryCallback = {},
@@ -676,42 +681,45 @@ export default function restApi<
 
                 const axiosActiveRequest: AxiosPromise<ResponseDataType> = axios[requestMethod.toLowerCase()]<ResponseDataType>(
                     restRequestUri,
-                    (() => {
+                    {
+                        withCredentials: withCredentials,
+                        ...((() => {
 
-                        if (requestMethod === GET) {
+                            if (requestMethod === GET) {
 
-                            return {
-                                params: query
+                                return {
+                                    params: query
+                                }
+
+                            } else if (requestMethod === POST) {
+
+                                if (undefined !== request?.dataInsertMultipleRows) {
+
+                                    return request.dataInsertMultipleRows.map(data =>
+                                        convertForRequestBody<typeof data>(data, fullTableList, C6, (message) => toast.error(message, toastOptions)));
+
+                                }
+
+                                return convertForRequestBody<RestTableInterfaces>(query as RestTableInterfaces, fullTableList, C6, (message) => toast.error(message, toastOptions))
+
+                            } else if (requestMethod === PUT) {
+
+                                return convertForRequestBody<RestTableInterfaces>(query as RestTableInterfaces, fullTableList, C6, (message) => toast.error(message, toastOptions))
+
+                            } else if (requestMethod === DELETE) {
+
+                                return {
+                                    data: convertForRequestBody<RestTableInterfaces>(query as RestTableInterfaces, fullTableList, C6, (message) => toast.error(message, toastOptions))
+                                }
+
+                            } else {
+
+                                throw new Error('The request method (' + requestMethod + ') was not recognized.')
+
                             }
 
-                        } else if (requestMethod === POST) {
-
-                            if (undefined !== request?.dataInsertMultipleRows) {
-
-                                return request.dataInsertMultipleRows.map(data =>
-                                    convertForRequestBody<typeof data>(data, fullTableList, C6, (message) => toast.error(message, toastOptions)));
-
-                            }
-
-                            return convertForRequestBody<RestTableInterfaces>(query as RestTableInterfaces, fullTableList, C6,(message) => toast.error(message, toastOptions))
-
-                        } else if (requestMethod === PUT) {
-
-                            return convertForRequestBody<RestTableInterfaces>(query as RestTableInterfaces, fullTableList, C6,(message) => toast.error(message, toastOptions))
-
-                        } else if (requestMethod === DELETE) {
-
-                            return {
-                                data: convertForRequestBody<RestTableInterfaces>(query as RestTableInterfaces, fullTableList, C6,(message) => toast.error(message, toastOptions))
-                            }
-
-                        } else {
-
-                            throw new Error('The request method (' + requestMethod + ') was not recognized.')
-
-                        }
-
-                    })()
+                        })())
+                    }
                 );
 
                 if (cachingConfirmed) {
