@@ -653,7 +653,9 @@ export default function restApi<
 
             }
 
-            // todo - remove
+            // A part of me exists that wants to remove this, but it's a good feature
+            // this allows developers the ability to cache requests based on primary key
+            // for tables like `photos` this can be a huge performance boost
             if (undefined !== query
                 && null !== query
                 && undefined !== primaryKey
@@ -842,13 +844,11 @@ export default function restApi<
 
                         }
 
-                        if (eFetchDependencies.NONE !== request.fetchDependencies) {
+                        if (request.fetchDependencies ??= eFetchDependencies.NONE) {
 
                             console.groupCollapsed('%c API: fetchDependencies segment', 'color: #0c0')
 
-                            console.log('%c ' + requestMethod + ' ' + tableName, 'color: #0c0')
-
-                            console.trace();
+                            console.log('%c ' + requestMethod + '  ' + tableName, 'color: #0c0')
 
                             const fetchDependencies = async (fetchData: {
                                 [key: string]: iConstraint[]
@@ -871,6 +871,8 @@ export default function restApi<
 
                                     const RestApi = fetchTable.default
 
+                                    console.log(constraint, fetchTable)
+
                                     return RestApi.Get({
                                         [C6.WHERE]: {
                                             [constraint.COLUMN]: responseData.rest[column]
@@ -886,7 +888,7 @@ export default function restApi<
                             // noinspection FallThroughInSwitchStatementJS
                             switch (request.fetchDependencies) {
                                 case eFetchDependencies.ALL:
-                                case eFetchDependencies.CHILDREN:
+                                case eFetchDependencies.CHILDREN: // todo - make this a binary flag with more expressive options
                                 // @ts-ignore
                                 case eFetchDependencies.REFERENCED:
 
@@ -917,6 +919,8 @@ export default function restApi<
                             await Promise.all(dependencies)
 
                         }
+
+                        console.trace();
 
                         console.groupEnd()
 
