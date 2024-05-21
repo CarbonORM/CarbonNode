@@ -1,6 +1,6 @@
 import axiosInstance from "api/axiosInstance";
 import convertForRequestBody from "api/convertForRequestBody";
-import {iC6RestfulModel, iConstraint, iRestApiFunctions, tC6RestApi} from "api/interfaces/ormInterfaces";
+import {iC6RestfulModel, iConstraint, iRestApiFunctions} from "api/interfaces/ormInterfaces";
 import {AxiosInstance, AxiosPromise, AxiosResponse} from "axios";
 
 import {toast} from "react-toastify";
