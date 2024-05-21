@@ -1,12 +1,12 @@
 import {
-    tRestApiImplementation
+    tC6RestApi
 } from "@carbonorm/carbonnode";
 
 {{#TABLES}}
-import { putState{{TABLE_NAME_SHORT_PASCAL_CASE}}, postState{{TABLE_NAME_SHORT_PASCAL_CASE}}, deleteState{{TABLE_NAME_SHORT_PASCAL_CASE}}, {{TABLE_NAME_SHORT_PASCAL_CASE}}  } from "./{{TABLE_NAME_SHORT_PASCAL_CASE}}";
+import {{TABLE_NAME_SHORT_PASCAL_CASE}}, { putState{{TABLE_NAME_SHORT_PASCAL_CASE}}, postState{{TABLE_NAME_SHORT_PASCAL_CASE}}, deleteState{{TABLE_NAME_SHORT_PASCAL_CASE}} }  from "./{{TABLE_NAME_SHORT_PASCAL_CASE}}";
 {{/TABLES}}
 
-const wsLiveUpdates: tRestApiImplementation = {
+const C6RestApi: tC6RestApi ={
 {{#TABLES}}
     {{TABLE_NAME_SHORT}}: {
         REST: {{TABLE_NAME_SHORT_PASCAL_CASE}},
@@ -18,6 +18,6 @@ const wsLiveUpdates: tRestApiImplementation = {
 };
 
 
-export default wsLiveUpdates;
+export default C6RestApi;
 
 

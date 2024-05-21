@@ -4,7 +4,7 @@ const {execSync} = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const Handlebars = require('handlebars');
-
+import {version} from '../package.json';
 
 const args = process.argv.slice(2);  // Slice the first two elements
 const argMap = {};
@@ -130,13 +130,13 @@ const pathRuntimeReference = MySQLDump.RELATIVE_OUTPUT_DIR.replace(/(^\/(src\/)?
 // Usage example
 const dumpFileLocation = MySQLDump.MySQLDump();
 
-type ColumnInfo = {
+/*type ColumnInfo = {
     type: string;
     length?: string;
     autoIncrement: boolean;
     notNull: boolean;
     defaultValue?: string;
-};
+};*/
 
 type foreignKeyInfo = {
     TABLE: string,
@@ -367,6 +367,7 @@ const parseSQLToTypeScript = (sql: string) => {
 
 
     return {
+        C6VERSION: version,
         PREFIX: MySQLDump.DB_PREFIX,
         TABLES: tables,
         RestTableNames: tables.map(table => "'" + table.TABLE_NAME + "'").join('\n | '),
@@ -389,9 +390,9 @@ const c6Template = fs.readFileSync(path.resolve(__dirname, 'assets/handlebars/C6
 
 fs.writeFileSync(path.join(MySQLDump.OUTPUT_DIR, 'C6.ts'), Handlebars.compile(c6Template)(tableData));
 
-const wsLiveUpdatesTemplate = fs.readFileSync(path.resolve(__dirname, 'assets/handlebars/WsLiveUpdates.ts.handlebars'), 'utf-8');
+const C6RestApiTemplate = fs.readFileSync(path.resolve(__dirname, 'assets/handlebars/C6RestApi.ts.handlebars'), 'utf-8');
 
-fs.writeFileSync(path.join(MySQLDump.OUTPUT_DIR, 'WsLiveUpdates.ts'), Handlebars.compile(wsLiveUpdatesTemplate)(tableData));
+fs.writeFileSync(path.join(MySQLDump.OUTPUT_DIR, 'C6RestApi.ts'), Handlebars.compile(C6RestApiTemplate)(tableData));
 
 const template = fs.readFileSync(path.resolve(__dirname, 'assets/handlebars/Table.ts.handlebars'), 'utf-8');
 

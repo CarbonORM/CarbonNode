@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+"use strict";
 var __values = (this && this.__values) || function(o) {
     var s = typeof Symbol === "function" && Symbol.iterator, m = s && o[s], i = 0;
     if (m) return m.call(o);
@@ -10,10 +11,12 @@ var __values = (this && this.__values) || function(o) {
     };
     throw new TypeError(s ? "Object is not iterable." : "Symbol.iterator is not defined.");
 };
+Object.defineProperty(exports, "__esModule", { value: true });
 var execSync = require('child_process').execSync;
 var fs = require('fs');
 var path = require('path');
 var Handlebars = require('handlebars');
+var package_json_1 = require("../package.json");
 var args = process.argv.slice(2); // Slice the first two elements
 var argMap = {};
 for (var i = 0; i < args.length; i += 2) {
@@ -284,6 +287,7 @@ var parseSQLToTypeScript = function (sql) {
     }
     var tables = Object.values(tableData);
     return {
+        C6VERSION: package_json_1.version,
         PREFIX: MySQLDump.DB_PREFIX,
         TABLES: tables,
         RestTableNames: tables.map(function (table) { return "'" + table.TABLE_NAME + "'"; }).join('\n | '),
@@ -299,8 +303,8 @@ fs.writeFileSync(path.join(process.cwd(), 'C6MySqlDump.json'), JSON.stringify(ta
 // import this file  src/assets/handlebars/C6.tsx.handlebars for a mustache template
 var c6Template = fs.readFileSync(path.resolve(__dirname, 'assets/handlebars/C6.ts.handlebars'), 'utf-8');
 fs.writeFileSync(path.join(MySQLDump.OUTPUT_DIR, 'C6.ts'), Handlebars.compile(c6Template)(tableData));
-var wsLiveUpdatesTemplate = fs.readFileSync(path.resolve(__dirname, 'assets/handlebars/WsLiveUpdates.ts.handlebars'), 'utf-8');
-fs.writeFileSync(path.join(MySQLDump.OUTPUT_DIR, 'WsLiveUpdates.ts'), Handlebars.compile(wsLiveUpdatesTemplate)(tableData));
+var C6RestApiTemplate = fs.readFileSync(path.resolve(__dirname, 'assets/handlebars/C6RestApi.ts.handlebars'), 'utf-8');
+fs.writeFileSync(path.join(MySQLDump.OUTPUT_DIR, 'C6RestApi.ts'), Handlebars.compile(C6RestApiTemplate)(tableData));
 var template = fs.readFileSync(path.resolve(__dirname, 'assets/handlebars/Table.ts.handlebars'), 'utf-8');
 var testTemplate = fs.readFileSync(path.resolve(__dirname, 'assets/handlebars/Table.test.ts.handlebars'), 'utf-8');
 Object.values(tableData.TABLES).forEach(function (tableData) {

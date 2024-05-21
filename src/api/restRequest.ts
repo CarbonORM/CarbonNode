@@ -1,6 +1,6 @@
 import axiosInstance from "api/axiosInstance";
 import convertForRequestBody from "api/convertForRequestBody";
-import {iC6RestfulModel} from "api/interfaces/ormInterfaces";
+import {iC6RestfulModel, iConstraint, iRestApiFunctions, tC6RestApi} from "api/interfaces/ormInterfaces";
 import {AxiosInstance, AxiosPromise, AxiosResponse} from "axios";
 
 import {toast} from "react-toastify";
@@ -105,10 +105,19 @@ type DeepPartialAny<T> = {
     [P in keyof T]?: T[P] extends AnyObject ? DeepPartialAny<T[P]> : any
 }
 
+export enum eFetchDependencies {
+    NONE = 0,
+    REFERENCED = 1,
+    CHILDREN = 1,
+    REFERENCES = 2,
+    PARENTS = 2,
+    ALL = 3
+}
+
 export type iAPI<RestTableInterfaces extends { [key: string]: any }> = RestTableInterfaces & {
     dataInsertMultipleRows?: RestTableInterfaces[],
     cacheResults?: boolean, // aka ignoreCache
-    fetchDependencies?: boolean,
+    fetchDependencies?: eFetchDependencies|Promise<apiReturn<iGetC6RestResponse<any>>>[],
     debug?: boolean,
     success?: string | ((r: AxiosResponse) => (string | void)),
     error?: string | ((r: AxiosResponse) => (string | void)),
@@ -297,11 +306,15 @@ export interface iPutC6RestResponse<RestData = any, RequestData = any> extends i
 }
 
 export interface iC6Object {
+    C6VERSION: string,
     TABLES: {
         [key: string]: iC6RestfulModel &
             { [key: string]: string | number }
     },
     PREFIX: string,
+    IMPORT: (tableName: string) => Promise<{
+        default: iRestApiFunctions
+    }>,
 
     [key: string]: any
 }
@@ -325,6 +338,7 @@ interface iRest<CustomAndRequiredFields extends { [key: string]: any }, RestTabl
 }, ResponseDataType = any,
     RestShortTableNames extends string = any> {
     C6: iC6Object,
+    C6RestApi: () => tC6RestApi,
     axios?: AxiosInstance,
     restURL?: string,
     withCredentials?: boolean,
@@ -364,6 +378,7 @@ export default function restApi<
     RestShortTableNames extends string = any
 >({
       C6,
+      C6RestApi,
       axios = axiosInstance,
       restURL = '/rest/',
       withCredentials = true,
@@ -751,8 +766,9 @@ export default function restApi<
                 // we had removed the value from the request to add to the URI.
                 addBackPK?.();  // adding back so post-processing methods work
 
+                // returning the promise with this then is important for tests. todo - we could make that optional.
                 // https://rapidapi.com/guides/axios-async-await
-                return axiosActiveRequest.then(response => {
+                return axiosActiveRequest.then(async (response) => {
 
                     if (typeof response.data === 'string') {
 
@@ -768,50 +784,6 @@ export default function restApi<
 
                     }
 
-                    apiResponse = TestRestfulResponse(response, request?.success, request?.error ?? "An unexpected API error occurred!")
-
-                    if (false !== apiResponse) {
-
-                        responseCallback(response, request, apiResponse)
-
-                        if (C6.GET === requestMethod) {
-
-                            const responseData = response.data as iGetC6RestResponse<any>;
-
-                            // @ts-ignore
-                            returnGetNextPageFunction = 1 !== query?.[C6.PAGINATION]?.[C6.LIMIT] &&
-                                query?.[C6.PAGINATION]?.[C6.LIMIT] === responseData.rest.length
-
-                            if (false === isTest || true === isVerbose) {
-
-                                console.groupCollapsed('%c API: Response returned length (' + responseData.rest?.length + ') of possible (' + query?.[C6.PAGINATION]?.[C6.LIMIT] + ') limit!', 'color: #0c0')
-
-                                console.log('%c ' + requestMethod + ' ' + tableName, 'color: #0c0')
-
-                                console.log('%c Request Data (note you may see the success and/or error prompt):', 'color: #0c0', request)
-
-                                console.log('%c Response Data:', 'color: #0c0', responseData.rest)
-
-                                console.log('%c Will return get next page function:' + (1 !== query?.[C6.PAGINATION]?.[C6.LIMIT] ? '' : ' (Will not return with explicit limit 1 set)'), 'color: #0c0', true === returnGetNextPageFunction)
-
-                                console.trace();
-
-                                console.groupEnd()
-
-                            }
-
-                            if (false === returnGetNextPageFunction
-                                && true === request.debug
-                                && isLocal) {
-
-                                toast.success("DEVS: Response returned length (" + responseData.rest?.length + ") less than limit (" + query?.[C6.PAGINATION]?.[C6.LIMIT] + ").", toastOptionsDevs);
-
-                            }
-
-                        }
-
-                    }
-
                     if (cachingConfirmed) {
 
                         const cacheIndex = apiRequestCache.findIndex(cache => cache.requestArgumentsSerialized === querySerialized);
@@ -820,6 +792,137 @@ export default function restApi<
 
                         // only cache get method requests
                         apiRequestCache[cacheIndex].response = response
+
+                    }
+
+                    apiResponse = TestRestfulResponse(response, request?.success, request?.error ?? "An unexpected API error occurred!")
+
+                    if (false === apiResponse) {
+
+                        if (request.debug && isLocal) {
+
+                            toast.warning("DEVS: TestRestfulResponse returned false for (" + operatingTable + ").", toastOptionsDevs);
+
+                        }
+
+                        return response;
+
+                    }
+
+                    responseCallback(response, request, apiResponse)
+
+                    if (C6.GET === requestMethod) {
+
+                        const responseData = response.data as iGetC6RestResponse<any>;
+
+                        returnGetNextPageFunction = 1 !== query?.[C6.PAGINATION]?.[C6.LIMIT] &&
+                            query?.[C6.PAGINATION]?.[C6.LIMIT] === responseData.rest.length
+
+                        if (false === isTest || true === isVerbose) {
+
+                            console.groupCollapsed('%c API: Response returned length (' + responseData.rest?.length + ') of possible (' + query?.[C6.PAGINATION]?.[C6.LIMIT] + ') limit!', 'color: #0c0')
+
+                            console.log('%c ' + requestMethod + ' ' + tableName, 'color: #0c0')
+
+                            console.log('%c Request Data (note you may see the success and/or error prompt):', 'color: #0c0', request)
+
+                            console.log('%c Response Data:', 'color: #0c0', responseData.rest)
+
+                            console.log('%c Will return get next page function:' + (1 !== query?.[C6.PAGINATION]?.[C6.LIMIT] ? '' : ' (Will not return with explicit limit 1 set)'), 'color: #0c0', true === returnGetNextPageFunction)
+
+                            console.trace();
+
+                            console.groupEnd()
+
+                        }
+
+                        if (false === returnGetNextPageFunction
+                            && true === request.debug
+                            && isLocal) {
+
+                            toast.success("DEVS: Response returned length (" + responseData.rest?.length + ") less than limit (" + query?.[C6.PAGINATION]?.[C6.LIMIT] + ").", toastOptionsDevs);
+
+                        }
+
+                        if (eFetchDependencies.NONE !== request.fetchDependencies) {
+
+                            const C6FullApi = C6RestApi()
+
+                            console.groupCollapsed('%c API: fetchDependencies segment', 'color: #0c0')
+
+                            console.log('%c ' + requestMethod + ' ' + tableName, 'color: #0c0')
+
+                            console.trace();
+
+                            const fetchDependencies = async (fetchData: {
+                                [key: string]: iConstraint[]
+                            }) => Object.keys(
+                                fetchData
+                            ).map((column) => {
+
+                                // check if the column is in the response
+                                if (undefined === responseData.rest[column]) {
+
+                                    return false
+
+                                }
+
+                                return fetchData[column].map(async (constraint) => {
+
+                                    console.log(C6FullApi, column, constraint.TABLE)
+
+                                    const fetchTable = await C6.IMPORT(constraint.TABLE)
+
+                                    const RestApi = fetchTable.default
+
+                                    return RestApi.Get({
+                                        [C6.WHERE]: {
+                                            [constraint.COLUMN]: responseData.rest[column]
+                                        }
+                                    });
+
+                                });
+
+                            });
+
+                            let dependencies: any[] = [];
+
+                            // noinspection FallThroughInSwitchStatementJS
+                            switch (request.fetchDependencies) {
+                                case eFetchDependencies.ALL:
+                                case eFetchDependencies.CHILDREN:
+                                // @ts-ignore
+                                case eFetchDependencies.REFERENCED:
+
+                                    const referencedBy = C6.TABLES[operatingTable].TABLE_REFERENCED_BY;
+
+                                    dependencies = (await fetchDependencies(referencedBy)).flat(Infinity)
+
+                                    if (request.fetchDependencies !== eFetchDependencies.ALL) {
+
+                                        break;
+
+                                    }
+
+                                case eFetchDependencies.PARENTS:
+                                case eFetchDependencies.REFERENCES:
+
+                                    const references = C6.TABLES[operatingTable].TABLE_REFERENCES;
+
+                                    dependencies = [...dependencies, (await fetchDependencies(references)).flat(Infinity)]
+
+                                    break;
+                                default:
+                                    throw new Error('The value of  fetchDependencies (' + request.fetchDependencies?.toString() + ') was not recognized.')
+                            }
+
+                            request.fetchDependencies = dependencies;
+
+                            await Promise.all(dependencies)
+
+                        }
+
+                        console.groupEnd()
 
                     }
 

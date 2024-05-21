@@ -1,3 +1,13 @@
+import {
+    apiReturn,
+    iAPI,
+    iDeleteC6RestResponse,
+    iPostC6RestResponse,
+    iGetC6RestResponse,
+    iPutC6RestResponse
+} from "api/restRequest";
+
+
 export interface stringMap {
     [key: string]: string;
 }
@@ -38,8 +48,23 @@ export interface iC6RestfulModel<RestShortTableNames extends string = string> {
     TABLE_REFERENCED_BY: { [columnName: string]: iConstraint[] },
 }
 
+export interface iRestApiFunctions {
+    Delete: (request?: (iAPI<any> & any)) => apiReturn<iDeleteC6RestResponse<any>>;
+    Post: (request?: (iAPI<any> & any)) => apiReturn<iPostC6RestResponse<any>>;
+    Get: (request?: (iAPI<any> & any)) => apiReturn<iGetC6RestResponse<any>>;
+    Put: (request?: (iAPI<any> & any)) => apiReturn<iPutC6RestResponse<any>>
+}
 
-export type tC6Tables = { [key: string]: (iC6RestfulModel & { [key: string]: any }) }
+export interface tC6Tables { [key: string]: (iC6RestfulModel & { [key: string]: any }) }
 
-export type tWsLiveUpdate = { [key: string]: { PUT: Function, POST: Function, DELETE: Function } };
+export interface tC6RestApi {
+    [key: string]: {
+        REST: iRestApiFunctions,
+        PUT: Function;
+        POST: Function;
+        DELETE: Function;
+    };
+}
+
+
 

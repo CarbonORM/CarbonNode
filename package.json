@@ -41,7 +41,7 @@
     "test": "node test/test.js",
     "pretest": "npm run build",
     "build:index": "npx barrelsby -d ./src --delete --exclude '(jestHoc|\\.test|\\.d).(js|tsx?)$' --exportDefault --verbose",
-    "build:generateRestBindings": "cd ./scripts/ && tsc --downlevelIteration generateRestBindings.ts && mv generateRestBindings.js generateRestBindings.cjs",
+    "build:generateRestBindings": "cd ./scripts/ && tsc --downlevelIteration --resolveJsonModule generateRestBindings.ts && mv generateRestBindings.js generateRestBindings.cjs",
     "generateRestBindings": "npm run build:generateRestBindings && node ./scripts/generateRestBindings.cjs",
     "c6": "npm run generateRestBindings"
   },

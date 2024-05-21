@@ -63,7 +63,7 @@ generate. Here are the templates used to generate the code:
 
 1) [C6.ts.handlebars](https://github.com/CarbonORM/CarbonNode/blob/main/scripts/assets/handlebars/C6.ts.handlebars)
 2) [Table.ts.handlebars](https://github.com/CarbonORM/CarbonNode/blob/main/scripts/assets/handlebars/Table.ts.handlebars)
-3) [Websocket.ts.handlebars](https://github.com/CarbonORM/CarbonNode/blob/main/scripts/assets/handlebars/WsLiveUpdates.ts.handlebars)
+3) [Websocket.ts.handlebars](https://github.com/CarbonORM/CarbonNode/blob/main/scripts/assets/handlebars/C6RestApi.ts.handlebars)
 
 #### Generation Example
 
