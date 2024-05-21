@@ -338,7 +338,6 @@ interface iRest<CustomAndRequiredFields extends { [key: string]: any }, RestTabl
 }, ResponseDataType = any,
     RestShortTableNames extends string = any> {
     C6: iC6Object,
-    C6RestApi: () => tC6RestApi,
     axios?: AxiosInstance,
     restURL?: string,
     withCredentials?: boolean,
@@ -378,7 +377,6 @@ export default function restApi<
     RestShortTableNames extends string = any
 >({
       C6,
-      C6RestApi,
       axios = axiosInstance,
       restURL = '/rest/',
       withCredentials = true,
@@ -846,8 +844,6 @@ export default function restApi<
 
                         if (eFetchDependencies.NONE !== request.fetchDependencies) {
 
-                            const C6FullApi = C6RestApi()
-
                             console.groupCollapsed('%c API: fetchDependencies segment', 'color: #0c0')
 
                             console.log('%c ' + requestMethod + ' ' + tableName, 'color: #0c0')
@@ -869,7 +865,7 @@ export default function restApi<
 
                                 return fetchData[column].map(async (constraint) => {
 
-                                    console.log(C6FullApi, column, constraint.TABLE)
+                                    console.log(column, constraint.TABLE)
 
                                     const fetchTable = await C6.IMPORT(constraint.TABLE)
 
