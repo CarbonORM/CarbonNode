@@ -856,7 +856,10 @@ export default function restApi<
                                 fetchData
                             ).map((column) => {
 
+                                console.log(responseData.rest,  column)
+
                                 // check if the column is in the response
+                                // todo - this may need [0][x]
                                 if (undefined === responseData.rest[column]) {
 
                                     return false
@@ -875,7 +878,7 @@ export default function restApi<
 
                                     return RestApi.Get({
                                         [C6.WHERE]: {
-                                            [constraint.COLUMN]: responseData.rest[column]
+                                            [constraint.COLUMN]: responseData.rest[column]  // todo - using value to avoid joins.... but. maybe this should be a parameterizable option
                                         }
                                     });
 
