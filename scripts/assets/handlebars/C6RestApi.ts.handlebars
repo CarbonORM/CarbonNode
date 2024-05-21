@@ -1,0 +1,23 @@
+import {
+    tRestApiImplementation
+} from "@carbonorm/carbonnode";
+
+{{#TABLES}}
+import { putState{{TABLE_NAME_SHORT_PASCAL_CASE}}, postState{{TABLE_NAME_SHORT_PASCAL_CASE}}, deleteState{{TABLE_NAME_SHORT_PASCAL_CASE}}, {{TABLE_NAME_SHORT_PASCAL_CASE}}  } from "./{{TABLE_NAME_SHORT_PASCAL_CASE}}";
+{{/TABLES}}
+
+const wsLiveUpdates: tRestApiImplementation = {
+{{#TABLES}}
+    {{TABLE_NAME_SHORT}}: {
+        REST: {{TABLE_NAME_SHORT_PASCAL_CASE}},
+        PUT: putState{{TABLE_NAME_SHORT_PASCAL_CASE}},
+        POST: postState{{TABLE_NAME_SHORT_PASCAL_CASE}},
+        DELETE: deleteState{{TABLE_NAME_SHORT_PASCAL_CASE}},
+    },
+{{/TABLES}}
+};
+
+
+export default wsLiveUpdates;
+
+
