@@ -117,7 +117,7 @@ export enum eFetchDependencies {
 export type iAPI<RestTableInterfaces extends { [key: string]: any }> = RestTableInterfaces & {
     dataInsertMultipleRows?: RestTableInterfaces[],
     cacheResults?: boolean, // aka ignoreCache
-    fetchDependencies?: eFetchDependencies|Promise<apiReturn<iGetC6RestResponse<any>>>[],
+    fetchDependencies?: eFetchDependencies | Promise<apiReturn<iGetC6RestResponse<any>>>[],
     debug?: boolean,
     success?: string | ((r: AxiosResponse) => (string | void)),
     error?: string | ((r: AxiosResponse) => (string | void)),
@@ -231,6 +231,14 @@ export function clearCache(props?: iClearCache) {
 
     userCustomClearCache = apiRequestCache = []
 
+}
+
+
+export function removePrefixIfExists(tableName: string, prefix: string): string {
+    if (tableName.startsWith(prefix.toLowerCase())) {
+        return tableName.slice(prefix.length);
+    }
+    return tableName;
 }
 
 /**
@@ -393,7 +401,7 @@ export default function restApi<
 
     const operatingTableFullName = fullTableList[0];
 
-    const operatingTable = operatingTableFullName.replace(C6.PREFIX, '');
+    const operatingTable = removePrefixIfExists(operatingTableFullName,C6.PREFIX);
 
     const tables = fullTableList.join(',')
 
@@ -846,9 +854,7 @@ export default function restApi<
 
                         if (request.fetchDependencies ??= eFetchDependencies.NONE) {
 
-                            console.groupCollapsed('%c API: fetchDependencies segment', 'color: #0c0')
-
-                            console.log('%c ' + requestMethod + '  ' + tableName, 'color: #0c0')
+                            console.groupCollapsed('%c API: fetchDependencies segment (' + requestMethod + ' ' + tableName + ')', 'color: #0c0')
 
                             const fetchDependencies = async (fetchData: {
                                 [key: string]: iConstraint[]
@@ -856,13 +862,17 @@ export default function restApi<
                                 fetchData
                             ).map((column) => {
 
-                                console.log(responseData.rest,  column)
+                                console.log('fetchDependencies', responseData.rest, column)
 
                                 // check if the column is in the response
                                 // todo - this may need [0][x]
-                                if (undefined === responseData.rest[column]) {
+                                if (!(column in responseData.rest)
+                                    && !(0 in responseData.rest
+                                        && column in responseData.rest[0])) {
 
-                                    return false
+                                    console.warn('The column (' + column + ') was not found in the response data. We will not fetch.', responseData)
+
+                                    return false;
 
                                 }
 
@@ -878,7 +888,8 @@ export default function restApi<
 
                                     return RestApi.Get({
                                         [C6.WHERE]: {
-                                            [constraint.COLUMN]: responseData.rest[column]  // todo - using value to avoid joins.... but. maybe this should be a parameterizable option
+                                            // todo - using value to avoid joins.... but. maybe this should be a parameterizable option
+                                            [constraint.COLUMN]: responseData.rest[column]
                                         }
                                     });
 
@@ -890,12 +901,18 @@ export default function restApi<
 
                             // noinspection FallThroughInSwitchStatementJS
                             switch (request.fetchDependencies) {
+                                // @ts-ignore
                                 case eFetchDependencies.ALL:
+
+                                    console.log('Fetching all dependencies.')
+
                                 case eFetchDependencies.CHILDREN: // todo - make this a binary flag with more expressive options
                                 // @ts-ignore
                                 case eFetchDependencies.REFERENCED:
 
                                     const referencedBy = C6.TABLES[operatingTable].TABLE_REFERENCED_BY;
+
+                                    console.log('REFERENCED BY (CHILDREN)', referencedBy)
 
                                     dependencies = (await fetchDependencies(referencedBy)).flat(Infinity)
 
@@ -909,6 +926,8 @@ export default function restApi<
                                 case eFetchDependencies.REFERENCES:
 
                                     const references = C6.TABLES[operatingTable].TABLE_REFERENCES;
+
+                                    console.log('REFERENCES (PARENTS)', references)
 
                                     dependencies = [...dependencies, (await fetchDependencies(references)).flat(Infinity)]
 

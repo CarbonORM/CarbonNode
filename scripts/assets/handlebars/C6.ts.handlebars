@@ -7,7 +7,8 @@ import {
     iPostC6RestResponse,
     iDeleteC6RestResponse,
     iPutC6RestResponse,
-    iAPI
+    iAPI,
+    removePrefixIfExists
 } from "@carbonorm/carbonnode";
 import {AxiosResponse} from "axios";
 
@@ -108,7 +109,19 @@ async function dynamicRestImport(tableName: string) : Promise<{
 
     // if tableName is not a key in the TABLES object then throw an error
     if (!TABLES[tableName]) {
-        throw new Error('Table (' + tableName + ') does not exist in the TABLES object. Possible values include (' + Object.keys(TABLES).join(', ') + ')');
+
+        const modifiedTableName = removePrefixIfExists(tableName, RestTablePrefix);
+
+        if (!TABLES[modifiedTableName]) {
+
+            throw new Error('Table (' + tableName + ') does not exist in the TABLES object. Possible values include (' + Object.keys(TABLES).join(', ') + ')');
+
+        } else {
+
+            tableName = modifiedTableName;
+
+        }
+
     }
 
     const module = await import('./' + (tableName.split('_')
