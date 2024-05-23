@@ -107,21 +107,24 @@ type DeepPartialAny<T> = {
 
 export enum eFetchDependencies {
     NONE = 0,
-    REFERENCED = 1,
-    CHILDREN = 1,
-    REFERENCES = 2,
-    PARENTS = 2,
-    ALL = 3
+    REFERENCED = 0b1,
+    CHILDREN = 0b1,
+    REFERENCES = 0b10,
+    PARENTS = 0b10,
+    ALL = 0b11,
+    C6ENTITY = 0b100,
+    RECURSIVE = 0b1000,
 }
 
+// todo - I don't like that these essentially become reserved words.
 export type iAPI<RestTableInterfaces extends { [key: string]: any }> = RestTableInterfaces & {
     dataInsertMultipleRows?: RestTableInterfaces[],
     cacheResults?: boolean, // aka ignoreCache
-    fetchDependencies?: eFetchDependencies | Promise<apiReturn<iGetC6RestResponse<any>>>[],
+    // todo - this should really only be used for get requests - add this to the Get interface or throw error (im actually inclined to ts ignore the function and add to iGetC6 atm; back later)
+    fetchDependencies?: number | eFetchDependencies | apiReturn<iGetC6RestResponse<any>>[],
     debug?: boolean,
     success?: string | ((r: AxiosResponse) => (string | void)),
     error?: string | ((r: AxiosResponse) => (string | void)),
-    blocking?: boolean
 }
 
 interface iCacheAPI<ResponseDataType = any> {
@@ -187,7 +190,7 @@ function checkCache<ResponseDataType = any, RestShortTableNames = string>(cacheR
 
         if (false === isTest || true === isVerbose) {
 
-            console.groupCollapsed('%c API: rest api cache has reached the final result. Returning undefined!', 'color: #cc0')
+            console.groupCollapsed('%c API: Rest api cache (' + requestMethod + '  ' + tableName + ') has reached the final result. Returning undefined!', 'color: #cc0')
 
             console.log('%c ' + requestMethod + ' ' + tableName, 'color: #cc0')
 
@@ -401,7 +404,7 @@ export default function restApi<
 
     const operatingTableFullName = fullTableList[0];
 
-    const operatingTable = removePrefixIfExists(operatingTableFullName,C6.PREFIX);
+    const operatingTable = removePrefixIfExists(operatingTableFullName, C6.PREFIX);
 
     const tables = fullTableList.join(',')
 
@@ -776,7 +779,7 @@ export default function restApi<
 
                 // returning the promise with this then is important for tests. todo - we could make that optional.
                 // https://rapidapi.com/guides/axios-async-await
-                return axiosActiveRequest.then(async (response) => {
+                return axiosActiveRequest.then(async (response): Promise<AxiosResponse<ResponseDataType, any>> => {
 
                     if (typeof response.data === 'string') {
 
@@ -817,6 +820,7 @@ export default function restApi<
 
                     }
 
+                    // stateful operations are done in the response callback - its leverages rest generated functions
                     responseCallback(response, request, apiResponse)
 
                     if (C6.GET === requestMethod) {
@@ -828,7 +832,7 @@ export default function restApi<
 
                         if (false === isTest || true === isVerbose) {
 
-                            console.groupCollapsed('%c API: Response returned length (' + responseData.rest?.length + ') of possible (' + query?.[C6.PAGINATION]?.[C6.LIMIT] + ') limit!', 'color: #0c0')
+                            console.groupCollapsed('%c API: Response (' + requestMethod + ' ' + tableName + ') returned length (' + responseData.rest?.length + ') of possible (' + query?.[C6.PAGINATION]?.[C6.LIMIT] + ') limit!', 'color: #0c0')
 
                             console.log('%c ' + requestMethod + ' ' + tableName, 'color: #0c0')
 
@@ -852,99 +856,116 @@ export default function restApi<
 
                         }
 
-                        if (request.fetchDependencies ??= eFetchDependencies.NONE) {
+                        request.fetchDependencies ??= eFetchDependencies.NONE;
 
-                            console.groupCollapsed('%c API: fetchDependencies segment (' + requestMethod + ' ' + tableName + ')', 'color: #0c0')
+                        if (request.fetchDependencies
+                            && 'number' === typeof request.fetchDependencies) {
 
-                            const fetchDependencies = async (fetchData: {
-                                [key: string]: iConstraint[]
-                            }) => Object.keys(
-                                fetchData
-                            ).map((column) => {
+                            const fetchDependencies = request.fetchDependencies as number;
 
-                                console.log('fetchDependencies', responseData.rest, column)
+                            console.groupCollapsed('%c API: Fetch Dependencies segment (' + requestMethod + ' ' + tableName + ')', 'color: #33ccff')
 
-                                // check if the column is in the response
-                                // todo - this may need [0][x]
-                                if (!(column in responseData.rest)
-                                    && !(0 in responseData.rest
-                                        && column in responseData.rest[0])) {
+                            console.trace();
 
-                                    console.warn('The column (' + column + ') was not found in the response data. We will not fetch.', responseData)
+                            // noinspection JSBitwiseOperatorUsage
+                            let dependencies: { [key: string]: iConstraint[] } = {
+                                ...fetchDependencies & eFetchDependencies.REFERENCED ? C6.TABLES[operatingTable].TABLE_REFERENCED_BY : {},
+                                ...fetchDependencies & eFetchDependencies.REFERENCES ? C6.TABLES[operatingTable].TABLE_REFERENCES : {}
+                            };
 
-                                    return false;
-
+                            let fetchReferences: {
+                                [externalTable: string]: {
+                                    [column: string]: string[]
                                 }
+                            } = {}
 
-                                return fetchData[column].map(async (constraint) => {
+                            let apiRequestPromises: Array<apiReturn<iGetC6RestResponse<any>>> = []
 
-                                    console.log(column, constraint.TABLE)
+                            Object.keys(
+                                dependencies
+                            ).forEach(column => dependencies[column].forEach((constraint) => {
+                                fetchReferences[constraint.TABLE] ??= {};
+                                fetchReferences[constraint.TABLE][constraint.COLUMN] = []
+                                fetchReferences[constraint.TABLE][constraint.COLUMN].push(responseData.rest[column] ?? responseData.rest.map((row) => row[column]))
+                            }));
 
-                                    const fetchTable = await C6.IMPORT(constraint.TABLE)
+                            for (const table in fetchReferences) {
 
-                                    const RestApi = fetchTable.default
+                                if (fetchDependencies & eFetchDependencies.C6ENTITY
+                                    && tableName === "carbon_carbons") {
 
-                                    console.log(constraint, fetchTable)
+                                    // this more or less implies
+                                    // todo - rethink the table ref entity system - when tables are renamed? no hooks exist in mysql
+                                    const tagFilter = (tag: string) => tag.split('/').pop() ?? ''
 
-                                    return RestApi.Get({
-                                        [C6.WHERE]: {
-                                            // todo - using value to avoid joins.... but. maybe this should be a parameterizable option
-                                            [constraint.COLUMN]: responseData.rest[column]
-                                        }
-                                    });
+                                    // since were already filtering on column, we can assume the first row constraint is the same as the rest
+                                    const referencesTable: string = tagFilter(responseData.rest[0]['entity_tag'] ?? '')
 
-                                });
+                                    // todo - allow c6 requests with multiple table endpoints to be fetched
+                                    //  const referencesTables: string[] = !(0 in responseData.rest) ? [tagFilter(responseData.rest['entity_tag'] ?? '')] : responseData.rest.map(row => tagFilter(row['entity_tag'] ?? '')).filter(n => n)
+                                    if (!table.endsWith(referencesTable)) {
 
-                            });
+                                        console.log('%c C6ENTITY: The constraintTableName (' + table + ') did not end with referencesTable (' + referencesTable + ')', 'color: #c00')
 
-                            let dependencies: any[] = [];
-
-                            // noinspection FallThroughInSwitchStatementJS
-                            switch (request.fetchDependencies) {
-                                // @ts-ignore
-                                case eFetchDependencies.ALL:
-
-                                    console.log('Fetching all dependencies.')
-
-                                case eFetchDependencies.CHILDREN: // todo - make this a binary flag with more expressive options
-                                // @ts-ignore
-                                case eFetchDependencies.REFERENCED:
-
-                                    const referencedBy = C6.TABLES[operatingTable].TABLE_REFERENCED_BY;
-
-                                    console.log('REFERENCED BY (CHILDREN)', referencedBy)
-
-                                    dependencies = (await fetchDependencies(referencedBy)).flat(Infinity)
-
-                                    if (request.fetchDependencies !== eFetchDependencies.ALL) {
-
-                                        break;
+                                        continue;
 
                                     }
 
-                                case eFetchDependencies.PARENTS:
-                                case eFetchDependencies.REFERENCES:
+                                    console.log('%c C6ENTITY: The constraintTableName (' + table + ') ended with referencesTable (' + referencesTable + ')', 'color: #0c0')
 
-                                    const references = C6.TABLES[operatingTable].TABLE_REFERENCES;
+                                }
 
-                                    console.log('REFERENCES (PARENTS)', references)
+                                const fetchTable = await C6.IMPORT(table)
 
-                                    dependencies = [...dependencies, (await fetchDependencies(references)).flat(Infinity)]
+                                const RestApi = fetchTable.default
 
-                                    break;
-                                default:
-                                    throw new Error('The value of  fetchDependencies (' + request.fetchDependencies?.toString() + ') was not recognized.')
+                                console.log('%c Fetch Dependencies will select (' + table + ') using GET request', 'color: #33ccff')
+
+                                // todo - filter out ids that exist in state?!?
+
+                                // this is a dynamic call to the rest api, any generated table may resolve with (RestApi)
+                                // todo - using value to avoid joins.... but. maybe this should be a parameterizable option -- think race conditions; its safer to join
+                                apiRequestPromises.push(RestApi.Get({
+                                        [C6.WHERE]: {
+                                            0: Object.keys(fetchReferences[table]).reduce((sum, column) => {
+
+                                                fetchReferences[table][column] = fetchReferences[table][column].flat(Infinity)
+
+                                                if (0 === fetchReferences[table][column].length) {
+
+                                                    console.warn('The column (' + column + ') was not found in the response data. We will not fetch.', responseData)
+
+                                                    return false;
+
+                                                }
+
+                                                sum[column] = fetchReferences[table][column].length === 1
+                                                    ? fetchReferences[table][column][0]
+                                                    : [
+                                                        C6.IN, fetchReferences[table][column]
+                                                    ]
+
+                                                return sum
+                                            }, {})
+                                        },
+                                        fetchDependencies: fetchDependencies & eFetchDependencies.RECURSIVE
+                                        || (fetchDependencies & eFetchDependencies.C6ENTITY
+                                            && table === "carbons")
+                                            ? fetchDependencies
+                                            : eFetchDependencies.NONE
+                                    }
+                                ));
+
                             }
 
-                            request.fetchDependencies = dependencies;
+                            await Promise.all(apiRequestPromises)
 
-                            await Promise.all(dependencies)
+                            request.fetchDependencies = apiRequestPromises
+
+                            console.groupEnd()
 
                         }
 
-                        console.trace();
-
-                        console.groupEnd()
 
                     }
 

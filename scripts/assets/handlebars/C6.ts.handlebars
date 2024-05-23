@@ -110,15 +110,19 @@ async function dynamicRestImport(tableName: string) : Promise<{
     // if tableName is not a key in the TABLES object then throw an error
     if (!TABLES[tableName]) {
 
-        const modifiedTableName = removePrefixIfExists(tableName, RestTablePrefix);
+        const error = (table: string) => throw new Error('Table (' + table + ') does not exist in the TABLES object. Possible values include (' + Object.keys(TABLES).join(', ') + ')');
 
-        if (!TABLES[modifiedTableName]) {
+        if (!tableName.startsWith(prefix.toLowerCase())) {
 
-            throw new Error('Table (' + tableName + ') does not exist in the TABLES object. Possible values include (' + Object.keys(TABLES).join(', ') + ')');
+            error(tableName);
 
-        } else {
+        }
 
-            tableName = modifiedTableName;
+        tableName = removePrefixIfExists(tableName, RestTablePrefix);
+
+        if (!TABLES[tableName]) {
+
+            error(tableName);
 
         }
 

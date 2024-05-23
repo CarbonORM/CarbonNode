@@ -19,7 +19,7 @@ export default (axios.create({
     baseURL: '',
 
     /**
-     * These headers are important to use here at dig.
+     * These headers are important to C6.
      * XMLHttpRequest - is a standard header all jquery ajax requests send by default. This allows our php side to return
      *                  nothing while running the get_header() and get_footer() functions with (bool) DropVariables::$ajax;
      *
@@ -50,10 +50,9 @@ export default (axios.create({
     // data should be default to empty for get request to serialize correctly
     data: {}, // do not change
 
-
     // `timeout` specifies the number of milliseconds before the request times out.
     // If the request takes longer than `timeout`, the request will be aborted.
-    // Default is 1000, this will fail for DIG
+    // Default is 1000 - lets increase this for large request which we are favored for
     timeout: 120000, // shit fails
 
     // `withCredentials` indicates weather cross-site Access-Control requests
