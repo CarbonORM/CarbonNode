@@ -781,210 +781,299 @@ export default function restApi<
                 // https://rapidapi.com/guides/axios-async-await
                 return axiosActiveRequest.then(async (response): Promise<AxiosResponse<ResponseDataType, any>> => {
 
-                    if (typeof response.data === 'string') {
+                        if (typeof response.data === 'string') {
 
-                        if (isTest) {
+                            if (isTest) {
 
-                            console.trace()
+                                console.trace()
 
-                            throw new Error('The response data was a string this typically indicated html was sent. Make sure all cookies (' + JSON.stringify(response.config.headers) + ') needed are present! (' + response.data + ')')
+                                throw new Error('The response data was a string this typically indicated html was sent. Make sure all cookies (' + JSON.stringify(response.config.headers) + ') needed are present! (' + response.data + ')')
+
+                            }
+
+                            return Promise.reject(response);
 
                         }
 
-                        return Promise.reject(response);
+                        if (cachingConfirmed) {
 
-                    }
+                            const cacheIndex = apiRequestCache.findIndex(cache => cache.requestArgumentsSerialized === querySerialized);
 
-                    if (cachingConfirmed) {
+                            apiRequestCache[cacheIndex].final = false === returnGetNextPageFunction
 
-                        const cacheIndex = apiRequestCache.findIndex(cache => cache.requestArgumentsSerialized === querySerialized);
+                            // only cache get method requests
+                            apiRequestCache[cacheIndex].response = response
 
-                        apiRequestCache[cacheIndex].final = false === returnGetNextPageFunction
+                        }
 
-                        // only cache get method requests
-                        apiRequestCache[cacheIndex].response = response
+                        apiResponse = TestRestfulResponse(response, request?.success, request?.error ?? "An unexpected API error occurred!")
 
-                    }
+                        if (false === apiResponse) {
 
-                    apiResponse = TestRestfulResponse(response, request?.success, request?.error ?? "An unexpected API error occurred!")
+                            if (request.debug && isLocal) {
 
-                    if (false === apiResponse) {
+                                toast.warning("DEVS: TestRestfulResponse returned false for (" + operatingTable + ").", toastOptionsDevs);
+
+                            }
+
+                            return response;
+
+                        }
+
+                        // stateful operations are done in the response callback - its leverages rest generated functions
+                        responseCallback(response, request, apiResponse)
+
+                        if (C6.GET === requestMethod) {
+
+                            const responseData = response.data as iGetC6RestResponse<any>;
+
+                            returnGetNextPageFunction = 1 !== query?.[C6.PAGINATION]?.[C6.LIMIT] &&
+                                query?.[C6.PAGINATION]?.[C6.LIMIT] === responseData.rest.length
+
+                            if (false === isTest || true === isVerbose) {
+
+                                console.groupCollapsed('%c API: Response (' + requestMethod + ' ' + tableName + ') returned length (' + responseData.rest?.length + ') of possible (' + query?.[C6.PAGINATION]?.[C6.LIMIT] + ') limit!', 'color: #0c0')
+
+                                console.log('%c ' + requestMethod + ' ' + tableName, 'color: #0c0')
+
+                                console.log('%c Request Data (note you may see the success and/or error prompt):', 'color: #0c0', request)
+
+                                console.log('%c Response Data:', 'color: #0c0', responseData.rest)
+
+                                console.log('%c Will return get next page function:' + (1 !== query?.[C6.PAGINATION]?.[C6.LIMIT] ? '' : ' (Will not return with explicit limit 1 set)'), 'color: #0c0', true === returnGetNextPageFunction)
+
+                                console.trace();
+
+                                console.groupEnd()
+
+                            }
+
+                            if (false === returnGetNextPageFunction
+                                && true === request.debug
+                                && isLocal) {
+
+                                toast.success("DEVS: Response returned length (" + responseData.rest?.length + ") less than limit (" + query?.[C6.PAGINATION]?.[C6.LIMIT] + ").", toastOptionsDevs);
+
+                            }
+
+                            request.fetchDependencies ??= eFetchDependencies.NONE;
+
+                            if (request.fetchDependencies
+                                && 'number' === typeof request.fetchDependencies
+                                && responseData.rest.length > 0) {
+
+                                const fetchDependencies = request.fetchDependencies as number;
+
+                                console.groupCollapsed('%c API: Fetch Dependencies segment (' + requestMethod + ' ' + tableName + ')'
+                                    + (fetchDependencies & eFetchDependencies.CHILDREN ? ' | (CHILDREN|REFERENCED) ' : '')
+                                    + (fetchDependencies & eFetchDependencies.PARENTS ? ' | (PARENTS|REFRENCED_BY)' : '')
+                                    + (fetchDependencies & eFetchDependencies.C6ENTITY ? ' | (C6ENTITY)' : '')
+                                    + (fetchDependencies & eFetchDependencies.RECURSIVE ? ' | (RECURSIVE)' : ''), 'color: #33ccff')
+
+                                console.groupCollapsed('Collapsed JS Trace');
+                                console.trace(); // hidden in collapsed group
+                                console.groupEnd();
+
+                                // noinspection JSBitwiseOperatorUsage
+                                let dependencies: {
+                                    [key: string]: iConstraint[]
+                                } = {};
+
+                                if (fetchDependencies & eFetchDependencies.C6ENTITY) {
+
+
+                                    dependencies = operatingTable.endsWith("carbon_carbons")
+                                        ? {
+                                            // the context of the entity system is a bit different
+                                            ...fetchDependencies & eFetchDependencies.CHILDREN // REFERENCED === CHILDREN
+                                                ? C6.TABLES[operatingTable].TABLE_REFERENCED_BY
+                                                : {},
+                                            ...fetchDependencies & eFetchDependencies.PARENTS // REFERENCES === PARENTS
+                                                ? C6.TABLES[operatingTable].TABLE_REFERENCES
+                                                : {}
+                                        } : {
+                                            // the context of the entity system is a bit different
+                                            ...fetchDependencies & eFetchDependencies.CHILDREN // REFERENCED === CHILDREN
+                                                ? {
+                                                    ...Object.keys(C6.TABLES[operatingTable].TABLE_REFERENCES).reduce((accumulator, columnName) => {
+
+                                                        if (!C6.TABLES[operatingTable].PRIMARY_SHORT.includes(columnName)) {
+                                                            accumulator[columnName] = C6.TABLES[operatingTable].TABLE_REFERENCES[columnName]
+                                                        }
+
+                                                        return accumulator
+                                                    }, {}),
+                                                    ...C6.TABLES[operatingTable].TABLE_REFERENCED_BY // it is unlikely that a C6 table will have any TABLE_REFERENCED_BY
+                                                }
+                                                : {},
+                                            ...fetchDependencies & eFetchDependencies.PARENTS // REFERENCES === PARENTS
+                                                ? C6.TABLES[operatingTable].PRIMARY_SHORT.reduce((accumulator, primaryKey) => {
+                                                    accumulator[primaryKey] = C6.TABLES[operatingTable].TABLE_REFERENCES[primaryKey]
+                                                    return accumulator
+                                                }, {})
+                                                : {}
+                                        }
+
+                                } else {
+
+                                    // this is the natural mysql context
+                                    dependencies = {
+                                        ...fetchDependencies & eFetchDependencies.REFERENCED // REFERENCED === CHILDREN
+                                            ? C6.TABLES[operatingTable].TABLE_REFERENCED_BY
+                                            : {},
+                                        ...fetchDependencies & eFetchDependencies.REFERENCES // REFERENCES === PARENTS
+                                            ? C6.TABLES[operatingTable].TABLE_REFERENCES
+                                            : {}
+                                    };
+
+                                }
+
+                                let fetchReferences: {
+                                    [externalTable: string]: {
+                                        [column: string]: string[]
+                                    }
+                                } = {}
+
+                                let apiRequestPromises: Array<Awaited<apiReturn<iGetC6RestResponse<any>>>> = []
+
+                                console.log('%c Dependencies', 'color: #005555', dependencies)
+
+                                Object.keys(
+                                    dependencies
+                                ).forEach(column => dependencies[column].forEach((constraint) => {
+                                    fetchReferences[constraint.TABLE] ??= {};
+                                    fetchReferences[constraint.TABLE][constraint.COLUMN] ??= []
+                                    // carbon_users -> user_id | user_photo -> carbon_carbons -> entity_id
+                                    fetchReferences[constraint.TABLE][constraint.COLUMN].push(responseData.rest[column] ?? responseData.rest.map((row) => row[column]).filter(n => n)) // todo - we are mapping all carbons received to every fk reference despite its tag name
+                                    console.log('fetchReferences[constraint.TABLE][constraint.COLUMN]', constraint.TABLE, constraint.COLUMN, fetchReferences[constraint.TABLE][constraint.COLUMN], responseData.rest)
+                                }));
+
+                                console.log('fetchReferences', fetchReferences)
+
+                                for (const tableToFetch in fetchReferences) {
+
+                                    if (fetchDependencies & eFetchDependencies.C6ENTITY
+                                        && 'string' === typeof tableName
+                                        && tableName.endsWith("carbon_carbons")) {
+
+                                        // this more or less implies
+                                        // todo - rethink the table ref entity system - when tables are renamed? no hooks exist in mysql
+                                        // since were already filtering on column, we can assume the first row constraint is the same as the rest
+
+                                        const referencesTables: string[] = responseData.rest.reduce((accumulator: string[], row) => {
+                                            if ('entity_tag' in row && !accumulator.includes(row['entity_tag'])) {
+                                                accumulator.push(row['entity_tag']);
+                                            }
+                                            return accumulator;
+                                        }, []).map((entityTag) => entityTag.split('\\').pop().toLowerCase());
+
+                                        const shouldContinue = referencesTables.find((referencesTable) => tableToFetch.endsWith(referencesTable))
+
+                                        if (!shouldContinue) {
+
+                                            console.log('%c C6ENTITY: The constraintTableName (' + tableToFetch + ') did not end with any value in referencesTables', 'color: #c00', referencesTables)
+
+                                            continue;
+
+                                        }
+
+                                        console.log('%c C6ENTITY: The constraintTableName (' + tableToFetch + ') will be fetched.', 'color: #0c0')
+
+                                    }
+
+                                    const fetchTable = await C6.IMPORT(tableToFetch)
+
+                                    const RestApi = fetchTable.default
+
+                                    console.log('%c Fetch Dependencies will select (' + tableToFetch + ') using GET request', 'color: #33ccff')
+
+                                    let nextFetchDependencies = eFetchDependencies.NONE
+
+                                    if (fetchDependencies & eFetchDependencies.RECURSIVE) {
+
+                                        if (fetchDependencies & eFetchDependencies.ALL) {
+
+                                            throw Error('Recursive fetch dependencies with both PARENT and CHILD reference will result in an infin1ite loop. As there is not real ending condition, this is not supported.')
+
+                                        }
+
+                                        nextFetchDependencies = fetchDependencies
+
+                                    } else if (fetchDependencies & eFetchDependencies.C6ENTITY) {
+
+                                        if (tableToFetch === "carbon_carbons") {
+
+                                            nextFetchDependencies = fetchDependencies
+
+                                        } else {
+
+                                            nextFetchDependencies = fetchDependencies ^ eFetchDependencies.C6ENTITY
+
+                                        }
+
+                                    }
+
+                                    console.log('fetchReferences', fetchReferences[tableToFetch], "Current fetchDependencies for (" + operatingTable + "):", fetchDependencies, "New fetchDependencies for (" + tableToFetch + "): ", nextFetchDependencies)
+
+                                    // todo - filter out ids that exist in state?!? note - remember that this does not necessarily mean the pk, but only known is its an FK to somewhere
+                                    // it not certain that they are using carbons' entities either
+
+                                    // this is a dynamic call to the rest api, any generated table may resolve with (RestApi)
+                                    // todo - using value to avoid joins.... but. maybe this should be a parameterizable option -- think race conditions; its safer to join
+                                    apiRequestPromises.push(await RestApi.Get({
+                                            [C6.WHERE]: {
+                                                0: Object.keys(fetchReferences[tableToFetch]).reduce((sum, column) => {
+
+                                                    fetchReferences[tableToFetch][column] = fetchReferences[tableToFetch][column].flat(Infinity)
+
+                                                    if (0 === fetchReferences[tableToFetch][column].length) {
+
+                                                        console.warn('The column (' + column + ') was not found in the response data. We will not fetch.', responseData)
+
+                                                        return false;
+
+                                                    }
+
+                                                    sum[column] = fetchReferences[tableToFetch][column].length === 1
+                                                        ? fetchReferences[tableToFetch][column][0]
+                                                        : [
+                                                            C6.IN, fetchReferences[tableToFetch][column]
+                                                        ]
+
+                                                    return sum
+                                                }, {})
+                                            },
+                                            fetchDependencies: nextFetchDependencies
+                                        }
+                                    ));
+
+                                }
+
+                                await Promise.all(apiRequestPromises)
+
+                                request.fetchDependencies = apiRequestPromises
+
+                                console.groupEnd()
+
+                            }
+
+
+                        }
 
                         if (request.debug && isLocal) {
 
-                            toast.warning("DEVS: TestRestfulResponse returned false for (" + operatingTable + ").", toastOptionsDevs);
+                            toast.success("DEVS: (" + requestMethod + ") request complete.", toastOptionsDevs);
 
                         }
 
                         return response;
 
                     }
+                )
+                    ;
 
-                    // stateful operations are done in the response callback - its leverages rest generated functions
-                    responseCallback(response, request, apiResponse)
-
-                    if (C6.GET === requestMethod) {
-
-                        const responseData = response.data as iGetC6RestResponse<any>;
-
-                        returnGetNextPageFunction = 1 !== query?.[C6.PAGINATION]?.[C6.LIMIT] &&
-                            query?.[C6.PAGINATION]?.[C6.LIMIT] === responseData.rest.length
-
-                        if (false === isTest || true === isVerbose) {
-
-                            console.groupCollapsed('%c API: Response (' + requestMethod + ' ' + tableName + ') returned length (' + responseData.rest?.length + ') of possible (' + query?.[C6.PAGINATION]?.[C6.LIMIT] + ') limit!', 'color: #0c0')
-
-                            console.log('%c ' + requestMethod + ' ' + tableName, 'color: #0c0')
-
-                            console.log('%c Request Data (note you may see the success and/or error prompt):', 'color: #0c0', request)
-
-                            console.log('%c Response Data:', 'color: #0c0', responseData.rest)
-
-                            console.log('%c Will return get next page function:' + (1 !== query?.[C6.PAGINATION]?.[C6.LIMIT] ? '' : ' (Will not return with explicit limit 1 set)'), 'color: #0c0', true === returnGetNextPageFunction)
-
-                            console.trace();
-
-                            console.groupEnd()
-
-                        }
-
-                        if (false === returnGetNextPageFunction
-                            && true === request.debug
-                            && isLocal) {
-
-                            toast.success("DEVS: Response returned length (" + responseData.rest?.length + ") less than limit (" + query?.[C6.PAGINATION]?.[C6.LIMIT] + ").", toastOptionsDevs);
-
-                        }
-
-                        request.fetchDependencies ??= eFetchDependencies.NONE;
-
-                        if (request.fetchDependencies
-                            && 'number' === typeof request.fetchDependencies
-                            && responseData.rest.length > 0) {
-
-                            const fetchDependencies = request.fetchDependencies as number;
-
-                            console.groupCollapsed('%c API: Fetch Dependencies segment (' + requestMethod + ' ' + tableName + ')', 'color: #33ccff')
-
-                            console.groupCollapsed('Collapsed JS Trace');
-                            console.trace(); // hidden in collapsed group
-                            console.groupEnd();
-
-                            // noinspection JSBitwiseOperatorUsage
-                            let dependencies: { [key: string]: iConstraint[] } = {
-                                ...fetchDependencies & eFetchDependencies.REFERENCED ? C6.TABLES[operatingTable].TABLE_REFERENCED_BY : {},
-                                ...fetchDependencies & eFetchDependencies.REFERENCES ? C6.TABLES[operatingTable].TABLE_REFERENCES : {}
-                            };
-
-                            let fetchReferences: {
-                                [externalTable: string]: {
-                                    [column: string]: string[]
-                                }
-                            } = {}
-
-                            let apiRequestPromises: Array<Awaited<apiReturn<iGetC6RestResponse<any>>>> = []
-
-                            Object.keys(
-                                dependencies
-                            ).forEach(column => dependencies[column].forEach((constraint) => {
-                                fetchReferences[constraint.TABLE] ??= {};
-                                fetchReferences[constraint.TABLE][constraint.COLUMN] = []
-                                fetchReferences[constraint.TABLE][constraint.COLUMN].push(responseData.rest[column] ?? responseData.rest.map((row) => row[column]))
-                            }));
-
-                            for (const table in fetchReferences) {
-
-                                if (fetchDependencies & eFetchDependencies.C6ENTITY
-                                    && tableName === "carbon_carbons") {
-
-                                    // this more or less implies
-                                    // todo - rethink the table ref entity system - when tables are renamed? no hooks exist in mysql
-                                    // since were already filtering on column, we can assume the first row constraint is the same as the rest
-                                    const referencesTable: string = (responseData.rest[0]['entity_tag'] ?? '').split('\\').pop().toLowerCase()
-
-                                    // todo - allow c6 requests with multiple table endpoints to be fetched
-                                    //  const referencesTables: string[] = !(0 in responseData.rest) ? [tagFilter(responseData.rest['entity_tag'] ?? '')] : responseData.rest.map(row => tagFilter(row['entity_tag'] ?? '')).filter(n => n)
-                                    if (!table.endsWith(referencesTable)) {
-
-                                        console.log('%c C6ENTITY: The constraintTableName (' + table + ') did not end with referencesTable (' + referencesTable + ')', 'color: #c00')
-
-                                        continue;
-
-                                    }
-
-                                    console.log('%c C6ENTITY: The constraintTableName (' + table + ') ended with referencesTable (' + referencesTable + ')', 'color: #0c0')
-
-                                }
-
-                                const fetchTable = await C6.IMPORT(table)
-
-                                const RestApi = fetchTable.default
-
-                                console.log('%c Fetch Dependencies will select (' + table + ') using GET request', 'color: #33ccff')
-
-                                const nextFetchDependencies = fetchDependencies & eFetchDependencies.RECURSIVE
-                                || (fetchDependencies & eFetchDependencies.C6ENTITY
-                                    && table === "carbons")
-                                    ? fetchDependencies
-                                    : eFetchDependencies.NONE
-
-                                console.log("Current fetchDependencies", fetchDependencies, "New fetchDependencies: ", nextFetchDependencies, 'recursive', fetchDependencies & eFetchDependencies.RECURSIVE, 'c6entity', fetchDependencies & eFetchDependencies.C6ENTITY, table)
-
-                                // todo - filter out ids that exist in state?!?
-
-                                // this is a dynamic call to the rest api, any generated table may resolve with (RestApi)
-                                // todo - using value to avoid joins.... but. maybe this should be a parameterizable option -- think race conditions; its safer to join
-                                apiRequestPromises.push(await RestApi.Get({
-                                        [C6.WHERE]: {
-                                            0: Object.keys(fetchReferences[table]).reduce((sum, column) => {
-
-                                                fetchReferences[table][column] = fetchReferences[table][column].flat(Infinity)
-
-                                                if (0 === fetchReferences[table][column].length) {
-
-                                                    console.warn('The column (' + column + ') was not found in the response data. We will not fetch.', responseData)
-
-                                                    return false;
-
-                                                }
-
-                                                sum[column] = fetchReferences[table][column].length === 1
-                                                    ? fetchReferences[table][column][0]
-                                                    : [
-                                                        C6.IN, fetchReferences[table][column]
-                                                    ]
-
-                                                return sum
-                                            }, {})
-                                        },
-                                        fetchDependencies: nextFetchDependencies
-                                    }
-                                ));
-
-                            }
-
-                            await Promise.all(apiRequestPromises)
-
-                            request.fetchDependencies = apiRequestPromises
-
-                            console.groupEnd()
-
-                        }
-
-
-                    }
-
-                    if (request.debug && isLocal) {
-
-                        toast.success("DEVS: (" + requestMethod + ") request complete.", toastOptionsDevs);
-
-                    }
-
-                    return response;
-
-                });
-
-            } catch (error) {
+            } catch
+                (error) {
 
                 if (isTest) {
 
