@@ -121,7 +121,7 @@ export type iAPI<RestTableInterfaces extends { [key: string]: any }> = RestTable
     dataInsertMultipleRows?: RestTableInterfaces[],
     cacheResults?: boolean, // aka ignoreCache
     // todo - this should really only be used for get requests - add this to the Get interface or throw error (im actually inclined to ts ignore the function and add to iGetC6 atm; back later)
-    fetchDependencies?: number | eFetchDependencies | apiReturn<iGetC6RestResponse<any>>[],
+    fetchDependencies?: number | eFetchDependencies | Awaited<apiReturn<iGetC6RestResponse<any>>>[],
     debug?: boolean,
     success?: string | ((r: AxiosResponse) => (string | void)),
     error?: string | ((r: AxiosResponse) => (string | void)),
@@ -859,13 +859,16 @@ export default function restApi<
                         request.fetchDependencies ??= eFetchDependencies.NONE;
 
                         if (request.fetchDependencies
-                            && 'number' === typeof request.fetchDependencies) {
+                            && 'number' === typeof request.fetchDependencies
+                            && responseData.rest.length > 0) {
 
                             const fetchDependencies = request.fetchDependencies as number;
 
                             console.groupCollapsed('%c API: Fetch Dependencies segment (' + requestMethod + ' ' + tableName + ')', 'color: #33ccff')
 
-                            console.trace();
+                            console.groupCollapsed('Collapsed JS Trace');
+                            console.trace(); // hidden in collapsed group
+                            console.groupEnd();
 
                             // noinspection JSBitwiseOperatorUsage
                             let dependencies: { [key: string]: iConstraint[] } = {
@@ -879,7 +882,7 @@ export default function restApi<
                                 }
                             } = {}
 
-                            let apiRequestPromises: Array<apiReturn<iGetC6RestResponse<any>>> = []
+                            let apiRequestPromises: Array<Awaited<apiReturn<iGetC6RestResponse<any>>>> = []
 
                             Object.keys(
                                 dependencies
@@ -896,10 +899,8 @@ export default function restApi<
 
                                     // this more or less implies
                                     // todo - rethink the table ref entity system - when tables are renamed? no hooks exist in mysql
-                                    const tagFilter = (tag: string) => tag.split('/').pop() ?? ''
-
                                     // since were already filtering on column, we can assume the first row constraint is the same as the rest
-                                    const referencesTable: string = tagFilter(responseData.rest[0]['entity_tag'] ?? '')
+                                    const referencesTable: string = (responseData.rest[0]['entity_tag'] ?? '').split('\\').pop().toLowerCase()
 
                                     // todo - allow c6 requests with multiple table endpoints to be fetched
                                     //  const referencesTables: string[] = !(0 in responseData.rest) ? [tagFilter(responseData.rest['entity_tag'] ?? '')] : responseData.rest.map(row => tagFilter(row['entity_tag'] ?? '')).filter(n => n)
@@ -921,11 +922,19 @@ export default function restApi<
 
                                 console.log('%c Fetch Dependencies will select (' + table + ') using GET request', 'color: #33ccff')
 
+                                const nextFetchDependencies = fetchDependencies & eFetchDependencies.RECURSIVE
+                                || (fetchDependencies & eFetchDependencies.C6ENTITY
+                                    && table === "carbons")
+                                    ? fetchDependencies
+                                    : eFetchDependencies.NONE
+
+                                console.log("Current fetchDependencies", fetchDependencies, "New fetchDependencies: ", nextFetchDependencies, 'recursive', fetchDependencies & eFetchDependencies.RECURSIVE, 'c6entity', fetchDependencies & eFetchDependencies.C6ENTITY, table)
+
                                 // todo - filter out ids that exist in state?!?
 
                                 // this is a dynamic call to the rest api, any generated table may resolve with (RestApi)
                                 // todo - using value to avoid joins.... but. maybe this should be a parameterizable option -- think race conditions; its safer to join
-                                apiRequestPromises.push(RestApi.Get({
+                                apiRequestPromises.push(await RestApi.Get({
                                         [C6.WHERE]: {
                                             0: Object.keys(fetchReferences[table]).reduce((sum, column) => {
 
@@ -948,11 +957,7 @@ export default function restApi<
                                                 return sum
                                             }, {})
                                         },
-                                        fetchDependencies: fetchDependencies & eFetchDependencies.RECURSIVE
-                                        || (fetchDependencies & eFetchDependencies.C6ENTITY
-                                            && table === "carbons")
-                                            ? fetchDependencies
-                                            : eFetchDependencies.NONE
+                                        fetchDependencies: nextFetchDependencies
                                     }
                                 ));
 

@@ -99,20 +99,24 @@ async function dynamicRestImport(tableName: string) : Promise<{
     postState: (response: AxiosResponse<iPostC6RestResponse<any>>, request: iAPI<any>, id: string | number | boolean) => void,
     deleteState: (response: AxiosResponse<iDeleteC6RestResponse<any>>, request: iAPI<any>) => void,
     putState: (response: AxiosResponse<iPutC6RestResponse<any>>, request: iAPI<any>) => void,
- }> {
+}> {
 
     tableName = tableName.toLowerCase();
 
     if (dynamicImportCache[tableName]) {
-        return dynamicImportCache[tableName]
+
+            return dynamicImportCache[tableName]
+
     }
 
     // if tableName is not a key in the TABLES object then throw an error
     if (!TABLES[tableName]) {
 
-        const error = (table: string) => throw new Error('Table (' + table + ') does not exist in the TABLES object. Possible values include (' + Object.keys(TABLES).join(', ') + ')');
+        const error = (table: string) => {
+            throw Error('Table (' + table + ') does not exist in the TABLES object. Possible values include (' + Object.keys(TABLES).join(', ') + ')');
+        }
 
-        if (!tableName.startsWith(prefix.toLowerCase())) {
+        if (!tableName.startsWith(RestTablePrefix.toLowerCase())) {
 
             error(tableName);
 
@@ -126,13 +130,13 @@ async function dynamicRestImport(tableName: string) : Promise<{
 
         }
 
-    }
+   }
 
     const module = await import('./' + (tableName.split('_')
-        .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-        .join('')) + '.ts');
+            .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+            .join('')) + '.ts');
 
-    dynamicImportCache[tableName] = module
+   dynamicImportCache[tableName] = module
 
     return module
 
