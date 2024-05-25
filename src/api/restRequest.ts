@@ -908,7 +908,9 @@ export default function restApi<
                                                 : {},
                                             ...fetchDependencies & eFetchDependencies.PARENTS // REFERENCES === PARENTS
                                                 ? C6.TABLES[operatingTable].PRIMARY_SHORT.reduce((accumulator, primaryKey) => {
-                                                    accumulator[primaryKey] = C6.TABLES[operatingTable].TABLE_REFERENCES[primaryKey]
+                                                    if (primaryKey in C6.TABLES[operatingTable].TABLE_REFERENCES) {
+                                                        accumulator[primaryKey] = C6.TABLES[operatingTable].TABLE_REFERENCES[primaryKey]
+                                                    }
                                                     return accumulator
                                                 }, {})
                                                 : {}

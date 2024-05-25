@@ -94,6 +94,7 @@ export const TABLES: tC6Tables = {
 
 let dynamicImportCache = {};
 
+// The only reason this function is here/dynamic is due to the relative import (using `./`)
 async function dynamicRestImport(tableName: string) : Promise<{
     default: iRestApiFunctions,
     postState: (response: AxiosResponse<iPostC6RestResponse<any>>, request: iAPI<any>, id: string | number | boolean) => void,
@@ -130,13 +131,13 @@ async function dynamicRestImport(tableName: string) : Promise<{
 
         }
 
-   }
+    }
 
     const module = await import('./' + (tableName.split('_')
             .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-            .join('')) + '.ts');
+            .join('_')) + '.ts');
 
-   dynamicImportCache[tableName] = module
+    dynamicImportCache[tableName] = module
 
     return module
 
