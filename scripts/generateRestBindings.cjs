@@ -331,8 +331,6 @@ fs.writeFileSync(path.join(process.cwd(), 'C6MySqlDump.json'), JSON.stringify(ta
 // import this file  src/assets/handlebars/C6.tsx.handlebars for a mustache template
 var c6Template = fs.readFileSync(path.resolve(__dirname, 'assets/handlebars/C6.ts.handlebars'), 'utf-8');
 fs.writeFileSync(path.join(MySQLDump.OUTPUT_DIR, 'C6.ts'), Handlebars.compile(c6Template)(tableData));
-var C6RestApiTemplate = fs.readFileSync(path.resolve(__dirname, 'assets/handlebars/C6RestApi.ts.handlebars'), 'utf-8');
-fs.writeFileSync(path.join(MySQLDump.OUTPUT_DIR, 'C6RestApi.ts'), Handlebars.compile(C6RestApiTemplate)(tableData));
 var template = fs.readFileSync(path.resolve(__dirname, 'assets/handlebars/Table.ts.handlebars'), 'utf-8');
 var testTemplate = fs.readFileSync(path.resolve(__dirname, 'assets/handlebars/Table.test.ts.handlebars'), 'utf-8');
 Object.values(tableData.TABLES).forEach(function (tableData) {

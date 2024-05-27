@@ -6,6 +6,7 @@ import {
     iGetC6RestResponse,
     iPutC6RestResponse
 } from "api/restRequest";
+import {AxiosResponse} from "axios";
 
 
 export interface stringMap {
@@ -48,11 +49,19 @@ export interface iC6RestfulModel<RestShortTableNames extends string = string> {
     TABLE_REFERENCED_BY: { [columnName: string]: iConstraint[] },
 }
 
-export interface iRestApiFunctions {
-    Delete: (request?: (iAPI<any> & any)) => apiReturn<iDeleteC6RestResponse<any>>;
-    Post: (request?: (iAPI<any> & any)) => apiReturn<iPostC6RestResponse<any>>;
-    Get: (request?: (iAPI<any> & any)) => apiReturn<iGetC6RestResponse<any>>;
-    Put: (request?: (iAPI<any> & any)) => apiReturn<iPutC6RestResponse<any>>
+export interface iRestApiFunctions<RestData = any> {
+    Delete: (request?: (iAPI<any> & any)) => apiReturn<iDeleteC6RestResponse<RestData>>;
+    Post: (request?: (iAPI<any> & any)) => apiReturn<iPostC6RestResponse<RestData>>;
+    Get: (request?: (iAPI<any> & any)) => apiReturn<iGetC6RestResponse<RestData>>;
+    Put: (request?: (iAPI<any> & any)) => apiReturn<iPutC6RestResponse<RestData>>,
+}
+
+export interface iDynamicApiImport<RestData = any> {
+    default: iRestApiFunctions<RestData>
+    // the methods below are optional
+    postState?: (response: AxiosResponse<iPostC6RestResponse<RestData>>, request: iAPI<any>, id: string | number | boolean) => void,
+    deleteState?: (response: AxiosResponse<iDeleteC6RestResponse<RestData>>, request: iAPI<any>) => void,
+    putState?: (response: AxiosResponse<iPutC6RestResponse<RestData>>, request: iAPI<any>) => void
 }
 
 export interface tC6Tables { [key: string]: (iC6RestfulModel & { [key: string]: any }) }

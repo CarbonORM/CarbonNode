@@ -408,10 +408,6 @@ const c6Template = fs.readFileSync(path.resolve(__dirname, 'assets/handlebars/C6
 
 fs.writeFileSync(path.join(MySQLDump.OUTPUT_DIR, 'C6.ts'), Handlebars.compile(c6Template)(tableData));
 
-const C6RestApiTemplate = fs.readFileSync(path.resolve(__dirname, 'assets/handlebars/C6RestApi.ts.handlebars'), 'utf-8');
-
-fs.writeFileSync(path.join(MySQLDump.OUTPUT_DIR, 'C6RestApi.ts'), Handlebars.compile(C6RestApiTemplate)(tableData));
-
 const template = fs.readFileSync(path.resolve(__dirname, 'assets/handlebars/Table.ts.handlebars'), 'utf-8');
 
 const testTemplate = fs.readFileSync(path.resolve(__dirname, 'assets/handlebars/Table.test.ts.handlebars'), 'utf-8');

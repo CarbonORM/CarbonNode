@@ -47,7 +47,7 @@ type PutCustomAndRequiredFields = {}
 type PutRequestTableOverrides = {}
 
 {{#REACT_IMPORT}}
-export function putState{{TABLE_NAME_SHORT_PASCAL_CASE}}(response : AxiosResponse<iPutC6RestResponse<i{{TABLE_NAME_SHORT_PASCAL_CASE}}>>, request : iAPI<Modify<i{{TABLE_NAME_SHORT_PASCAL_CASE}}, PutRequestTableOverrides>> & PutCustomAndRequiredFields) {
+export function putState(response : AxiosResponse<iPutC6RestResponse<i{{TABLE_NAME_SHORT_PASCAL_CASE}}>>, request : iAPI<Modify<i{{TABLE_NAME_SHORT_PASCAL_CASE}}, PutRequestTableOverrides>> & PutCustomAndRequiredFields) {
     {{REACT_IMPORT}}.updateRestfulObjectArrays<i{{TABLE_NAME_SHORT_PASCAL_CASE}}>({{CARBON_REACT_INSTANCE}}, [
         removeInvalidKeys<i{{TABLE_NAME_SHORT_PASCAL_CASE}}>({
             ...request,
@@ -73,7 +73,7 @@ type PostCustomAndRequiredFields = {}
 
 type PostRequestTableOverrides = {}
 
-{{#REACT_IMPORT}}export function postState{{TABLE_NAME_SHORT_PASCAL_CASE}}(response : AxiosResponse<iPostC6RestResponse<i{{TABLE_NAME_SHORT_PASCAL_CASE}}>>, request : iAPI<Modify<i{{TABLE_NAME_SHORT_PASCAL_CASE}}, PostRequestTableOverrides>> & PostCustomAndRequiredFields, id: string | number | boolean) {
+{{#REACT_IMPORT}}export function postState(response : AxiosResponse<iPostC6RestResponse<i{{TABLE_NAME_SHORT_PASCAL_CASE}}>>, request : iAPI<Modify<i{{TABLE_NAME_SHORT_PASCAL_CASE}}, PostRequestTableOverrides>> & PostCustomAndRequiredFields, id: string | number | boolean) {
     if ('number' === typeof id || 'string' === typeof id) {
         if (1 !== {{TABLE_NAME_SHORT}}.PRIMARY_SHORT.length) {
             console.error("C6 received unexpected result's given the primary key length");
@@ -118,7 +118,7 @@ type DeleteCustomAndRequiredFields = {}
 
 type DeleteRequestTableOverrides = {}
 
-{{#REACT_IMPORT}}export function deleteState{{TABLE_NAME_SHORT_PASCAL_CASE}}(_response : AxiosResponse<iDeleteC6RestResponse<i{{TABLE_NAME_SHORT_PASCAL_CASE}}>>, request : iAPI<Modify<i{{TABLE_NAME_SHORT_PASCAL_CASE}}, DeleteRequestTableOverrides>> & DeleteCustomAndRequiredFields) {
+{{#REACT_IMPORT}}export function deleteState(_response : AxiosResponse<iDeleteC6RestResponse<i{{TABLE_NAME_SHORT_PASCAL_CASE}}>>, request : iAPI<Modify<i{{TABLE_NAME_SHORT_PASCAL_CASE}}, DeleteRequestTableOverrides>> & DeleteCustomAndRequiredFields) {
     {{REACT_IMPORT}}.deleteRestfulObjectArrays<i{{TABLE_NAME_SHORT_PASCAL_CASE}}>([
         request
     ], "{{TABLE_NAME_SHORT}}", {{TABLE_NAME_SHORT}}.PRIMARY_SHORT as (keyof i{{TABLE_NAME_SHORT_PASCAL_CASE}})[])

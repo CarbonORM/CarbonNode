@@ -1,6 +1,6 @@
 import axiosInstance from "api/axiosInstance";
 import convertForRequestBody from "api/convertForRequestBody";
-import {iC6RestfulModel, iConstraint, iRestApiFunctions} from "api/interfaces/ormInterfaces";
+import {iC6RestfulModel, iConstraint, iDynamicApiImport} from "api/interfaces/ormInterfaces";
 import {AxiosInstance, AxiosPromise, AxiosResponse} from "axios";
 
 import {toast} from "react-toastify";
@@ -323,10 +323,7 @@ export interface iC6Object {
             { [key: string]: string | number }
     },
     PREFIX: string,
-    IMPORT: (tableName: string) => Promise<{
-        default: iRestApiFunctions
-    }>,
-
+    IMPORT: (tableName: string) => Promise<iDynamicApiImport>,
     [key: string]: any
 }
 

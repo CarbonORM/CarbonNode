@@ -6,6 +6,7 @@ import {
     iRestApiFunctions,
     iPostC6RestResponse,
     iDeleteC6RestResponse,
+    iDynamicApiImport,
     iPutC6RestResponse,
     iAPI,
     removePrefixIfExists
@@ -95,12 +96,7 @@ export const TABLES: tC6Tables = {
 let dynamicImportCache = {};
 
 // The only reason this function is here/dynamic is due to the relative import (using `./`)
-async function dynamicRestImport(tableName: string) : Promise<{
-    default: iRestApiFunctions,
-    postState: (response: AxiosResponse<iPostC6RestResponse<any>>, request: iAPI<any>, id: string | number | boolean) => void,
-    deleteState: (response: AxiosResponse<iDeleteC6RestResponse<any>>, request: iAPI<any>) => void,
-    putState: (response: AxiosResponse<iPutC6RestResponse<any>>, request: iAPI<any>) => void,
-}> {
+async function dynamicRestImport(tableName: string) : Promise<iDynamicApiImport> {
 
     tableName = tableName.toLowerCase();
 
