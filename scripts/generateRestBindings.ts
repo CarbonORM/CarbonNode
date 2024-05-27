@@ -267,6 +267,22 @@ const parseSQLToTypeScript = (sql: string) => {
 
         }
 
+        let REACT_IMPORT: false|string = false, CARBON_REACT_INSTANCE : false|string = false;
+
+        if (argMap['--react'] || false) {
+
+            const reactArgSplit = argMap['--react'];
+
+            if (reactArgSplit.length !== 2 || reactArgSplit[1].endsWith(',')) {
+                console.error("React requires two arguments, the import and the carbon react instance statement. Example: --react 'import CustomCarbonReactApplication from \"src/CustomCarbonReactApplication\"; CustomCarbonReactApplication,'");
+                process.exit(1);
+            }
+
+            [REACT_IMPORT, CARBON_REACT_INSTANCE] = reactArgSplit;
+
+        }
+
+
         const tsModel = {
             RELATIVE_OUTPUT_DIR: pathRuntimeReference,
             TABLE_NAME: tableName,
@@ -286,6 +302,8 @@ const parseSQLToTypeScript = (sql: string) => {
             REGEX_VALIDATION: {},
             TABLE_REFERENCES: {},
             TABLE_REFERENCED_BY: {},
+            REACT_IMPORT: REACT_IMPORT,
+            CARBON_REACT_INSTANCE: CARBON_REACT_INSTANCE,
         };
 
         for (const colName in columns) {

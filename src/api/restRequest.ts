@@ -357,9 +357,9 @@ interface iRest<CustomAndRequiredFields extends { [key: string]: any }, RestTabl
     clearCache?: () => void,
     skipPrimaryCheck?: boolean,
     queryCallback: RequestQueryBody<Modify<RestTableInterfaces, RequestTableOverrides>> | ((request: iAPI<Modify<RestTableInterfaces, RequestTableOverrides>> & CustomAndRequiredFields) => (null | undefined | RequestQueryBody<Modify<RestTableInterfaces, RequestTableOverrides>>)),
-    responseCallback: (response: AxiosResponse<ResponseDataType>,
-                       request: iAPI<Modify<RestTableInterfaces, RequestTableOverrides>> & CustomAndRequiredFields,
-                       success: (ResponseDataType extends iPutC6RestResponse | iDeleteC6RestResponse ? RequestQueryBody<Modify<RestTableInterfaces, RequestTableOverrides>> : string) | string | number | boolean) => any // keep this set to any, it allows easy arrow functions and the results unused here
+    responseCallback?: (response: AxiosResponse<ResponseDataType>,
+                        request: iAPI<Modify<RestTableInterfaces, RequestTableOverrides>> & CustomAndRequiredFields,
+                        success: (ResponseDataType extends iPutC6RestResponse | iDeleteC6RestResponse ? RequestQueryBody<Modify<RestTableInterfaces, RequestTableOverrides>> : string) | string | number | boolean) => any // keep this set to any, it allows easy arrow functions and the results unused here
 }
 
 export function extendedTypeHints<RestTableInterfaces extends {
@@ -371,10 +371,10 @@ export function extendedTypeHints<RestTableInterfaces extends {
         [key: string]: any
     } = any, ResponseDataType extends {
         [key: string]: any
-    } = any>(argv) => restApi<CustomAndRequiredFields, RequestTableTypes, RequestTableOverrides, ResponseDataType, RestShortTableNames>(argv)
+    } = any>(argv) => restRequest<CustomAndRequiredFields, RequestTableTypes, RequestTableOverrides, ResponseDataType, RestShortTableNames>(argv)
 }
 
-export default function restApi<
+export default function restRequest<
     CustomAndRequiredFields extends {
         [key: string]: any;
     } = any,
@@ -821,7 +821,11 @@ export default function restApi<
                         }
 
                         // stateful operations are done in the response callback - its leverages rest generated functions
-                        responseCallback(response, request, apiResponse)
+                        if (responseCallback) {
+
+                            responseCallback(response, request, apiResponse)
+
+                        }
 
                         if (C6.GET === requestMethod) {
 
@@ -866,7 +870,7 @@ export default function restApi<
 
                                 console.groupCollapsed('%c API: Fetch Dependencies segment (' + requestMethod + ' ' + tableName + ')'
                                     + (fetchDependencies & eFetchDependencies.CHILDREN ? ' | (CHILDREN|REFERENCED) ' : '')
-                                    + (fetchDependencies & eFetchDependencies.PARENTS ? ' | (PARENTS|REFRENCED_BY)' : '')
+                                    + (fetchDependencies & eFetchDependencies.PARENTS ? ' | (PARENTS|REFERENCED_BY)' : '')
                                     + (fetchDependencies & eFetchDependencies.C6ENTITY ? ' | (C6ENTITY)' : '')
                                     + (fetchDependencies & eFetchDependencies.RECURSIVE ? ' | (RECURSIVE)' : ''), 'color: #33ccff')
 
@@ -880,7 +884,6 @@ export default function restApi<
                                 } = {};
 
                                 if (fetchDependencies & eFetchDependencies.C6ENTITY) {
-
 
                                     dependencies = operatingTable.endsWith("carbon_carbons")
                                         ? {
@@ -940,15 +943,44 @@ export default function restApi<
 
                                 console.log('%c Dependencies', 'color: #005555', dependencies)
 
-                                Object.keys(
-                                    dependencies
-                                ).forEach(column => dependencies[column].forEach((constraint) => {
-                                    fetchReferences[constraint.TABLE] ??= {};
-                                    fetchReferences[constraint.TABLE][constraint.COLUMN] ??= []
-                                    // carbon_users -> user_id | user_photo -> carbon_carbons -> entity_id
-                                    fetchReferences[constraint.TABLE][constraint.COLUMN].push(responseData.rest[column] ?? responseData.rest.map((row) => row[column]).filter(n => n)) // todo - we are mapping all carbons received to every fk reference despite its tag name
-                                    console.log('fetchReferences[constraint.TABLE][constraint.COLUMN]', constraint.TABLE, constraint.COLUMN, fetchReferences[constraint.TABLE][constraint.COLUMN], responseData.rest)
-                                }));
+                                Object.keys(dependencies)
+                                    .forEach(column => dependencies[column]
+                                        .forEach((constraint) => {
+
+                                            const columnValues = responseData.rest[column] ?? responseData.rest.map((row) => {
+
+                                                if (operatingTable.endsWith("carbons")
+                                                    && 'entity_tag' in row
+                                                    && !constraint.TABLE.endsWith(row['entity_tag'].split('\\').pop().toLowerCase())) {
+
+                                                    return false; // map
+
+                                                }
+
+                                                if (!(column in row)) {
+                                                    return false
+                                                }
+
+                                                // todo - row[column] is a FK value, we should optionally remove values that are already in state
+                                                // this could be any column in the table constraint.TABLE, not just the primary key
+
+                                                return row[column]
+
+                                            }).filter(n => n) ?? [];
+
+                                            if (columnValues.length === 0) {
+
+                                                return; // forEach
+
+                                            }
+
+                                            fetchReferences[constraint.TABLE] ??= {};
+
+                                            fetchReferences[constraint.TABLE][constraint.COLUMN] ??= []
+
+                                            fetchReferences[constraint.TABLE][constraint.COLUMN].push(columnValues)
+
+                                        }));
 
                                 console.log('fetchReferences', fetchReferences)
 
@@ -958,11 +990,12 @@ export default function restApi<
                                         && 'string' === typeof tableName
                                         && tableName.endsWith("carbon_carbons")) {
 
-                                        // this more or less implies
                                         // todo - rethink the table ref entity system - when tables are renamed? no hooks exist in mysql
                                         // since were already filtering on column, we can assume the first row constraint is the same as the rest
 
-                                        const referencesTables: string[] = responseData.rest.reduce((accumulator: string[], row) => {
+                                        const referencesTables: string[] = responseData.rest.reduce((accumulator: string[], row: {
+                                            [x: string]: string;
+                                        }) => {
                                             if ('entity_tag' in row && !accumulator.includes(row['entity_tag'])) {
                                                 accumulator.push(row['entity_tag']);
                                             }
@@ -1043,6 +1076,7 @@ export default function restApi<
                                                         ]
 
                                                     return sum
+
                                                 }, {})
                                             },
                                             fetchDependencies: nextFetchDependencies

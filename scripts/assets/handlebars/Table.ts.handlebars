@@ -13,8 +13,9 @@ import {
     iAPI,
     Modify
 } from "@carbonorm/carbonnode";
+import {C6, i{{TABLE_NAME_SHORT_PASCAL_CASE}}, {{TABLE_NAME_SHORT}}, RestTableNames} from "./C6";{{#REACT_IMPORT}}
 import {deleteRestfulObjectArrays, updateRestfulObjectArrays} from "@carbonorm/carbonreact";
-import {C6, i{{TABLE_NAME_SHORT_PASCAL_CASE}}, {{TABLE_NAME_SHORT}}, RestTableNames} from "./C6";
+{{REACT_IMPORT}};{{/REACT_IMPORT}}
 
 /**
 {{{TABLE_DEFINITION}}}
@@ -34,25 +35,26 @@ const Get = restRequest<GetCustomAndRequiredFields, i{{TABLE_NAME_SHORT_PASCAL_C
         request.success ??= 'Successfully received {{TABLE_NAME_SHORT}}!'
         request.error ??= 'An unknown issue occurred creating the {{TABLE_NAME_SHORT}}!'
         return request
-    },
+    },{{#REACT_IMPORT}}
     responseCallback: (response, _request) => {
         const responseData = response?.data?.rest;
-        updateRestfulObjectArrays<i{{TABLE_NAME_SHORT_PASCAL_CASE}}>(Array.isArray(responseData) ? responseData : [responseData], "{{TABLE_NAME_SHORT}}", C6.{{TABLE_NAME_SHORT}}.PRIMARY_SHORT as (keyof i{{TABLE_NAME_SHORT_PASCAL_CASE}})[])
-    }
+        {{REACT_IMPORT}}.updateRestfulObjectArrays<i{{TABLE_NAME_SHORT_PASCAL_CASE}}>({{CARBON_REACT_INSTANCE}},Array.isArray(responseData) ? responseData : [responseData], "{{TABLE_NAME_SHORT}}", C6.{{TABLE_NAME_SHORT}}.PRIMARY_SHORT as (keyof i{{TABLE_NAME_SHORT_PASCAL_CASE}})[])
+    }{{/REACT_IMPORT}}
 });
 
 type PutCustomAndRequiredFields = {}
 
 type PutRequestTableOverrides = {}
 
+{{#REACT_IMPORT}}
 export function putState{{TABLE_NAME_SHORT_PASCAL_CASE}}(response : AxiosResponse<iPutC6RestResponse<i{{TABLE_NAME_SHORT_PASCAL_CASE}}>>, request : iAPI<Modify<i{{TABLE_NAME_SHORT_PASCAL_CASE}}, PutRequestTableOverrides>> & PutCustomAndRequiredFields) {
-    updateRestfulObjectArrays<i{{TABLE_NAME_SHORT_PASCAL_CASE}}>([
+    {{REACT_IMPORT}}.updateRestfulObjectArrays<i{{TABLE_NAME_SHORT_PASCAL_CASE}}>({{CARBON_REACT_INSTANCE}}, [
         removeInvalidKeys<i{{TABLE_NAME_SHORT_PASCAL_CASE}}>({
             ...request,
             ...response?.data?.rest,
         }, C6.TABLES)
     ], "{{TABLE_NAME_SHORT}}", {{TABLE_NAME_SHORT}}.PRIMARY_SHORT as (keyof i{{TABLE_NAME_SHORT_PASCAL_CASE}})[])
-}
+}{{/REACT_IMPORT}}
 
 const Put = restRequest<PutCustomAndRequiredFields, i{{TABLE_NAME_SHORT_PASCAL_CASE}}, PutRequestTableOverrides, iPutC6RestResponse<i{{TABLE_NAME_SHORT_PASCAL_CASE}}>, RestTableNames>({
     C6: C6,
@@ -63,15 +65,15 @@ const Put = restRequest<PutCustomAndRequiredFields, i{{TABLE_NAME_SHORT_PASCAL_C
         request.success ??= 'Successfully updated {{TABLE_NAME_SHORT}} data!'
         request.error ??= 'An unknown issue occurred updating the {{TABLE_NAME_SHORT}} data!'
         return request
-    },
-    responseCallback: putState{{TABLE_NAME_SHORT_PASCAL_CASE}}
+    },{{#REACT_IMPORT}}
+    responseCallback: putState{{TABLE_NAME_SHORT_PASCAL_CASE}}{{/REACT_IMPORT}}
 });
 
 type PostCustomAndRequiredFields = {}
 
 type PostRequestTableOverrides = {}
 
-export function postState{{TABLE_NAME_SHORT_PASCAL_CASE}}(response : AxiosResponse<iPostC6RestResponse<i{{TABLE_NAME_SHORT_PASCAL_CASE}}>>, request : iAPI<Modify<i{{TABLE_NAME_SHORT_PASCAL_CASE}}, PostRequestTableOverrides>> & PostCustomAndRequiredFields, id: string | number | boolean) {
+{{#REACT_IMPORT}}export function postState{{TABLE_NAME_SHORT_PASCAL_CASE}}(response : AxiosResponse<iPostC6RestResponse<i{{TABLE_NAME_SHORT_PASCAL_CASE}}>>, request : iAPI<Modify<i{{TABLE_NAME_SHORT_PASCAL_CASE}}, PostRequestTableOverrides>> & PostCustomAndRequiredFields, id: string | number | boolean) {
     if ('number' === typeof id || 'string' === typeof id) {
         if (1 !== {{TABLE_NAME_SHORT}}.PRIMARY_SHORT.length) {
             console.error("C6 received unexpected result's given the primary key length");
@@ -79,7 +81,7 @@ export function postState{{TABLE_NAME_SHORT_PASCAL_CASE}}(response : AxiosRespon
             request[{{TABLE_NAME_SHORT}}.PRIMARY_SHORT[0]] = id
         }
     }
-    updateRestfulObjectArrays<i{{TABLE_NAME_SHORT_PASCAL_CASE}}>(
+    {{REACT_IMPORT}}.updateRestfulObjectArrays<i{{TABLE_NAME_SHORT_PASCAL_CASE}}>(
         undefined !== request.dataInsertMultipleRows
             ? request.dataInsertMultipleRows.map((request, index) => {
                 return removeInvalidKeys<i{{TABLE_NAME_SHORT_PASCAL_CASE}}>({
@@ -96,10 +98,11 @@ export function postState{{TABLE_NAME_SHORT_PASCAL_CASE}}(response : AxiosRespon
         "{{TABLE_NAME_SHORT}}",
         {{TABLE_NAME_SHORT}}.PRIMARY_SHORT as (keyof i{{TABLE_NAME_SHORT_PASCAL_CASE}})[]
     )
-}
+}{{/REACT_IMPORT}}
 
 const Post = restRequest<PostCustomAndRequiredFields, i{{TABLE_NAME_SHORT_PASCAL_CASE}}, PostRequestTableOverrides, iPostC6RestResponse<i{{TABLE_NAME_SHORT_PASCAL_CASE}}>, RestTableNames>({
-    C6: C6,
+    C6: C6,{{#REACT_IMPORT}}
+    instance: {{CARBON_REACT_INSTANCE}}{{/REACT_IMPORT}}
     restURL: {{{REST_URL_EXPRESSION}}},
     tableName: {{TABLE_NAME_SHORT}}.TABLE_NAME,
     requestMethod: POST,
@@ -107,22 +110,23 @@ const Post = restRequest<PostCustomAndRequiredFields, i{{TABLE_NAME_SHORT_PASCAL
         request.success ??= 'Successfully created the {{TABLE_NAME_SHORT}} data!'
         request.error ??= 'An unknown issue occurred creating the {{TABLE_NAME_SHORT}} data!'
         return request
-    },
-    responseCallback: postState{{TABLE_NAME_SHORT_PASCAL_CASE}}
+    },{{#REACT_IMPORT}}
+    responseCallback: postState{{TABLE_NAME_SHORT_PASCAL_CASE}}{{/REACT_IMPORT}}
 });
 
 type DeleteCustomAndRequiredFields = {}
 
 type DeleteRequestTableOverrides = {}
 
-export function deleteState{{TABLE_NAME_SHORT_PASCAL_CASE}}(_response : AxiosResponse<iDeleteC6RestResponse<i{{TABLE_NAME_SHORT_PASCAL_CASE}}>>, request : iAPI<Modify<i{{TABLE_NAME_SHORT_PASCAL_CASE}}, DeleteRequestTableOverrides>> & DeleteCustomAndRequiredFields) {
-    deleteRestfulObjectArrays<i{{TABLE_NAME_SHORT_PASCAL_CASE}}>([
+{{#REACT_IMPORT}}export function deleteState{{TABLE_NAME_SHORT_PASCAL_CASE}}(_response : AxiosResponse<iDeleteC6RestResponse<i{{TABLE_NAME_SHORT_PASCAL_CASE}}>>, request : iAPI<Modify<i{{TABLE_NAME_SHORT_PASCAL_CASE}}, DeleteRequestTableOverrides>> & DeleteCustomAndRequiredFields) {
+    {{REACT_IMPORT}}.deleteRestfulObjectArrays<i{{TABLE_NAME_SHORT_PASCAL_CASE}}>([
         request
     ], "{{TABLE_NAME_SHORT}}", {{TABLE_NAME_SHORT}}.PRIMARY_SHORT as (keyof i{{TABLE_NAME_SHORT_PASCAL_CASE}})[])
-}
+}{{/REACT_IMPORT}}
 
 const Delete = restRequest<DeleteCustomAndRequiredFields, i{{TABLE_NAME_SHORT_PASCAL_CASE}}, DeleteRequestTableOverrides, iDeleteC6RestResponse<i{{TABLE_NAME_SHORT_PASCAL_CASE}}>, RestTableNames>({
-    C6: C6,
+    C6: C6,{{#REACT_IMPORT}}
+    instance: {{CARBON_REACT_INSTANCE}}{{/REACT_IMPORT}}
     restURL: {{{REST_URL_EXPRESSION}}},
     tableName: {{TABLE_NAME_SHORT}}.TABLE_NAME,
     requestMethod: DELETE,
@@ -130,8 +134,8 @@ const Delete = restRequest<DeleteCustomAndRequiredFields, i{{TABLE_NAME_SHORT_PA
         request.success ??= 'Successfully removed the {{TABLE_NAME_SHORT}} data!'
         request.error ??= 'An unknown issue occurred removing the {{TABLE_NAME_SHORT}} data!'
         return request
-    },
-    responseCallback: deleteState{{TABLE_NAME_SHORT_PASCAL_CASE}}
+    },{{#REACT_IMPORT}}
+    responseCallback: deleteState{{TABLE_NAME_SHORT_PASCAL_CASE}}{{/REACT_IMPORT}}
 });
 
 const {{TABLE_NAME_SHORT_PASCAL_CASE}} = {

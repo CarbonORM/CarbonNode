@@ -1,5 +1,21 @@
 #!/usr/bin/env node
 "use strict";
+var __read = (this && this.__read) || function (o, n) {
+    var m = typeof Symbol === "function" && o[Symbol.iterator];
+    if (!m) return o;
+    var i = m.call(o), r, ar = [], e;
+    try {
+        while ((n === void 0 || n-- > 0) && !(r = i.next()).done) ar.push(r.value);
+    }
+    catch (error) { e = { error: error }; }
+    finally {
+        try {
+            if (r && !r.done && (m = i["return"])) m.call(i);
+        }
+        finally { if (e) throw e.error; }
+    }
+    return ar;
+};
 var __values = (this && this.__values) || function(o) {
     var s = typeof Symbol === "function" && Symbol.iterator, m = s && o[s], i = 0;
     if (m) return m.call(o);
@@ -140,6 +156,7 @@ var parseSQLToTypeScript = function (sql) {
     var tableData = {};
     var references = [];
     var _loop_1 = function (tableMatch) {
+        var _c;
         var tableName = tableMatch[1];
         var columnDefinitions = tableMatch[2];
         var columns = {};
@@ -184,6 +201,15 @@ var parseSQLToTypeScript = function (sql) {
                 ON_UPDATE: onUpdateAction
             });
         }
+        var REACT_IMPORT = false, CARBON_REACT_INSTANCE = false;
+        if (argMap['--react'] || false) {
+            var reactArgSplit = argMap['--react'];
+            if (reactArgSplit.length !== 2 || reactArgSplit[1].endsWith(',')) {
+                console.error("React requires two arguments, the import and the carbon react instance statement. Example: --react 'import CustomCarbonReactApplication from \"src/CustomCarbonReactApplication\"; CustomCarbonReactApplication,'");
+                process.exit(1);
+            }
+            _c = __read(reactArgSplit, 2), REACT_IMPORT = _c[0], CARBON_REACT_INSTANCE = _c[1];
+        }
         var tsModel = {
             RELATIVE_OUTPUT_DIR: pathRuntimeReference,
             TABLE_NAME: tableName,
@@ -203,6 +229,8 @@ var parseSQLToTypeScript = function (sql) {
             REGEX_VALIDATION: {},
             TABLE_REFERENCES: {},
             TABLE_REFERENCED_BY: {},
+            REACT_IMPORT: REACT_IMPORT,
+            CARBON_REACT_INSTANCE: CARBON_REACT_INSTANCE,
         };
         for (var colName in columns) {
             tsModel.COLUMNS["".concat(tableName, ".").concat(colName)] = colName;
