@@ -271,10 +271,10 @@ const parseSQLToTypeScript = (sql: string) => {
 
         if (argMap['--react'] || false) {
 
-            const reactArgSplit = argMap['--react'];
+            const reactArgSplit = argMap['--react'].split(';')
 
-            if (reactArgSplit.length !== 2 || reactArgSplit[1].endsWith(',')) {
-                console.error("React requires two arguments, the import and the carbon react instance statement. Example: --react 'import CustomCarbonReactApplication from \"src/CustomCarbonReactApplication\"; CustomCarbonReactApplication,'");
+            if (reactArgSplit.length !== 2) {
+                console.error("React requires two arguments, the import and the carbon react instance statement. Example: --react 'import CustomCarbonReactApplication from \"src/CustomCarbonReactApplication.tsx\"; CustomCarbonReactApplication.instance'");
                 process.exit(1);
             }
 

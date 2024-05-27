@@ -203,9 +203,9 @@ var parseSQLToTypeScript = function (sql) {
         }
         var REACT_IMPORT = false, CARBON_REACT_INSTANCE = false;
         if (argMap['--react'] || false) {
-            var reactArgSplit = argMap['--react'];
-            if (reactArgSplit.length !== 2 || reactArgSplit[1].endsWith(',')) {
-                console.error("React requires two arguments, the import and the carbon react instance statement. Example: --react 'import CustomCarbonReactApplication from \"src/CustomCarbonReactApplication\"; CustomCarbonReactApplication,'");
+            var reactArgSplit = argMap['--react'].split(';');
+            if (reactArgSplit.length !== 2) {
+                console.error("React requires two arguments, the import and the carbon react instance statement. Example: --react 'import CustomCarbonReactApplication from \"src/CustomCarbonReactApplication.tsx\"; CustomCarbonReactApplication.instance'");
                 process.exit(1);
             }
             _c = __read(reactArgSplit, 2), REACT_IMPORT = _c[0], CARBON_REACT_INSTANCE = _c[1];

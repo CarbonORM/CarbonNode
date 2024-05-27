@@ -2,8 +2,9 @@ import {xdescribe, expect, test} from '@jest/globals';
 import {CarbonReact} from "@carbonorm/carbonreact";
 import {checkAllRequestsComplete} from "@carbonorm/carbonnode";
 import {act, waitFor} from '@testing-library/react';
-import {C6, iRestfulObjectArrayTypes, i{{TABLE_NAME_SHORT_PASCAL_CASE}}, {{TABLE_NAME_SHORT}} } from "{{RELATIVE_OUTPUT_DIR}}/C6";
-import {{TABLE_NAME_SHORT_PASCAL_CASE}} from "./{{TABLE_NAME_SHORT_PASCAL_CASE}}";
+import {C6, i{{TABLE_NAME_SHORT_PASCAL_CASE}}, {{TABLE_NAME_SHORT}} } from "{{RELATIVE_OUTPUT_DIR}}/C6";
+import {{TABLE_NAME_SHORT_PASCAL_CASE}} from "./{{TABLE_NAME_SHORT_PASCAL_CASE}}";{{#if REACT_IMPORT}}
+{{{REACT_IMPORT}}};{{/if}}
 
 const randomString = Math.random().toString(36).substring(7);
 const randomInt = Math.floor(Math.random() * 1000000);
@@ -97,8 +98,10 @@ xdescribe('REST {{TABLE_NAME_SHORT_PASCAL_CASE}} api', () => {
             testData.{{COLUMN_NAME}} = {{#TYPESCRIPT_TYPE_IS_STRING}}fillString.substring(0, {{MAX_LENGTH}}){{/TYPESCRIPT_TYPE_IS_STRING}}{{#TYPESCRIPT_TYPE_IS_NUMBER}}randomInt{{/TYPESCRIPT_TYPE_IS_NUMBER}};
             {{/each}}
 
+            {{#if REACT_IMPORT}}
             // wait for the global state to be updated
-            expect(CarbonReact.getState<iRestfulObjectArrayTypes>().{{TABLE_NAME_SHORT}}).not.toBeUndefined();
+            expect({{{CARBON_REACT_INSTANCE}}}.state.{{TABLE_NAME_SHORT}}).not.toBeUndefined();
+            {{/if}}
 
             const updateResponse = await {{TABLE_NAME_SHORT_PASCAL_CASE}}.Put(testData)
 
