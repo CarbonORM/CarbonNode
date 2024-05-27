@@ -330,6 +330,7 @@ export interface iC6Object {
     [key: string]: any
 }
 
+// todo - I'm not sure that Modify<ResponseDataType, ResponseDataOverrides>[]> is needed?
 export type iGetC6RestResponse<ResponseDataType, ResponseDataOverrides = {}> = iC6RestResponse<Modify<ResponseDataType, ResponseDataOverrides> | Modify<ResponseDataType, ResponseDataOverrides>[]>
 
 // returning undefined means no more results are available, thus we've queried everything possible

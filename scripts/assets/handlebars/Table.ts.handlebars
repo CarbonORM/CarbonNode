@@ -1,4 +1,3 @@
-import {AxiosResponse} from "axios";
 import {
     iPostC6RestResponse,
     restRequest,
@@ -8,11 +7,12 @@ import {
     DELETE,
     iDeleteC6RestResponse,
     iGetC6RestResponse,
-    iPutC6RestResponse,
+    iPutC6RestResponse,{{#REACT_IMPORT}}
     removeInvalidKeys,
     iAPI,
-    Modify
-} from "@carbonorm/carbonnode";
+    Modify{{/REACT_IMPORT}}
+} from "@carbonorm/carbonnode";{{#REACT_IMPORT}}
+import {AxiosResponse} from "axios";{{/REACT_IMPORT}}
 import {C6, i{{TABLE_NAME_SHORT_PASCAL_CASE}}, {{TABLE_NAME_SHORT}}, RestTableNames} from "./C6";{{#REACT_IMPORT}}
 import {deleteRestfulObjectArrays, updateRestfulObjectArrays} from "@carbonorm/carbonreact";
 {{REACT_IMPORT}};{{/REACT_IMPORT}}
