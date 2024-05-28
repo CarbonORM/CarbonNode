@@ -324,6 +324,7 @@ export interface iC6Object {
     },
     PREFIX: string,
     IMPORT: (tableName: string) => Promise<iDynamicApiImport>,
+
     [key: string]: any
 }
 
@@ -937,7 +938,7 @@ export default function restRequest<
                                     }
                                 } = {}
 
-                                let apiRequestPromises: Array<Awaited<apiReturn<iGetC6RestResponse<any>>>> = []
+                                let apiRequestPromises: Array<apiReturn<iGetC6RestResponse<any>>> = []
 
                                 console.log('%c Dependencies', 'color: #005555', dependencies)
 
@@ -1053,7 +1054,7 @@ export default function restRequest<
 
                                     // this is a dynamic call to the rest api, any generated table may resolve with (RestApi)
                                     // todo - using value to avoid joins.... but. maybe this should be a parameterizable option -- think race conditions; its safer to join
-                                    apiRequestPromises.push(await RestApi.Get({
+                                    apiRequestPromises.push(RestApi.Get({
                                             [C6.WHERE]: {
                                                 0: Object.keys(fetchReferences[tableToFetch]).reduce((sum, column) => {
 
@@ -1083,11 +1084,16 @@ export default function restRequest<
 
                                 }
 
+                                console.groupEnd()
+
                                 await Promise.all(apiRequestPromises)
 
-                                request.fetchDependencies = apiRequestPromises
-
-                                console.groupEnd()
+                                apiRequestPromises.map(async (promise) => {
+                                    if (!Array.isArray(request.fetchDependencies)) {
+                                        request.fetchDependencies = [];
+                                    }
+                                    request.fetchDependencies.push(await promise)
+                                })
 
                             }
 
