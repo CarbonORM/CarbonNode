@@ -86,7 +86,7 @@ export const TABLES: tC6Tables = {
 {{/TABLES}}
 };
 
-let dynamicImportCache = {};
+let dynamicImportCache : Record<string, iDynamicApiImport> = {};
 
 // The only reason this function is here/dynamic is due to the relative import (using `./`)
 async function dynamicRestImport(tableName: string) : Promise<iDynamicApiImport> {
