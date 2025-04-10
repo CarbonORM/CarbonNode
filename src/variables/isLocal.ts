@@ -1,2 +1,6 @@
+import {getEnvVar} from "./getEnvVar";
 
-export default process.env.NODE_ENV === 'development';
+
+const isDevelopment = getEnvVar('NODE_ENV', '') === 'development';
+
+export default isDevelopment;
