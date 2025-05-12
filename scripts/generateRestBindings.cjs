@@ -125,27 +125,73 @@ var dumpFileLocation = MySQLDump.MySQLDump();
 function capitalizeFirstLetter(string) {
     return string.charAt(0).toUpperCase() + string.slice(1);
 }
-function determineTypeScriptType(mysqlType) {
-    switch (mysqlType.toLowerCase()) {
+function determineTypeScriptType(mysqlType, enumValues) {
+    var baseType = mysqlType.toLowerCase().replace(/\(.+?\)/, '').split(' ')[0];
+    if (baseType === 'enum' && Array.isArray(enumValues)) {
+        return enumValues.map(function (val) { return "'".concat(val, "'"); }).join(' | ');
+    }
+    switch (mysqlType) {
+        // String & Temporal
+        case 'char':
         case 'varchar':
         case 'text':
-        case 'char':
+        case 'tinytext':
+        case 'mediumtext':
+        case 'longtext':
+        case 'enum':
+        case 'set':
+        case 'date':
+        case 'time':
         case 'datetime':
         case 'timestamp':
-        case 'date':
+        case 'year':
             return 'string';
-        case 'int':
-        case 'bigint':
+        // Numeric
+        case 'tinyint':
         case 'smallint':
+        case 'mediumint':
+        case 'int':
+        case 'integer':
+        case 'bigint':
         case 'decimal':
+        case 'dec':
+        case 'numeric':
         case 'float':
         case 'double':
-        case 'tinyint':
+        case 'real':
             return 'number';
+        // Boolean
         case 'boolean':
+        case 'bool':
             return 'boolean';
+        // JSON
         case 'json':
-            return 'any'; // or 'object' based on usage
+            return 'any';
+        // GeoJSON
+        case 'geometry':
+            return 'GeoJSON.Geometry';
+        case 'point':
+            return 'GeoJSON.Point';
+        case 'linestring':
+            return 'GeoJSON.LineString';
+        case 'polygon':
+            return 'GeoJSON.Polygon';
+        case 'multipoint':
+            return 'GeoJSON.MultiPoint';
+        case 'multilinestring':
+            return 'GeoJSON.MultiLineString';
+        case 'multipolygon':
+            return 'GeoJSON.MultiPolygon';
+        case 'geometrycollection':
+            return 'GeoJSON.GeometryCollection';
+        // Binary
+        case 'binary':
+        case 'varbinary':
+        case 'blob':
+        case 'tinyblob':
+        case 'mediumblob':
+        case 'longblob':
+            return 'Buffer | string';
         default:
             return 'string';
     }
@@ -161,18 +207,26 @@ var parseSQLToTypeScript = function (sql) {
         var columnDefinitions = tableMatch[2];
         var columns = {};
         // Improved regular expression to match column definitions
-        var columnRegex = /\s*`([^`]*)`\s+(\w+)(?:\(([^)]+)\))?\s*(NOT NULL)?\s*(AUTO_INCREMENT)?\s*(DEFAULT\s+'.*?'|DEFAULT\s+\S+)?/gm;
-        var columnMatch;
+        var columnRegex = /^\s*`([^`]+)`\s+([a-zA-Z0-9_]+(?:\s+unsigned)?(?:\(\d+(?:,\d+)?\))?)\s*(NOT NULL|NULL)?\s*(DEFAULT\s+(?:'[^']*'|[^\s,]+))?\s*(AUTO_INCREMENT)?/i;
         var columnDefinitionsLines = columnDefinitions.split('\n');
         columnDefinitionsLines.forEach(function (line) {
             if (!line.match(/(PRIMARY KEY|UNIQUE KEY|CONSTRAINT)/)) {
-                while ((columnMatch = columnRegex.exec(line))) {
-                    columns[columnMatch[1]] = {
-                        type: columnMatch[2],
-                        length: columnMatch[3] || '',
-                        notNull: !!columnMatch[4],
-                        autoIncrement: !!columnMatch[5],
-                        defaultValue: columnMatch[6] ? columnMatch[6].replace(/^DEFAULT\s+/i, '') : ''
+                var match = columnRegex.exec(line.trim());
+                if (match) {
+                    var _a = __read(match, 6), name_1 = _a[1], fullTypeRaw = _a[2], nullability = _a[3], defaultRaw = _a[4], autoInc = _a[5];
+                    var fullType = fullTypeRaw.trim();
+                    var enumMatch = fullType.startsWith('enum') ? fullType.match(/^enum\((.+)\)/i) : null;
+                    var enumValues = enumMatch ? enumMatch[1].split(',').map(function (s) { return s.trim().replace(/^'(.*)'$/, '$1'); }) : null;
+                    var type = fullType.replace(/\(.+?\)/, '').split(' ')[0].toLowerCase();
+                    var lengthMatch = fullType.match(/\(([^)]+)\)/);
+                    var length_1 = lengthMatch ? lengthMatch[1] : '';
+                    columns[name_1] = {
+                        type: type,
+                        length: length_1,
+                        enumValues: enumValues,
+                        notNull: (nullability === null || nullability === void 0 ? void 0 : nullability.toUpperCase()) === 'NOT NULL',
+                        autoIncrement: !!autoInc,
+                        defaultValue: defaultRaw ? defaultRaw.replace(/^DEFAULT\s+/i, '') : ''
                     };
                 }
             }
@@ -202,7 +256,7 @@ var parseSQLToTypeScript = function (sql) {
             });
         }
         var REACT_IMPORT = false, CARBON_REACT_INSTANCE = false;
-        if (argMap['--react'] || false) {
+        if (argMap['--react']) {
             var reactArgSplit = argMap['--react'].split(';');
             if (reactArgSplit.length !== 2) {
                 console.error("React requires two arguments, the import and the carbon react instance statement. Example: --react 'import CustomCarbonReactApplication from \"src/CustomCarbonReactApplication.tsx\"; CustomCarbonReactApplication.instance'");
@@ -235,12 +289,12 @@ var parseSQLToTypeScript = function (sql) {
         for (var colName in columns) {
             tsModel.COLUMNS["".concat(tableName, ".").concat(colName)] = colName;
             tsModel.COLUMNS_UPPERCASE[colName.toUpperCase()] = tableName + '.' + colName;
-            var typescript_type = determineTypeScriptType(columns[colName].type.toLowerCase()) === "number" ? "number" : "string";
+            var typescript_type = determineTypeScriptType(columns[colName].type.toLowerCase(), columns[colName].enumValues) === "number" ? "number" : "string";
             tsModel.TYPE_VALIDATION["".concat(tableName, ".").concat(colName)] = {
                 COLUMN_NAME: colName,
                 MYSQL_TYPE: columns[colName].type.toLowerCase(),
                 TYPESCRIPT_TYPE: typescript_type,
-                TYPESCRIPT_TYPE_IS_STRING: 'string' === typescript_type,
+                TYPESCRIPT_TYPE_IS_STRING: typescript_type === 'string' || typescript_type.includes("'"),
                 TYPESCRIPT_TYPE_IS_NUMBER: 'number' === typescript_type,
                 MAX_LENGTH: columns[colName].length,
                 AUTO_INCREMENT: columns[colName].autoIncrement,

@@ -12,6 +12,7 @@ export * from "./api/restRequest";
 export { default as timeout } from "./api/timeout";
 export * from "./api/timeout";
 export * from "./api/interfaces/ormInterfaces";
+export * from "./variables/getEnvVar";
 export { default as isLocal } from "./variables/isLocal";
 export * from "./variables/isLocal";
 export { default as isTest } from "./variables/isTest";
