@@ -80,7 +80,10 @@ console.log(globals)
 export default [
 	{
 		input: 'src/index.ts',
-		external: externals,
+		external: [
+			...externals,
+			/^src\/api\/rest\/.+$/
+		],
 		plugins: plugins,
 		output: [
 			// browser-friendly UMD build
@@ -91,8 +94,18 @@ export default [
 			// builds from a single configuration where possible, using
 			// an array for the `output` option, where we can specify
 			// `file` and `format` for each target)
-			{file: pkg.main, format: 'cjs', globals: globals, sourcemap: true},
-			{file: pkg.module, format: 'es', globals: globals, sourcemap: true}
+			{
+				file: pkg.exports['.'].import,
+				format: 'es', // ✅ this is the ES module
+				globals,
+				sourcemap: true
+			},
+			{
+				file: pkg.exports['.'].require,
+				format: 'cjs', // ✅ this is the CommonJS
+				globals,
+				sourcemap: true
+			}
 		]
 	},
 

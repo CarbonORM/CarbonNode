@@ -4,7 +4,7 @@ import {
     iDeleteC6RestResponse,
     iPostC6RestResponse,
     iGetC6RestResponse,
-    iPutC6RestResponse
+    iPutC6RestResponse, RequestGetPutDeleteBody
 } from "api/restRequest";
 import {AxiosResponse} from "axios";
 
@@ -32,6 +32,13 @@ export interface iTypeValidation {
     SKIP_COLUMN_IN_POST: boolean
 }
 
+export type iRestReactiveLifecycle<T extends RequestGetPutDeleteBody> = {
+    beforeProcessing?: (args: { request: T[]; requestMeta?: any }) => void | Promise<void>;
+    beforeExecution?: (args: { request: T[]; requestMeta?: any }) => void | Promise<void>;
+    afterExecution?: (args: { response: T[]; request: T[]; responseMeta?: any }) => void | Promise<void>;
+    afterCommit?: (args: { response: T[]; request: T[]; responseMeta?: any }) => void | Promise<void>;
+};
+
 export interface iConstraint {
     TABLE: string,
     COLUMN: string,
@@ -43,6 +50,7 @@ export interface iC6RestfulModel<RestShortTableNames extends string = string> {
     PRIMARY: string[],
     PRIMARY_SHORT: string[],
     COLUMNS: stringMap,
+    LIFECYCLE_HOOKS: iRestReactiveLifecycle<RequestGetPutDeleteBody>[],
     REGEX_VALIDATION: RegExpMap,
     TYPE_VALIDATION: { [key: string]: iTypeValidation },
     TABLE_REFERENCES: { [columnName: string]: iConstraint[] },

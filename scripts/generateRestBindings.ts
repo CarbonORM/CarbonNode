@@ -24,7 +24,7 @@ class MySQLDump {
     static DB_PASS = argMap['--pass'] || 'password';
     static DB_HOST = argMap['--host'] || '127.0.0.1';
     static DB_PORT = argMap['--port'] || '3306';
-    static DB_NAME = argMap['--dbname'] || 'CarbonPHP';
+    static DB_NAME = argMap['--dbname'] || 'assessorly';
     static DB_PREFIX = argMap['--prefix'] || 'carbon_';
     static RELATIVE_OUTPUT_DIR = argMap['--output'] || '/src/api/rest';
     static OUTPUT_DIR = path.join(process.cwd(), MySQLDump.RELATIVE_OUTPUT_DIR);
@@ -159,6 +159,17 @@ function determineTypeScriptType(mysqlType: string, enumValues?: string[]): stri
     }
 
     switch (mysqlType) {
+        case 'enum':
+            throw Error('An unexpected error occurred. Please report this issue to the maintainers of this script.');
+
+        // Date & Time
+        case 'time':
+        case 'year':
+        case 'date':
+        case 'datetime':
+        case 'timestamp':
+            return 'Date | string';
+
         // String & Temporal
         case 'char':
         case 'varchar':
@@ -166,13 +177,7 @@ function determineTypeScriptType(mysqlType: string, enumValues?: string[]): stri
         case 'tinytext':
         case 'mediumtext':
         case 'longtext':
-        case 'enum':
         case 'set':
-        case 'date':
-        case 'time':
-        case 'datetime':
-        case 'timestamp':
-        case 'year':
             return 'string';
 
         // Numeric
@@ -203,7 +208,7 @@ function determineTypeScriptType(mysqlType: string, enumValues?: string[]): stri
         case 'geometry':
             return 'GeoJSON.Geometry';
         case 'point':
-            return 'GeoJSON.Point';
+            return '{ x: number; y: number }';
         case 'linestring':
             return 'GeoJSON.LineString';
         case 'polygon':
@@ -268,7 +273,7 @@ const parseSQLToTypeScript = (sql: string) => {
         let columns = {};
 
         // Improved regular expression to match column definitions
-        const columnRegex = /^\s*`([^`]+)`\s+([a-zA-Z0-9_]+(?:\s+unsigned)?(?:\(\d+(?:,\d+)?\))?)\s*(NOT NULL|NULL)?\s*(DEFAULT\s+(?:'[^']*'|[^\s,]+))?\s*(AUTO_INCREMENT)?/i;
+        const columnRegex = /^\s*`([^`]+)`\s+((?:enum|set)\((?:'(?:[^']|\\')*'(?:,\s*'(?:[^']|\\')*')*)\)|[a-zA-Z0-9_]+(?:\s+unsigned)?(?:\(\d+(?:,\d+)?\))?)\s*(NOT NULL|NULL)?\s*(DEFAULT\s+(?:'[^']*'|[^\s,]+))?\s*(AUTO_INCREMENT)?/i;
 
         const columnDefinitionsLines = columnDefinitions.split('\n');
 
@@ -279,14 +284,22 @@ const parseSQLToTypeScript = (sql: string) => {
                     const [, name, fullTypeRaw, nullability, defaultRaw, autoInc] = match;
 
                     const fullType = fullTypeRaw.trim();
-                    const enumMatch = fullType.startsWith('enum') ? fullType.match(/^enum\((.+)\)/i) : null;
-                    const enumValues = enumMatch ? enumMatch[1].split(',').map(s => s.trim().replace(/^'(.*)'$/, '$1')) : null;
+                    const enumMatch = /^enum\((.+)\)$/i.exec(fullType);
+                    const enumValues = enumMatch
+                        ? enumMatch[1]
+                            .split(/,(?=(?:[^']*'[^']*')*[^']*$)/) // split only top-level commas
+                            .map(s => s.trim().replace(/^'(.*)'$/, '$1'))
+                        : null;
                     const type = fullType.replace(/\(.+?\)/, '').split(' ')[0].toLowerCase();                    const lengthMatch = fullType.match(/\(([^)]+)\)/);
                     const length = lengthMatch ? lengthMatch[1] : '';
+
+                    const sridMatch = line.match(/SRID\s+(\d+)/i);
+                    const srid = sridMatch ? parseInt(sridMatch[1], 10) : null;
 
                     columns[name] = {
                         type,
                         length,
+                        srid,
                         enumValues,
                         notNull: nullability?.toUpperCase() === 'NOT NULL',
                         autoIncrement: !!autoInc,
@@ -341,11 +354,12 @@ const parseSQLToTypeScript = (sql: string) => {
 
         }
 
-
         const tsModel = {
             RELATIVE_OUTPUT_DIR: pathRuntimeReference,
             TABLE_NAME: tableName,
-            TABLE_DEFINITION: tableMatch[0],
+            TABLE_DEFINITION: tableMatch[0].replace(/\/\*!([0-9]{5}) ([^*]+)\*\//g, (_match, _version, body) => {
+                return `/!* ${body.trim()} *!/`;
+            }),
             TABLE_CONSTRAINT: references,
             REST_URL_EXPRESSION: argMap['--restUrlExpression'] || '"/rest/"',
             TABLE_NAME_SHORT: tableName.replace(MySQLDump.DB_PREFIX, ''),
@@ -371,7 +385,7 @@ const parseSQLToTypeScript = (sql: string) => {
 
             tsModel.COLUMNS_UPPERCASE[colName.toUpperCase()] = tableName + '.' + colName;
 
-            const typescript_type = determineTypeScriptType(columns[colName].type.toLowerCase(), columns[colName].enumValues) === "number" ? "number" : "string"
+            const typescript_type = determineTypeScriptType(columns[colName].type.toLowerCase(), columns[colName].enumValues)
 
             tsModel.TYPE_VALIDATION[`${tableName}.${colName}`] = {
                 COLUMN_NAME: colName,

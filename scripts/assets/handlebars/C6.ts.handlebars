@@ -14,11 +14,13 @@ export type RestTableNames = {{{RestTableNames}}};
 
 export type RestShortTableNames = {{{RestShortTableNames}}};
 
+
+
 {{#TABLES}}
 
 export interface i{{TABLE_NAME_SHORT_PASCAL_CASE}} {
 {{#each TYPE_VALIDATION}}
-    '{{this.COLUMN_NAME}}'?: {{this.TYPESCRIPT_TYPE}}{{^NOT_NULL}} | null{{/NOT_NULL}};
+    '{{this.COLUMN_NAME}}'?: {{{this.TYPESCRIPT_TYPE}}}{{^NOT_NULL}} | null{{/NOT_NULL}};
 {{/each}}
 }
 
@@ -63,6 +65,7 @@ export const {{TABLE_NAME_SHORT}}: iC6RestfulModel<RestTableNames> & iDefine{{TA
         '{{@key}}': '{{this}}',
     {{/each}}
     },
+    LIFECYCLE_HOOKS: [],
     TABLE_REFERENCES: {
         {{#each TABLE_REFERENCES}}'{{@key}}': [{{#this}}{
             TABLE: '{{TABLE}}',

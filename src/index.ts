@@ -5,6 +5,7 @@
 export * from "./api/C6Constants";
 export { default as axiosInstance } from "./api/axiosInstance";
 export * from "./api/axiosInstance";
+export * from "./api/carbonSqlExecutor";
 export { default as convertForRequestBody } from "./api/convertForRequestBody";
 export * from "./api/convertForRequestBody";
 export { default as restRequest } from "./api/restRequest";
@@ -15,6 +16,8 @@ export * from "./api/interfaces/ormInterfaces";
 export * from "./variables/getEnvVar";
 export { default as isLocal } from "./variables/isLocal";
 export * from "./variables/isLocal";
+export { default as isNode } from "./variables/isNode";
+export * from "./variables/isNode";
 export { default as isTest } from "./variables/isTest";
 export * from "./variables/isTest";
 export { default as isVerbose } from "./variables/isVerbose";

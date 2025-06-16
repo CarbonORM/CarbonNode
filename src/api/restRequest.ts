@@ -2,8 +2,10 @@ import axiosInstance from "api/axiosInstance";
 import convertForRequestBody from "api/convertForRequestBody";
 import {iC6RestfulModel, iConstraint, iDynamicApiImport} from "api/interfaces/ormInterfaces";
 import {AxiosInstance, AxiosPromise, AxiosResponse} from "axios";
+import {Pool} from "mysql2/promise";
 
 import {toast} from "react-toastify";
+import isNode from 'variables/isNode';  // simple check: `typeof window==='undefined'`
 import isLocal from "variables/isLocal";
 import isTest from "variables/isTest";
 import isVerbose from "variables/isVerbose";
@@ -267,23 +269,116 @@ export const DELETE = 'DELETE';
 
 export type iRestMethods = 'GET' | 'POST' | 'PUT' | 'DELETE';
 
+// ========================
+// 🔧 SQL Operator & Helpers
+// ========================
 
-//wip
-export type RequestGetPutDeleteBody = {
-    SELECT?: any,
-    UPDATE?: any,
-    DELETE?: any,
-    WHERE?: any,
-    JOIN?: {
-        LEFT?: any,
-        RIGHT?: any,
-        INNER?: any,
-    },
-    PAGINATION?: {
-        PAGE?: number,
-        LIMIT?: number,
-    }
-}
+export type SQLFunction =
+    | 'COUNT'
+    | 'GROUP_CONCAT'
+    | 'MAX'
+    | 'MIN'
+    | 'SUM'
+    | 'DISTINCT';
+
+export type SQLComparisonOperator =
+    | '='
+    | '!='
+    | '<'
+    | '<='
+    | '>'
+    | '>='
+    | 'IN'
+    | 'NOT IN'
+    | 'LIKE'
+    | 'IS NULL'
+    | 'IS NOT NULL'
+    | 'BETWEEN'
+    | 'LESS_THAN'
+    | 'GREATER_THAN';
+
+export type JoinType = 'INNER' | 'LEFT_OUTER' | 'RIGHT_OUTER';
+
+export type OrderDirection = 'ASC' | 'DESC';
+
+
+// ========================
+// 📦 SELECT
+// ========================
+
+export type SubSelect<T = any> = {
+    subSelect: true;
+    table: string; // could be enum’d to known table names
+    args: RequestGetPutDeleteBody<T>;
+    alias: string;
+};
+
+export type SelectField<T = any> =
+    | keyof T
+    | [keyof T, 'AS', string]
+    | [SQLFunction, keyof T]
+    | [SQLFunction, keyof T, string] // With alias
+    | SubSelect<T>; // Fully nested sub-select
+
+
+// ========================
+// 🧠 WHERE (Recursive)
+// ========================
+
+export type WhereClause<T = any> =
+    | Partial<T>
+    | LogicalGroup<T>
+    | ComparisonClause<T>;
+
+export type LogicalGroup<T = any> = {
+    [logicalGroup: string]: Array<WhereClause<T>>;
+};
+
+export type ComparisonClause<T = any> = [keyof T, SQLComparisonOperator, any];
+
+
+// ========================
+// 🔗 JOIN
+// ========================
+
+export type JoinTableCondition<T = any> =
+    | Partial<T>
+    | WhereClause<T>[]
+    | ComparisonClause<T>[];
+
+export type JoinClause<T = any> = {
+    [table: string]: JoinTableCondition<T>;
+};
+
+export type Join<T = any> = {
+    [K in JoinType]?: JoinClause<T>;
+};
+
+
+// ========================
+// 📄 PAGINATION
+// ========================
+
+export type Pagination<T = any> = {
+    PAGE?: number;
+    LIMIT?: number | null;
+    ORDER?: Partial<Record<keyof T, OrderDirection>>;
+};
+
+
+// ========================
+// 🌐 MAIN API TYPE
+// ========================
+
+export type RequestGetPutDeleteBody<T = any> = {
+    SELECT?: SelectField<T>[];
+    UPDATE?: Partial<T>;
+    DELETE?: boolean;
+    WHERE?: WhereClause<T>;
+    JOIN?: Join<T>;
+    PAGINATION?: Pagination<T>;
+};
+
 
 export type RequestQueryBody<RestTableInterfaces extends { [key: string]: any }> =
     iAPI<RestTableInterfaces>
@@ -350,6 +445,7 @@ interface iRest<CustomAndRequiredFields extends { [key: string]: any }, RestTabl
     C6: iC6Object,
     axios?: AxiosInstance,
     restURL?: string,
+    mysqlPool?: Pool;
     withCredentials?: boolean,
     tableName: RestShortTableNames | RestShortTableNames[],
     requestMethod: iRestMethods,
@@ -389,6 +485,7 @@ export default function restRequest<
       C6,
       axios = axiosInstance,
       restURL = '/rest/',
+      mysqlPool,
       withCredentials = true,
       tableName,
       requestMethod = GET,
@@ -423,7 +520,7 @@ export default function restRequest<
 
     }
 
-    return (request: iAPI<Modify<RestTableInterfaces, RequestTableOverrides>> & CustomAndRequiredFields = {} as iAPI<Modify<RestTableInterfaces, RequestTableOverrides>> & CustomAndRequiredFields) => {
+    return async (request: iAPI<Modify<RestTableInterfaces, RequestTableOverrides>> & CustomAndRequiredFields = {} as iAPI<Modify<RestTableInterfaces, RequestTableOverrides>> & CustomAndRequiredFields) => {
 
         console.groupCollapsed('%c API: (' + requestMethod + ') Request for (' + operatingTable + ')', 'color: #0c0')
 
@@ -480,7 +577,7 @@ export default function restRequest<
         }
 
         // this could return itself with a new page number, or undefined if the end is reached
-        function apiRequest(): apiReturn<ResponseDataType> {
+        async function apiRequest(): Promise<apiReturn<ResponseDataType>> {
 
             request.cacheResults ??= (C6.GET === requestMethod)
 
@@ -662,6 +759,54 @@ export default function restRequest<
                 }
 
             }
+
+            // this is node check is for react bundlers to skip this import all together
+            if (isNode && mysqlPool) {
+                const { CarbonSqlExecutor } = await import('./carbonSqlExecutor');
+                const engine = new CarbonSqlExecutor(mysqlPool, C6);
+                switch (requestMethod) {
+                    case GET:
+                        return engine
+                            .select(tableName, undefined, request)
+                            .then((rows) => {
+                                // mirror the front‐end shape
+                                const serverResponse: iGetC6RestResponse<typeof rows> = {
+                                    rest: rows,
+                                    session: undefined,
+                                    sql: true,
+                                };
+                                return serverResponse;
+                            }) as apiReturn<ResponseDataType>;
+
+                    case POST:
+                        return engine
+                            .insert(tableName, request)
+                            .then((created) => ({
+                                rest: created,
+                            })) as apiReturn<ResponseDataType>;
+
+                    case PUT:
+                        return engine
+                            .update(tableName, undefined, request)
+                            .then((updatedResult) => ({
+                                rest: updatedResult,
+                                rowCount: (updatedResult as any).affectedRows ?? 0,
+                            })) as apiReturn<ResponseDataType>;
+
+                    case DELETE:
+                        return engine
+                            .delete(tableName, undefined, request)
+                            .then((deletedResult) => ({
+                                rest: deletedResult,
+                                rowCount: (deletedResult as any).affectedRows ?? 0,
+                                deleted: true,
+                            })) as apiReturn<ResponseDataType>;
+
+                    default:
+                        throw new Error(`Unsupported method: ${requestMethod}`);
+                }
+            }
+
 
             // A part of me exists that wants to remove this, but it's a good feature
             // this allows developers the ability to cache requests based on primary key
@@ -1139,7 +1284,7 @@ export default function restRequest<
 
         }
 
-        return apiRequest()
+        return await apiRequest()
 
     }
 

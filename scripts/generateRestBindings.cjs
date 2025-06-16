@@ -112,7 +112,7 @@ var MySQLDump = /** @class */ (function () {
     MySQLDump.DB_PASS = argMap['--pass'] || 'password';
     MySQLDump.DB_HOST = argMap['--host'] || '127.0.0.1';
     MySQLDump.DB_PORT = argMap['--port'] || '3306';
-    MySQLDump.DB_NAME = argMap['--dbname'] || 'CarbonPHP';
+    MySQLDump.DB_NAME = argMap['--dbname'] || 'assessorly';
     MySQLDump.DB_PREFIX = argMap['--prefix'] || 'carbon_';
     MySQLDump.RELATIVE_OUTPUT_DIR = argMap['--output'] || '/src/api/rest';
     MySQLDump.OUTPUT_DIR = path.join(process.cwd(), MySQLDump.RELATIVE_OUTPUT_DIR);
@@ -131,6 +131,15 @@ function determineTypeScriptType(mysqlType, enumValues) {
         return enumValues.map(function (val) { return "'".concat(val, "'"); }).join(' | ');
     }
     switch (mysqlType) {
+        case 'enum':
+            throw Error('An unexpected error occurred. Please report this issue to the maintainers of this script.');
+        // Date & Time
+        case 'time':
+        case 'year':
+        case 'date':
+        case 'datetime':
+        case 'timestamp':
+            return 'Date | string';
         // String & Temporal
         case 'char':
         case 'varchar':
@@ -138,13 +147,7 @@ function determineTypeScriptType(mysqlType, enumValues) {
         case 'tinytext':
         case 'mediumtext':
         case 'longtext':
-        case 'enum':
         case 'set':
-        case 'date':
-        case 'time':
-        case 'datetime':
-        case 'timestamp':
-        case 'year':
             return 'string';
         // Numeric
         case 'tinyint':
@@ -171,7 +174,7 @@ function determineTypeScriptType(mysqlType, enumValues) {
         case 'geometry':
             return 'GeoJSON.Geometry';
         case 'point':
-            return 'GeoJSON.Point';
+            return '{ x: number; y: number }';
         case 'linestring':
             return 'GeoJSON.LineString';
         case 'polygon':
@@ -207,7 +210,7 @@ var parseSQLToTypeScript = function (sql) {
         var columnDefinitions = tableMatch[2];
         var columns = {};
         // Improved regular expression to match column definitions
-        var columnRegex = /^\s*`([^`]+)`\s+([a-zA-Z0-9_]+(?:\s+unsigned)?(?:\(\d+(?:,\d+)?\))?)\s*(NOT NULL|NULL)?\s*(DEFAULT\s+(?:'[^']*'|[^\s,]+))?\s*(AUTO_INCREMENT)?/i;
+        var columnRegex = /^\s*`([^`]+)`\s+((?:enum|set)\((?:'(?:[^']|\\')*'(?:,\s*'(?:[^']|\\')*')*)\)|[a-zA-Z0-9_]+(?:\s+unsigned)?(?:\(\d+(?:,\d+)?\))?)\s*(NOT NULL|NULL)?\s*(DEFAULT\s+(?:'[^']*'|[^\s,]+))?\s*(AUTO_INCREMENT)?/i;
         var columnDefinitionsLines = columnDefinitions.split('\n');
         columnDefinitionsLines.forEach(function (line) {
             if (!line.match(/(PRIMARY KEY|UNIQUE KEY|CONSTRAINT)/)) {
@@ -215,14 +218,21 @@ var parseSQLToTypeScript = function (sql) {
                 if (match) {
                     var _a = __read(match, 6), name_1 = _a[1], fullTypeRaw = _a[2], nullability = _a[3], defaultRaw = _a[4], autoInc = _a[5];
                     var fullType = fullTypeRaw.trim();
-                    var enumMatch = fullType.startsWith('enum') ? fullType.match(/^enum\((.+)\)/i) : null;
-                    var enumValues = enumMatch ? enumMatch[1].split(',').map(function (s) { return s.trim().replace(/^'(.*)'$/, '$1'); }) : null;
+                    var enumMatch = /^enum\((.+)\)$/i.exec(fullType);
+                    var enumValues = enumMatch
+                        ? enumMatch[1]
+                            .split(/,(?=(?:[^']*'[^']*')*[^']*$)/) // split only top-level commas
+                            .map(function (s) { return s.trim().replace(/^'(.*)'$/, '$1'); })
+                        : null;
                     var type = fullType.replace(/\(.+?\)/, '').split(' ')[0].toLowerCase();
                     var lengthMatch = fullType.match(/\(([^)]+)\)/);
                     var length_1 = lengthMatch ? lengthMatch[1] : '';
+                    var sridMatch = line.match(/SRID\s+(\d+)/i);
+                    var srid = sridMatch ? parseInt(sridMatch[1], 10) : null;
                     columns[name_1] = {
                         type: type,
                         length: length_1,
+                        srid: srid,
                         enumValues: enumValues,
                         notNull: (nullability === null || nullability === void 0 ? void 0 : nullability.toUpperCase()) === 'NOT NULL',
                         autoIncrement: !!autoInc,
@@ -267,7 +277,9 @@ var parseSQLToTypeScript = function (sql) {
         var tsModel = {
             RELATIVE_OUTPUT_DIR: pathRuntimeReference,
             TABLE_NAME: tableName,
-            TABLE_DEFINITION: tableMatch[0],
+            TABLE_DEFINITION: tableMatch[0].replace(/\/\*!([0-9]{5}) ([^*]+)\*\//g, function (_match, _version, body) {
+                return "/!* ".concat(body.trim(), " *!/");
+            }),
             TABLE_CONSTRAINT: references,
             REST_URL_EXPRESSION: argMap['--restUrlExpression'] || '"/rest/"',
             TABLE_NAME_SHORT: tableName.replace(MySQLDump.DB_PREFIX, ''),
@@ -289,7 +301,7 @@ var parseSQLToTypeScript = function (sql) {
         for (var colName in columns) {
             tsModel.COLUMNS["".concat(tableName, ".").concat(colName)] = colName;
             tsModel.COLUMNS_UPPERCASE[colName.toUpperCase()] = tableName + '.' + colName;
-            var typescript_type = determineTypeScriptType(columns[colName].type.toLowerCase(), columns[colName].enumValues) === "number" ? "number" : "string";
+            var typescript_type = determineTypeScriptType(columns[colName].type.toLowerCase(), columns[colName].enumValues);
             tsModel.TYPE_VALIDATION["".concat(tableName, ".").concat(colName)] = {
                 COLUMN_NAME: colName,
                 MYSQL_TYPE: columns[colName].type.toLowerCase(),

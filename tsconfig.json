@@ -1,5 +1,10 @@
 {
   "compilerOptions": {
+    "paths": {
+      "@carbonorm/carbonnode": [
+        "."
+      ]
+    },
     "importHelpers": true,
     "allowSyntheticDefaultImports": true,
     "allowUnreachableCode": false,
@@ -34,5 +39,10 @@
     "src/custom.d.ts",
     "src/**/*",
     "src/index.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "src/api/rest/**",
+    "src/api/rest/**/*.test.ts"
   ]
 }
