@@ -17,13 +17,7 @@ const config = JSON.parse(readFileSync('tsconfig.json', {encoding: 'utf8'}));
 
 
 const plugins = [
-	commonjs({
-		namedExports: {
-			// This is needed because react/jsx-runtime exports jsx on the module export.
-			// Without this mapping the transformed import {jsx as _jsx} from 'react/jsx-runtime' will fail.
-			'react/jsx-runtime': ['jsx', 'jsxs', 'Fragment'],
-		},
-	}),
+	commonjs(),
 	includePaths({
 		paths: [
 			config.compilerOptions.baseUrl
