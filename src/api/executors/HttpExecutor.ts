@@ -38,6 +38,7 @@ export class HttpExecutor<
             restURL,
             withCredentials,
             restModel,
+            reactBootstrap,
             requestMethod,
             queryCallback,
             responseCallback,
@@ -470,6 +471,21 @@ export class HttpExecutor<
 
                             return response;
 
+                        }
+
+                        // TODO - preform those callbacks here
+                       if (this.config.)
+                        switch (requestMethod) {
+                            case GET:
+                                this.request.response = response.data as iGetC6RestResponse<RestTableInterface>;
+                                break;
+                            case POST:
+                            case PUT:
+                                this.request.response = apiResponse as RestTableInterface[PrimaryKey];
+                                break;
+                            case DELETE:
+                                this.request.response = apiResponse as boolean;
+                                break;
                         }
 
                         // stateful operations are done in the response callback - its leverages rest generated functions

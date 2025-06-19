@@ -292,6 +292,7 @@ export interface iRest<
     mysqlPool?: Pool;
     withCredentials?: boolean,
     restModel: iC6RestfulModel<RestShortTableName, RestTableInterface, PrimaryKey>,
+    reactBootstrap: CarbonReact,
     requestMethod: iRestMethods,
     clearCache?: () => void,
     skipPrimaryCheck?: boolean,

@@ -8,6 +8,7 @@ import {
     iDeleteC6RestResponse,
     iGetC6RestResponse,
     iPutC6RestResponse,{{#REACT_IMPORT}}
+    getPrimaryKeyTypes,
     removeInvalidKeys,
     iAPI,
     Modify{{/REACT_IMPORT}}
@@ -100,13 +101,29 @@ type PostRequestTableOverrides = {}
     request: iAPI<Modify<i{{TABLE_NAME_SHORT_PASCAL_CASE}}, PostRequestTableOverrides>> & PostCustomAndRequiredFields,
     success: i{{TABLE_NAME_SHORT_PASCAL_CASE}}[{{TABLE_NAME_SHORT_PASCAL_CASE}}PrimaryKeys] | string | number | boolean | undefined
 ) {
-    if ('number' === typeof id || 'string' === typeof success) {
-        if (1 !== {{TABLE_NAME_SHORT}}.PRIMARY_SHORT.length) {
-            console.error("C6 received unexpected result's given the primary key length");
-        } else {
-            request[{{TABLE_NAME_SHORT}}.PRIMARY_SHORT[0]] = success
+
+    if (1 !== {{TABLE_NAME_SHORT}}.PRIMARY_SHORT.length) {
+
+        console.error("C6 received unexpected result's given the primary key length");
+
+    } else {
+
+        const pk = {{TABLE_NAME_SHORT}}.PRIMARY_SHORT[0];
+
+        const pkTypes = getPrimaryKeyTypes({{TABLE_NAME_SHORT}});
+
+        const expectedType = pkTypes[pk];
+
+        if (expectedType === typeof success) {
+
+            return;
+
         }
+
+        request[pk] = success as i{{TABLE_NAME_SHORT_PASCAL_CASE}}[{{TABLE_NAME_SHORT_PASCAL_CASE}}PrimaryKeys]
+
     }
+
     {{CARBON_REACT_INSTANCE}}.updateRestfulObjectArrays<i{{TABLE_NAME_SHORT_PASCAL_CASE}}>({
         dataOrCallback: undefined !== request.dataInsertMultipleRows
             ? request.dataInsertMultipleRows.map((request, index) => {
