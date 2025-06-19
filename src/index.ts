@@ -21,6 +21,7 @@ export * from "./api/types/mysqlTypes";
 export * from "./api/types/ormInterfaces";
 export * from "./api/utils/apiHelpers";
 export * from "./api/utils/cacheManager";
+export * from "./api/utils/determineRuntimeJsType";
 export * from "./api/utils/logger";
 export * from "./api/utils/sortAndSerializeQueryObject";
 export * from "./api/utils/testHelpers";

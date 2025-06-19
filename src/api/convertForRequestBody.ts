@@ -8,7 +8,7 @@ export default function <RestTableInterfaces extends { [key:string] : any }>(res
 
     const tableNames = Array.isArray(tableName) ? tableName : [tableName];
 
-    let tableDefinitions : (iC6RestfulModel & any)[] = [];
+    let tableDefinitions : (iC6RestfulModel<any, any, any> & any)[] = [];
 
     tableNames.forEach((tableName) => {
 

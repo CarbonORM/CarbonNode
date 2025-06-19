@@ -14,18 +14,20 @@ import {Executor} from "./Executor";
 import {toastOptions, toastOptionsDevs } from "variables/toastOptions";
 
 export class HttpExecutor<
-    CustomAndRequiredFields extends { [key: string]: any },           // CustomAndRequiredFields
-    RestTableInterfaces extends  { [key: string]: any },            // RestTableInterfaces
-    RequestTableOverrides = { [key in keyof RestTableInterfaces]: any },   // RequestTableOverrides
-    ResponseDataType = any,                // ResponseDataType
-    RestShortTableNames extends string = ""    // RestShortTableNames
+    RestShortTableName extends string = any,
+    RestTableInterface extends { [key: string]: any } = any,
+    PrimaryKey extends Extract<keyof RestTableInterface, string> = Extract<keyof RestTableInterface, string>,
+    CustomAndRequiredFields extends { [key: string]: any } = any,
+    RequestTableOverrides extends { [key: string]: any; } = { [key in keyof RestTableInterface]: any },
+    ResponseDataType = any
 >
     extends Executor<
+        RestShortTableName,
+        RestTableInterface,
+        PrimaryKey,
         CustomAndRequiredFields,
-        RestTableInterfaces,
         RequestTableOverrides,
-        ResponseDataType,
-        RestShortTableNames
+        ResponseDataType
     > {
 
     public async execute() : Promise<apiReturn<ResponseDataType>> {
@@ -35,13 +37,15 @@ export class HttpExecutor<
             axios,
             restURL,
             withCredentials,
-            tableName,
+            restModel,
             requestMethod,
             queryCallback,
             responseCallback,
             skipPrimaryCheck,
             clearCache,
         } = this.config
+
+        const tableName = restModel.TABLE_NAME;
 
         const fullTableList = Array.isArray(tableName) ? tableName : [tableName];
 
@@ -75,7 +79,7 @@ export class HttpExecutor<
 
         // an undefined query would indicate queryCallback returned undefined,
         // thus the request shouldn't fire as is in custom cache
-        let query: RequestQueryBody<Modify<RestTableInterfaces, RequestTableOverrides>> | undefined | null;
+        let query: RequestQueryBody<Modify<RestTableInterface, RequestTableOverrides>> | undefined | null;
 
         if ('function' === typeof queryCallback) {
 
@@ -250,7 +254,7 @@ export class HttpExecutor<
 
             let addBackPK: (() => void) | undefined;
 
-            let apiResponse: string | boolean | number | undefined;
+            let apiResponse: RestTableInterface[PrimaryKey] | string | boolean | number | undefined;
 
             let returnGetNextPageFunction = false;
 
@@ -381,7 +385,7 @@ export class HttpExecutor<
                             }
 
                             return [
-                                convertForRequestBody<RestTableInterfaces>(query as RestTableInterfaces, fullTableList, C6, (message) => toast.error(message, toastOptions)),
+                                convertForRequestBody<RestTableInterface>(query as RestTableInterface, fullTableList, C6, (message) => toast.error(message, toastOptions)),
                                 {
                                     withCredentials: withCredentials,
                                 }
@@ -390,7 +394,7 @@ export class HttpExecutor<
                         } else if (requestMethod === PUT) {
 
                             return [
-                                convertForRequestBody<RestTableInterfaces>(query as RestTableInterfaces, fullTableList, C6, (message) => toast.error(message, toastOptions)),
+                                convertForRequestBody<RestTableInterface>(query as RestTableInterface, fullTableList, C6, (message) => toast.error(message, toastOptions)),
                                 {
                                     withCredentials: withCredentials,
                                 }
@@ -399,7 +403,7 @@ export class HttpExecutor<
 
                             return [{
                                 withCredentials: withCredentials,
-                                data: convertForRequestBody<RestTableInterfaces>(query as RestTableInterfaces, fullTableList, C6, (message) => toast.error(message, toastOptions))
+                                data: convertForRequestBody<RestTableInterface>(query as RestTableInterface, fullTableList, C6, (message) => toast.error(message, toastOptions))
                             }]
 
                         } else {

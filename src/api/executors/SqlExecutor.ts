@@ -4,23 +4,37 @@ import {buildSelectQuery} from "../builders/sqlBuilder";
 import {Executor} from "./Executor";
 
 
-export class SqlExecutor<CustomAndRequiredFields extends object, RestTableInterfaces extends object, RequestTableOverrides extends object, ResponseDataType, RestShortTableNames extends string>
-    extends Executor<CustomAndRequiredFields, RestTableInterfaces, RequestTableOverrides, ResponseDataType, RestShortTableNames> {
+export class SqlExecutor<
+    RestShortTableName extends string = any,
+    RestTableInterface extends { [key: string]: any } = any,
+    PrimaryKey extends Extract<keyof RestTableInterface, string> = Extract<keyof RestTableInterface, string>,
+    CustomAndRequiredFields extends { [key: string]: any } = any,
+    RequestTableOverrides extends { [key: string]: any; } = { [key in keyof RestTableInterface]: any },
+    ResponseDataType = any
+>
+    extends Executor<
+        RestShortTableName,
+        RestTableInterface,
+        PrimaryKey,
+        CustomAndRequiredFields,
+        RequestTableOverrides,
+        ResponseDataType
+    > {
 
     public execute():  Promise<apiReturn<ResponseDataType>> {
         switch (this.config.requestMethod) {
             case 'GET':
                 return (this.select(
-                    this.config.tableName as RestShortTableNames,
+                    this.config.restModel.TABLE_NAME,
                     undefined,
                     this.request
                 ) as Promise<any>).then(rows => ({rest: rows})) as any;
             case 'POST':
-                return this.insert(this.config.tableName as RestShortTableNames, this.request) as any;
+                return this.insert(this.config.restModel.TABLE_NAME, this.request) as any;
             case 'PUT':
-                return this.update(this.config.tableName as RestShortTableNames, undefined, this.request) as any;
+                return this.update(this.config.restModel.TABLE_NAME, undefined, this.request) as any;
             case 'DELETE':
-                return this.delete(this.config.tableName as RestShortTableNames, undefined, this.request) as any;
+                return this.delete(this.config.restModel.TABLE_NAME, undefined, this.request) as any;
         }
     }
 

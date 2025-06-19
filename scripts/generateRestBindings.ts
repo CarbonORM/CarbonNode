@@ -229,7 +229,7 @@ function determineTypeScriptType(mysqlType: string, enumValues?: string[]): stri
         case 'tinyblob':
         case 'mediumblob':
         case 'longblob':
-            return 'Buffer | string';
+            return 'Buffer'; // todo - we should pass driver specific types here
 
         default:
             return 'string';

@@ -36,7 +36,6 @@ export function TestRestfulResponse(response: AxiosResponse | any, success: ((r:
 
     return false;
 
-
 }
 
 export function removePrefixIfExists(tableName: string, prefix: string): string {
@@ -47,7 +46,7 @@ export function removePrefixIfExists(tableName: string, prefix: string): string 
 }
 
 export function removeInvalidKeys<iRestObject>(request: any, c6Tables: {
-    [key: string]: (iC6RestfulModel & { [key: string]: any })
+    [key: string]: (iC6RestfulModel<any,any,any> & { [key: string]: any })
 }): iRestObject {
 
     let intersection: iRestObject = {} as iRestObject

@@ -1,4 +1,3 @@
-import restRequest from "api/restRequest";
 import {AxiosInstance, AxiosPromise, AxiosResponse} from "axios";
 import {Pool} from "mysql2/promise";
 import {eFetchDependencies} from "./dynamicFetching";
@@ -41,16 +40,33 @@ export interface iConstraint {
     CONSTRAINT: string
 }
 
-export interface iC6RestfulModel<RestShortTableNames extends string = string> {
-    TABLE_NAME: RestShortTableNames,
-    PRIMARY: string[],
-    PRIMARY_SHORT: string[],
-    COLUMNS: stringMap,
-    LIFECYCLE_HOOKS: iRestReactiveLifecycle<RequestGetPutDeleteBody>[],
-    REGEX_VALIDATION: RegExpMap,
-    TYPE_VALIDATION: { [key: string]: iTypeValidation },
-    TABLE_REFERENCES: { [columnName: string]: iConstraint[] },
-    TABLE_REFERENCED_BY: { [columnName: string]: iConstraint[] },
+// This maps full column names to short column keys
+export type tColumns<
+    TableName extends string,
+    T extends { [key: string]: any }
+> = {
+    [K in keyof T & string as `${TableName}.${K}`]: K;
+};
+
+export type tPrimaryKeys<
+    TableName extends string,
+    PK extends string
+> = `${TableName}.${PK}`;
+
+export interface iC6RestfulModel<
+    RestShortTableNames extends string,
+    RestTableInterfaces extends { [key: string]: any },
+    PK extends keyof RestTableInterfaces & string,
+> {
+    TABLE_NAME: RestShortTableNames;
+    PRIMARY: tPrimaryKeys<RestShortTableNames, PK>[];
+    PRIMARY_SHORT: PK[];
+    COLUMNS: tColumns<RestShortTableNames, RestTableInterfaces>;
+    TYPE_VALIDATION: { [key: string]: iTypeValidation };
+    REGEX_VALIDATION: RegExpMap;
+    LIFECYCLE_HOOKS: iRestReactiveLifecycle<RequestGetPutDeleteBody>[];
+    TABLE_REFERENCES: { [columnName: string]: iConstraint[] };
+    TABLE_REFERENCED_BY: { [columnName: string]: iConstraint[] };
 }
 
 export interface iRestApiFunctions<RestData = any> {
@@ -68,7 +84,13 @@ export interface iDynamicApiImport<RestData = any> {
     putState?: (response: AxiosResponse<iPutC6RestResponse<RestData>>, request: iAPI<any>) => void
 }
 
-export interface tC6Tables { [key: string]: (iC6RestfulModel & { [key: string]: any }) }
+export interface tC6Tables<
+    RestShortTableName extends string = any,
+    RestTableInterface extends { [key: string]: any } = any,
+    PrimaryKey extends Extract<keyof RestTableInterface, string> = Extract<keyof RestTableInterface, string>
+> {
+    [key: string]: iC6RestfulModel<RestShortTableName, RestTableInterface, PrimaryKey> & { [key: string]: any }
+}
 
 export interface tC6RestApi {
     [key: string]: {
@@ -96,7 +118,6 @@ export interface iCacheAPI<ResponseDataType = any> {
     response?: AxiosResponse,
     final?: boolean,
 }
-
 
 
 /**
@@ -226,11 +247,17 @@ export interface iPutC6RestResponse<RestData = any, RequestData = any> extends i
     updated: boolean | number | string | RequestData,
 }
 
-export interface iC6Object {
+export interface iC6Object<
+    RestShortTableName extends string = any,
+    RestTableInterface extends { [key: string]: any } = any,
+    PrimaryKey extends Extract<keyof RestTableInterface, string> = Extract<keyof RestTableInterface, string>
+> {
     C6VERSION: string,
     TABLES: {
-        [key: string]: iC6RestfulModel &
-            { [key: string]: string | number }
+        [key: string]: iC6RestfulModel<RestShortTableName, RestTableInterface, PrimaryKey>
+            & {
+            [key: string]: string | number
+        }
     },
     PREFIX: string,
     IMPORT: (tableName: string) => Promise<iDynamicApiImport>,
@@ -252,36 +279,32 @@ export type apiReturn<Response> =
 
 
 export interface iRest<
-    CustomAndRequiredFields extends { [key: string]: any },
-    RestTableInterfaces extends { [key: string]: any },
-    RequestTableOverrides = { [key in keyof RestTableInterfaces]: any },
-    ResponseDataType = any,
-    RestShortTableNames extends string = any
+    RestShortTableName extends string = any,
+    RestTableInterface extends { [key: string]: any } = any,
+    PrimaryKey extends Extract<keyof RestTableInterface, string> = Extract<keyof RestTableInterface, string>,
+    CustomAndRequiredFields extends { [key: string]: any } = any,
+    RequestTableOverrides = { [key in keyof RestTableInterface]: any },
+    ResponseDataType = any
 > {
     C6: iC6Object,
     axios?: AxiosInstance,
     restURL?: string,
     mysqlPool?: Pool;
     withCredentials?: boolean,
-    tableName: RestShortTableNames | RestShortTableNames[],
+    restModel: iC6RestfulModel<RestShortTableName, RestTableInterface, PrimaryKey>,
     requestMethod: iRestMethods,
     clearCache?: () => void,
     skipPrimaryCheck?: boolean,
-    queryCallback: RequestQueryBody<Modify<RestTableInterfaces, RequestTableOverrides>> | ((request: iAPI<Modify<RestTableInterfaces, RequestTableOverrides>> & CustomAndRequiredFields) => (null | undefined | RequestQueryBody<Modify<RestTableInterfaces, RequestTableOverrides>>)),
+    queryCallback: RequestQueryBody<Modify<RestTableInterface, RequestTableOverrides>> | ((request: iAPI<Modify<RestTableInterface, RequestTableOverrides>> & CustomAndRequiredFields) => (null | undefined | RequestQueryBody<Modify<RestTableInterface, RequestTableOverrides>>)),
     responseCallback?: (response: AxiosResponse<ResponseDataType>,
-                        request: iAPI<Modify<RestTableInterfaces, RequestTableOverrides>> & CustomAndRequiredFields,
-                        success: (ResponseDataType extends iPutC6RestResponse | iDeleteC6RestResponse ? RequestQueryBody<Modify<RestTableInterfaces, RequestTableOverrides>> : string) | string | number | boolean) => any // keep this set to any, it allows easy arrow functions and the results unused here
+                        request: iAPI<Modify<RestTableInterface, RequestTableOverrides>> & CustomAndRequiredFields,
+                        success: (ResponseDataType extends iPutC6RestResponse | iDeleteC6RestResponse
+                                ? RequestQueryBody<Modify<RestTableInterface, RequestTableOverrides>>
+                                : string)
+                            | RestTableInterface[PrimaryKey]     // Rest PK
+                            | string | number | boolean                 // Toast and validations
+    ) => any // keep this set to any, it allows easy arrow functions and the results unused here
 }
 
-export function extendedTypeHints<RestTableInterfaces extends {
-    [key: string]: any
-}, RestShortTableNames extends string>() {
-    return <CustomAndRequiredFields extends {
-        [key: string]: any
-    } = any, RequestTableTypes extends RestTableInterfaces = any, RequestTableOverrides extends {
-        [key: string]: any
-    } = any, ResponseDataType extends {
-        [key: string]: any
-    } = any>(argv) => restRequest<CustomAndRequiredFields, RequestTableTypes, RequestTableOverrides, ResponseDataType, RestShortTableNames>(argv)
-}
+
 

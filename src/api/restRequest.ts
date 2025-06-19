@@ -6,34 +6,50 @@ import {apiReturn, iAPI, iRest} from "./types/ormInterfaces";
  * Facade: routes API calls to SQL or HTTP executors based on runtime context.
  */
 export default function restRequest<
-    CustomAndRequiredFields extends {
-        [key: string]: any;
-    } = any,
-    RestTableInterfaces extends {
-        [key: string]: any
-    } = any,
-    RequestTableOverrides extends {
-        [key: string]: any;
-    } = any,
-    ResponseDataType = any,
-    RestShortTableNames extends string = any
+    RestShortTableName extends string = any,
+    RestTableInterface extends { [key: string]: any } = any,
+    PrimaryKey extends Extract<keyof RestTableInterface, string> = Extract<keyof RestTableInterface, string>,
+    CustomAndRequiredFields extends { [key: string]: any } = any,
+    RequestTableOverrides extends { [key: string]: any } = { [key in keyof RestTableInterface]: any },
+    ResponseDataType = any
 >(
-    config: iRest<CustomAndRequiredFields, RestTableInterfaces, RequestTableOverrides, ResponseDataType, RestShortTableNames>
+    config: iRest<
+        RestShortTableName,
+        RestTableInterface,
+        PrimaryKey,
+        CustomAndRequiredFields,
+        RequestTableOverrides,
+        ResponseDataType
+    >
 ) {
     return async (
-        request: iAPI<Modify<RestTableInterfaces, RequestTableOverrides>> & CustomAndRequiredFields = {} as iAPI<Modify<RestTableInterfaces, RequestTableOverrides>> & CustomAndRequiredFields
+        request: iAPI<Modify<RestTableInterface, RequestTableOverrides>> & CustomAndRequiredFields = {} as iAPI<Modify<RestTableInterface, RequestTableOverrides>> & CustomAndRequiredFields
     ): Promise<apiReturn<ResponseDataType>> => {
 
         // SQL path if on Node with a provided pool
         if (isNode && config.mysqlPool) {
             const {SqlExecutor} = await import('./executors/SqlExecutor');
-            const executor = new SqlExecutor<CustomAndRequiredFields, RestTableInterfaces, RequestTableOverrides, ResponseDataType, RestShortTableNames>(config, request);
+            const executor = new SqlExecutor<
+                RestShortTableName,
+                RestTableInterface,
+                PrimaryKey,
+                CustomAndRequiredFields,
+                RequestTableOverrides,
+                ResponseDataType
+            >(config, request);
             return executor.execute();
         }
 
         // HTTP path fallback
         const {HttpExecutor} = await import('./executors/HttpExecutor');
-        const http = new HttpExecutor<CustomAndRequiredFields, RestTableInterfaces, RequestTableOverrides, ResponseDataType, RestShortTableNames>(config, request);
+        const http = new HttpExecutor<
+            RestShortTableName,
+            RestTableInterface,
+            PrimaryKey,
+            CustomAndRequiredFields,
+            RequestTableOverrides,
+            ResponseDataType
+        >(config, request);
         return http.execute();
     };
 }

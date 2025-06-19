@@ -14,10 +14,7 @@ export type RestTableNames = {{{RestTableNames}}};
 
 export type RestShortTableNames = {{{RestShortTableNames}}};
 
-
-
 {{#TABLES}}
-
 export interface i{{TABLE_NAME_SHORT_PASCAL_CASE}} {
 {{#each TYPE_VALIDATION}}
     '{{this.COLUMN_NAME}}'?: {{{this.TYPESCRIPT_TYPE}}}{{^NOT_NULL}} | null{{/NOT_NULL}};
@@ -30,7 +27,17 @@ interface iDefine{{TABLE_NAME_SHORT_PASCAL_CASE}} {
 {{/each}}
 }
 
-export const {{TABLE_NAME_SHORT}}: iC6RestfulModel<RestTableNames> & iDefine{{TABLE_NAME_SHORT_PASCAL_CASE}} = {
+export type {{TABLE_NAME_SHORT_PASCAL_CASE}}PrimaryKeys = {{#PRIMARY_SHORT}}
+    '{{this}}'{{#unless @last}} |{{else}};{{/unless}}
+{{/PRIMARY_SHORT}}
+
+export const {{TABLE_NAME_SHORT}}:
+    iC6RestfulModel<
+        '{{TABLE_NAME_SHORT}}',
+        i{{TABLE_NAME_SHORT_PASCAL_CASE}},
+        {{TABLE_NAME_SHORT_PASCAL_CASE}}PrimaryKeys
+    >
+    & iDefine{{TABLE_NAME_SHORT_PASCAL_CASE}} = {
     TABLE_NAME: '{{TABLE_NAME}}',
     {{#each COLUMNS_UPPERCASE}}
     {{@key}}: '{{this}}',
@@ -126,7 +133,8 @@ async function dynamicRestImport(tableName: string) : Promise<iDynamicApiImport>
 
     }
 
-    const module = await import('./' + (tableName.split('_')
+    // This will rightfully throw a dynamic import warning in the console, but it is necessary to use dynamic imports
+    const module = await import(/* @vite-ignore */ './' + (tableName.split('_')
             .map(word => word.charAt(0).toUpperCase() + word.slice(1))
             .join('_')) + '.ts');
 
