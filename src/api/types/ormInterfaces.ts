@@ -3,6 +3,7 @@ import {Pool} from "mysql2/promise";
 import {eFetchDependencies} from "./dynamicFetching";
 import {Modify} from "./modifyTypes";
 import {JoinType, OrderDirection, SQLComparisonOperator, SQLFunction} from "./mysqlTypes";
+import {CarbonReact} from "@carbonorm/carbonreact";
 
 export interface stringMap {
     [key: string]: string;
@@ -27,12 +28,79 @@ export interface iTypeValidation {
     SKIP_COLUMN_IN_POST: boolean
 }
 
-export type iRestReactiveLifecycle<T extends RequestGetPutDeleteBody> = {
-    beforeProcessing?: (args: { request: T[]; requestMeta?: any }) => void | Promise<void>;
-    beforeExecution?: (args: { request: T[]; requestMeta?: any }) => void | Promise<void>;
-    afterExecution?: (args: { response: T[]; request: T[]; responseMeta?: any }) => void | Promise<void>;
-    afterCommit?: (args: { response: T[]; request: T[]; responseMeta?: any }) => void | Promise<void>;
+
+// config, request, response
+export type iRestReactiveLifecycle<
+    RequestMethod extends iRestMethods,
+    RestShortTableName extends string = any,
+    RestTableInterface extends { [key: string]: any } = any,
+    PrimaryKey extends keyof RestTableInterface & string = any,
+    // TODO - do we ever use these last two ever? should we make usage just any?
+    CustomAndRequiredFields extends { [key: string]: any } = any,
+    RequestTableOverrides extends { [key: string]: any } = { [key in keyof RestTableInterface]: any }
+> = {
+    beforeProcessing?: {
+        [key: string]: (args: {
+            config: iRest<
+                RestShortTableName,
+                RestTableInterface,
+                PrimaryKey
+            >,
+            request: iAPI<Modify<RestTableInterface, RequestTableOverrides>> & CustomAndRequiredFields;
+        }) => void | Promise<void>
+    },
+    beforeExecution?:
+        {
+            [key: string]: (args: {
+                config: iRest<
+                    RestShortTableName,
+                    RestTableInterface,
+                    PrimaryKey
+                >,
+                request: iAPI<Modify<RestTableInterface, RequestTableOverrides>> & CustomAndRequiredFields
+            }) => void | Promise<void>
+        };
+    afterExecution?:
+        {
+            [key: string]: (args: {
+                config: iRest<
+                    RestShortTableName,
+                    RestTableInterface,
+                    PrimaryKey
+                >,
+                request: iAPI<Modify<RestTableInterface, RequestTableOverrides>> & CustomAndRequiredFields;
+                response: AxiosResponse<DetermineResponseDataType<RequestMethod, RestTableInterface>>;
+            }) => void | Promise<void>
+        };
+    afterCommit?: {
+        [key: string]: (args: {
+            config: iRest<
+                RestShortTableName,
+                RestTableInterface,
+                PrimaryKey
+            >,
+            request: iAPI<Modify<RestTableInterface, RequestTableOverrides>> & CustomAndRequiredFields;
+            response: AxiosResponse<DetermineResponseDataType<RequestMethod, RestTableInterface>>;
+        }) => void | Promise<void>
+    };
 };
+
+export type iRestHooks<
+    RestShortTableName extends string = any,
+    RestTableInterface extends { [key: string]: any } = any,
+    PrimaryKey extends keyof RestTableInterface & string = any,
+    CustomAndRequiredFields extends { [key: string]: any } = any,
+    RequestTableOverrides extends { [key: string]: any } = { [key in keyof RestTableInterface]: any }
+> = {
+    [Method in iRestMethods]: iRestReactiveLifecycle<
+        Method,
+        RestShortTableName,
+        RestTableInterface,
+        PrimaryKey,
+        CustomAndRequiredFields,
+        RequestTableOverrides
+    >
+}
 
 export interface iConstraint {
     TABLE: string,
@@ -64,7 +132,8 @@ export interface iC6RestfulModel<
     COLUMNS: tColumns<RestShortTableNames, RestTableInterfaces>;
     TYPE_VALIDATION: { [key: string]: iTypeValidation };
     REGEX_VALIDATION: RegExpMap;
-    LIFECYCLE_HOOKS: iRestReactiveLifecycle<RequestGetPutDeleteBody>[];
+    // TODO - I thon think theres a good way to infer the last two generics (overides)
+    LIFECYCLE_HOOKS: iRestHooks<RestShortTableNames, RestTableInterfaces, PK>;
     TABLE_REFERENCES: { [columnName: string]: iConstraint[] };
     TABLE_REFERENCED_BY: { [columnName: string]: iConstraint[] };
 }
@@ -278,13 +347,23 @@ export type apiReturn<Response> =
     | (Response extends iPutC6RestResponse | iDeleteC6RestResponse | iPostC6RestResponse ? null : (() => apiReturn<Response>))
 
 
+export type DetermineResponseDataType<
+    RequestMethod extends iRestMethods,
+    RestTableInterface extends { [key: string]: any }
+> = RequestMethod extends "POST"
+    ? iPostC6RestResponse<RestTableInterface>
+    : RequestMethod extends "GET"
+        ? iGetC6RestResponse<RestTableInterface>
+        : RequestMethod extends "PUT"
+            ? iPutC6RestResponse<RestTableInterface>
+            : RequestMethod extends "DELETE"
+                ? iDeleteC6RestResponse<RestTableInterface>
+                : any;
+
 export interface iRest<
     RestShortTableName extends string = any,
     RestTableInterface extends { [key: string]: any } = any,
-    PrimaryKey extends Extract<keyof RestTableInterface, string> = Extract<keyof RestTableInterface, string>,
-    CustomAndRequiredFields extends { [key: string]: any } = any,
-    RequestTableOverrides = { [key in keyof RestTableInterface]: any },
-    ResponseDataType = any
+    PrimaryKey extends keyof RestTableInterface & string = any
 > {
     C6: iC6Object,
     axios?: AxiosInstance,
@@ -292,19 +371,22 @@ export interface iRest<
     mysqlPool?: Pool;
     withCredentials?: boolean,
     restModel: iC6RestfulModel<RestShortTableName, RestTableInterface, PrimaryKey>,
-    reactBootstrap: CarbonReact,
+    reactBootstrap?: CarbonReact<any, any>,
     requestMethod: iRestMethods,
     clearCache?: () => void,
     skipPrimaryCheck?: boolean,
-    queryCallback: RequestQueryBody<Modify<RestTableInterface, RequestTableOverrides>> | ((request: iAPI<Modify<RestTableInterface, RequestTableOverrides>> & CustomAndRequiredFields) => (null | undefined | RequestQueryBody<Modify<RestTableInterface, RequestTableOverrides>>)),
-    responseCallback?: (response: AxiosResponse<ResponseDataType>,
-                        request: iAPI<Modify<RestTableInterface, RequestTableOverrides>> & CustomAndRequiredFields,
-                        success: (ResponseDataType extends iPutC6RestResponse | iDeleteC6RestResponse
-                                ? RequestQueryBody<Modify<RestTableInterface, RequestTableOverrides>>
-                                : string)
-                            | RestTableInterface[PrimaryKey]     // Rest PK
-                            | string | number | boolean                 // Toast and validations
-    ) => any // keep this set to any, it allows easy arrow functions and the results unused here
+    /*    queryCallback: RequestQueryBody<Modify<RestTableInterface, RequestTableOverrides>> | ((request: iAPI<Modify<RestTableInterface, RequestTableOverrides>> & CustomAndRequiredFields) => (null | undefined | RequestQueryBody<Modify<RestTableInterface, RequestTableOverrides>>)),
+        responseCallback?: (
+            response: AxiosResponse<DetermineResponseDataType<RequestMethod, RestTableInterface>>,
+            request: iAPI<Modify<RestTableInterface, RequestTableOverrides>> & CustomAndRequiredFields,
+            success: (
+                    // TODO - make sure this makes sense, or re-implement with the hooks model
+                    DetermineResponseDataType<RequestMethod, RestTableInterface> extends iPutC6RestResponse | iDeleteC6RestResponse
+                        ? RequestQueryBody<Modify<RestTableInterface, RequestTableOverrides>>
+                        : string)
+                | RestTableInterface[PrimaryKey]     // Rest PK
+                | string | number | boolean                 // Toast and validations
+        ) => (RestTableInterface | RestTableInterface[] | void) // keep this set to any, it allows easy arrow functions and the results unused here*/
 }
 
 

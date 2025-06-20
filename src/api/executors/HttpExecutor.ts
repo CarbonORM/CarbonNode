@@ -6,31 +6,117 @@ import isVerbose from "../../variables/isVerbose";
 import convertForRequestBody from "../convertForRequestBody";
 import {eFetchDependencies} from "../types/dynamicFetching";
 import {Modify} from "../types/modifyTypes";
-import {apiReturn, DELETE, GET, iCacheAPI, iConstraint, iGetC6RestResponse, POST, PUT, RequestQueryBody} from "../types/ormInterfaces";
-import {removePrefixIfExists, TestRestfulResponse} from "../utils/apiHelpers";
+import {
+    apiReturn,
+    DELETE, DetermineResponseDataType,
+    GET, iAPI,
+    iCacheAPI,
+    iConstraint,
+    iGetC6RestResponse,
+    iRestMethods,
+    POST,
+    PUT,
+    RequestQueryBody
+} from "../types/ormInterfaces";
+import {removeInvalidKeys, removePrefixIfExists, TestRestfulResponse} from "../utils/apiHelpers";
 import {apiRequestCache, checkCache, userCustomClearCache} from "../utils/cacheManager";
 import {sortAndSerializeQueryObject} from "../utils/sortAndSerializeQueryObject";
 import {Executor} from "./Executor";
-import {toastOptions, toastOptionsDevs } from "variables/toastOptions";
+import {toastOptions, toastOptionsDevs} from "variables/toastOptions";
 
 export class HttpExecutor<
+    RequestMethod extends iRestMethods,
     RestShortTableName extends string = any,
     RestTableInterface extends { [key: string]: any } = any,
     PrimaryKey extends Extract<keyof RestTableInterface, string> = Extract<keyof RestTableInterface, string>,
     CustomAndRequiredFields extends { [key: string]: any } = any,
-    RequestTableOverrides extends { [key: string]: any; } = { [key in keyof RestTableInterface]: any },
-    ResponseDataType = any
+    RequestTableOverrides extends { [key in keyof RestTableInterface]: any } = { [key in keyof RestTableInterface]: any }
 >
     extends Executor<
+        RequestMethod,
         RestShortTableName,
         RestTableInterface,
         PrimaryKey,
         CustomAndRequiredFields,
-        RequestTableOverrides,
-        ResponseDataType
+        RequestTableOverrides
     > {
 
-    public async execute() : Promise<apiReturn<ResponseDataType>> {
+    public putState(
+        response: AxiosResponse<DetermineResponseDataType<RequestMethod, RestTableInterface>>,
+        request: iAPI<Modify<RestTableInterface, RequestTableOverrides>> & CustomAndRequiredFields,
+        callback: () => void
+    ) {
+        this.config.reactBootstrap?.updateRestfulObjectArrays<RestTableInterface>({
+            callback,
+            dataOrCallback: [
+                removeInvalidKeys<RestTableInterface>({
+                    ...request,
+                    ...response?.data?.rest,
+                }, this.config.C6.TABLES)
+            ],
+            stateKey: this.config.restModel.TABLE_NAME,
+            uniqueObjectId: this.config.restModel.PRIMARY_SHORT
+        })
+    }
+
+    public postState(
+        response: AxiosResponse<DetermineResponseDataType<RequestMethod, RestTableInterface>>,
+        request: iAPI<Modify<RestTableInterface, RequestTableOverrides>> & CustomAndRequiredFields,
+        callback: () => void
+    ) {
+
+        if (1 !== this.config.restModel.PRIMARY_SHORT.length) {
+
+            console.error("C6 received unexpected result's given the primary key length");
+
+        } else {
+
+            const pk = this.config.restModel.PRIMARY_SHORT[0];
+
+            // TODO - should overrides be handled differently? Why override: (react/php), driver missmatches, aux data..
+            // @ts-ignore - this is technically a correct error, but we allow it anyway...
+            request[pk] = response.data?.created as RestTableInterface[PrimaryKey]
+
+        }
+
+        this.config.reactBootstrap?.updateRestfulObjectArrays<RestTableInterface>({
+            callback,
+            dataOrCallback: undefined !== request.dataInsertMultipleRows
+                ? request.dataInsertMultipleRows.map((request, index) => {
+                    return removeInvalidKeys<RestTableInterface>({
+                        ...request,
+                        ...(index === 0 ? response?.data?.rest : {}),
+                    }, this.config.C6.TABLES)
+                })
+                : [
+                    removeInvalidKeys<RestTableInterface>({
+                        ...request,
+                        ...response?.data?.rest,
+                    }, this.config.C6.TABLES)
+                ],
+            stateKey: this.config.restModel.TABLE_NAME,
+            uniqueObjectId: this.config.restModel.PRIMARY_SHORT as (keyof RestTableInterface)[]
+        })
+    }
+
+    public deleteState(
+        _response: AxiosResponse<DetermineResponseDataType<RequestMethod, RestTableInterface>>,
+        request: iAPI<Modify<RestTableInterface, RequestTableOverrides>> & CustomAndRequiredFields,
+        callback: () => void
+    ) {
+        this.config.reactBootstrap?.deleteRestfulObjectArrays<RestTableInterface>({
+            callback,
+            dataOrCallback: [
+                request as unknown as RestTableInterface,
+            ],
+            stateKey: this.config.restModel.TABLE_NAME,
+            uniqueObjectId: this.config.restModel.PRIMARY_SHORT as (keyof RestTableInterface)[]
+        })
+    }
+
+    public async execute(): Promise<apiReturn<DetermineResponseDataType<RequestMethod, RestTableInterface>>> {
+
+        type ResponseDataType = DetermineResponseDataType<RequestMethod, RestTableInterface>;
 
         const {
             C6,
@@ -40,11 +126,17 @@ export class HttpExecutor<
             restModel,
             reactBootstrap,
             requestMethod,
-            queryCallback,
-            responseCallback,
             skipPrimaryCheck,
             clearCache,
         } = this.config
+
+
+        await this.runLifecycleHooks<"beforeProcessing">(
+            "beforeProcessing", {
+                config: this.config,
+                request: this.request,
+            });
+
 
         const tableName = restModel.TABLE_NAME;
 
@@ -82,16 +174,6 @@ export class HttpExecutor<
         // thus the request shouldn't fire as is in custom cache
         let query: RequestQueryBody<Modify<RestTableInterface, RequestTableOverrides>> | undefined | null;
 
-        if ('function' === typeof queryCallback) {
-
-            query = queryCallback(this.request); // obj or obj[]
-
-        } else {
-
-            query = queryCallback;
-
-        }
-
         if (undefined === query || null === query) {
 
             if (this.request.debug && isLocal) {
@@ -127,7 +209,7 @@ export class HttpExecutor<
         }
 
         // this could return itself with a new page number, or undefined if the end is reached
-        const apiRequest = async (): Promise<apiReturn<ResponseDataType>> => {
+        const apiRequest = async (): Promise<apiReturn<DetermineResponseDataType<RequestMethod, RestTableInterface>>> => {
 
             const {
                 debug,
@@ -135,7 +217,7 @@ export class HttpExecutor<
                 dataInsertMultipleRows,
                 success,
                 fetchDependencies = eFetchDependencies.NONE,
-                error =  "An unexpected API error occurred!"
+                error = "An unexpected API error occurred!"
             } = this.request
 
             if (C6.GET === requestMethod
@@ -358,6 +440,12 @@ export class HttpExecutor<
 
                 console.groupEnd()
 
+                this.runLifecycleHooks<"beforeExecution">(
+                    "beforeExecution", {
+                        config: this.config,
+                        request: this.request
+                    })
+
                 const axiosActiveRequest: AxiosPromise<ResponseDataType> = axios![requestMethod.toLowerCase()]<ResponseDataType>(
                     restRequestUri,
                     ...((() => {
@@ -432,8 +520,9 @@ export class HttpExecutor<
 
                 // returning the promise with this then is important for tests. todo - we could make that optional.
                 // https://rapidapi.com/guides/axios-async-await
-                return axiosActiveRequest.then(async (response): Promise<AxiosResponse<ResponseDataType, any>> => {
+                return axiosActiveRequest.then(async (response: AxiosResponse<ResponseDataType, any>): Promise<AxiosResponse<ResponseDataType, any>> => {
 
+                        // noinspection SuspiciousTypeOfGuard
                         if (typeof response.data === 'string') {
 
                             if (isTest) {
@@ -459,6 +548,14 @@ export class HttpExecutor<
 
                         }
 
+                        this.runLifecycleHooks<"afterExecution">(
+                            "afterExecution", {
+                                config: this.config,
+                                request: this.request,
+                                response
+                            })
+
+                        // todo - this feels dumb now, but i digress
                         apiResponse = TestRestfulResponse(response, success, error)
 
                         if (false === apiResponse) {
@@ -473,26 +570,36 @@ export class HttpExecutor<
 
                         }
 
-                        // TODO - preform those callbacks here
-                       if (this.config.)
-                        switch (requestMethod) {
-                            case GET:
-                                this.request.response = response.data as iGetC6RestResponse<RestTableInterface>;
-                                break;
-                            case POST:
-                            case PUT:
-                                this.request.response = apiResponse as RestTableInterface[PrimaryKey];
-                                break;
-                            case DELETE:
-                                this.request.response = apiResponse as boolean;
-                                break;
-                        }
 
-                        // stateful operations are done in the response callback - its leverages rest generated functions
-                        if (responseCallback) {
+                        const callback = () => this.runLifecycleHooks<"afterCommit">(
+                            "afterCommit", {
+                                config: this.config,
+                                request: this.request,
+                                response
+                            });
 
-                            responseCallback(response, this.request, apiResponse)
-
+                        if (undefined !== reactBootstrap && response) {
+                            switch (requestMethod) {
+                                case GET:
+                                    reactBootstrap.updateRestfulObjectArrays<RestTableInterface>({
+                                        dataOrCallback: Array.isArray(response.data.rest) ? response.data.rest : [response.data.rest],
+                                        stateKey: this.config.restModel.TABLE_NAME,
+                                        uniqueObjectId: this.config.restModel.PRIMARY_SHORT as (keyof RestTableInterface)[],
+                                        callback
+                                    })
+                                    break;
+                                case POST:
+                                    this.postState(response, this.request, callback);
+                                    break;
+                                case PUT:
+                                    this.putState(response, this.request, callback);
+                                    break;
+                                case DELETE:
+                                    this.deleteState(response, this.request, callback);
+                                    break;
+                            }
+                        } else {
+                            callback();
                         }
 
                         if (C6.GET === requestMethod) {

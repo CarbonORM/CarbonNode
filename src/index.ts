@@ -7,6 +7,7 @@ export { default as axiosInstance } from "./api/axiosInstance";
 export * from "./api/axiosInstance";
 export { default as convertForRequestBody } from "./api/convertForRequestBody";
 export * from "./api/convertForRequestBody";
+export * from "./api/restOrm";
 export { default as restRequest } from "./api/restRequest";
 export * from "./api/restRequest";
 export { default as timeout } from "./api/timeout";

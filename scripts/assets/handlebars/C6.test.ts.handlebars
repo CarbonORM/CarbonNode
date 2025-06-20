@@ -1,0 +1,88 @@
+import { describe, expect, test } from '@jest/globals';
+import { checkAllRequestsComplete } from '@carbonorm/carbonnode';
+import { act, waitFor } from '@testing-library/react';
+import { C6 } from "./C6";
+
+const fillString = () => Math.random().toString(36).substring(2, 12);
+const fillNumber = () => Math.floor(Math.random() * 1000000);
+
+const RESERVED_COLUMNS = ['created_at', 'updated_at', 'deleted_at'];
+
+function buildTestData(tableModel: any): Record<string, any> {
+    const data: Record<string, any> = {};
+    const validation = tableModel.TYPE_VALIDATION;
+
+    for (const col of Object.keys(validation)) {
+        const { MYSQL_TYPE, SKIP_COLUMN_IN_POST, MAX_LENGTH } = validation[col];
+
+        if (SKIP_COLUMN_IN_POST || RESERVED_COLUMNS.includes(col)) continue;
+
+        if (MYSQL_TYPE.startsWith('varchar') || MYSQL_TYPE === 'text') {
+            let str = fillString();
+            if (MAX_LENGTH) str = str.substring(0, MAX_LENGTH);
+            data[col] = str;
+        } else if (MYSQL_TYPE.includes('int') || MYSQL_TYPE === 'decimal') {
+            data[col] = fillNumber();
+        } else if (MYSQL_TYPE === 'json') {
+            data[col] = {};
+        } else if (MYSQL_TYPE === 'tinyint(1)') {
+            data[col] = 1;
+        } else {
+            data[col] = null;
+        }
+    }
+
+    return data;
+}
+
+describe('CarbonORM table API integration tests', () => {
+    for (const [shortName, tableModel] of Object.entries(C6.TABLES)) {
+        const primaryKeys: string[] = tableModel.PRIMARY_SHORT;
+
+        // Get restOrm binding
+        const restBinding = (C6 as any)[shortName[0].toUpperCase() + shortName.slice(1)];
+        if (!restBinding) continue;
+
+        test(`[${shortName}] GET → POST → GET → PUT → DELETE`, async () => {
+
+            const testData = buildTestData(tableModel);
+
+            await act(async () => {
+
+                // GET all
+                const all = await restBinding.Get({});
+                expect(all?.data?.rest).toBeDefined();
+
+                // POST one
+                const post = await restBinding.Post(testData);
+                expect(post?.data?.created).toBeDefined();
+
+                const postID = post?.data?.created;
+                const pkName = primaryKeys[0];
+                testData[pkName] = postID;
+
+                // GET single
+                const select = await restBinding.Get({
+                    [C6.WHERE]: {
+                        [tableModel[pkName.toUpperCase()]]: postID
+                    }
+                });
+
+                expect(select?.data?.rest?.[0]?.[pkName]).toEqual(postID);
+
+                // PUT update
+                const updated = await restBinding.Put(testData);
+                expect(updated?.data?.updated).toBeDefined();
+
+                // DELETE
+                const deleted = await restBinding.Delete({ [pkName]: postID });
+                expect(deleted?.data?.deleted).toBeDefined();
+
+                // Wait for all requests to settle
+                await waitFor(() => {
+                    expect(checkAllRequestsComplete()).toEqual(true);
+                 }, { timeout: 10000, interval: 1000 });
+            });
+        }, 100000);
+    }
+});

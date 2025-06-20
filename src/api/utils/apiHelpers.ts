@@ -5,6 +5,10 @@ import { AxiosResponse } from "axios";
 import {toastOptions} from "../../variables/toastOptions";
 import {iC6RestfulModel} from "../types/ormInterfaces";
 
+
+
+
+
 export function TestRestfulResponse(response: AxiosResponse | any, success: ((r: AxiosResponse) => (string | void)) | string | undefined, error: ((r: AxiosResponse) => (string | void)) | string | undefined): string | boolean | number {
 
     if (undefined === response.data?.['ERROR TYPE']

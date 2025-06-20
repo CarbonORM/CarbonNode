@@ -478,21 +478,9 @@ fs.writeFileSync(path.join(process.cwd(), 'C6MySqlDump.json'), JSON.stringify(ta
 
 // import this file  src/assets/handlebars/C6.tsx.handlebars for a mustache template
 const c6Template = fs.readFileSync(path.resolve(__dirname, 'assets/handlebars/C6.ts.handlebars'), 'utf-8');
+const c6TestTemplate = fs.readFileSync(path.resolve(__dirname, 'assets/handlebars/C6.test.ts.handlebars'), 'utf-8');
 
 fs.writeFileSync(path.join(MySQLDump.OUTPUT_DIR, 'C6.ts'), Handlebars.compile(c6Template)(tableData));
-
-const template = fs.readFileSync(path.resolve(__dirname, 'assets/handlebars/Table.ts.handlebars'), 'utf-8');
-
-const testTemplate = fs.readFileSync(path.resolve(__dirname, 'assets/handlebars/Table.test.ts.handlebars'), 'utf-8');
-
-Object.values(tableData.TABLES).forEach((tableData) => {
-
-    const tableName = tableData.TABLE_NAME_SHORT_PASCAL_CASE
-
-    fs.writeFileSync(path.join(MySQLDump.OUTPUT_DIR, tableName + '.ts'), Handlebars.compile(template)(tableData));
-
-    fs.writeFileSync(path.join(MySQLDump.OUTPUT_DIR, tableName + '.test.ts'), Handlebars.compile(testTemplate)(tableData));
-
-})
+fs.writeFileSync(path.join(MySQLDump.OUTPUT_DIR, 'C6.test.ts'), Handlebars.compile(c6TestTemplate)(tableData));
 
 console.log('Successfully created CarbonORM bindings!')

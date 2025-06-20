@@ -1,27 +1,27 @@
-import {apiReturn} from "@carbonorm/carbonnode";
+import {iRestMethods} from "@carbonorm/carbonnode";
 import { PoolConnection, RowDataPacket } from 'mysql2/promise';
 import {buildSelectQuery} from "../builders/sqlBuilder";
 import {Executor} from "./Executor";
 
 
 export class SqlExecutor<
+    RequestMethod extends iRestMethods,
     RestShortTableName extends string = any,
     RestTableInterface extends { [key: string]: any } = any,
     PrimaryKey extends Extract<keyof RestTableInterface, string> = Extract<keyof RestTableInterface, string>,
     CustomAndRequiredFields extends { [key: string]: any } = any,
-    RequestTableOverrides extends { [key: string]: any; } = { [key in keyof RestTableInterface]: any },
-    ResponseDataType = any
+    RequestTableOverrides extends { [key in keyof RestTableInterface]: any } = { [key in keyof RestTableInterface]: any }
 >
     extends Executor<
+        RequestMethod,
         RestShortTableName,
         RestTableInterface,
         PrimaryKey,
         CustomAndRequiredFields,
-        RequestTableOverrides,
-        ResponseDataType
+        RequestTableOverrides
     > {
 
-    public execute():  Promise<apiReturn<ResponseDataType>> {
+    public execute() {
         switch (this.config.requestMethod) {
             case 'GET':
                 return (this.select(
