@@ -1,4 +1,4 @@
-// noinspection JSUnusedGlobalSymbols
+// noinspection JSUnusedGlobalSymbols,SpellCheckingInspection
 
 import {
     C6Constants,
@@ -80,7 +80,12 @@ export const {{TABLE_NAME_SHORT}}:
         '{{@key}}': '{{this}}',
     {{/each}}
     },
-    LIFECYCLE_HOOKS: [],
+    LIFECYCLE_HOOKS: {
+        GET: {beforeProcessing:{}, beforeExecution:{}, afterExecution:{}, afterCommit:{}},
+        PUT: {beforeProcessing:{}, beforeExecution:{}, afterExecution:{}, afterCommit:{}},
+        POST: {beforeProcessing:{}, beforeExecution:{}, afterExecution:{}, afterCommit:{}},
+        DELETE: {beforeProcessing:{}, beforeExecution:{}, afterExecution:{}, afterCommit:{}},
+    },
     TABLE_REFERENCES: {
         {{#each TABLE_REFERENCES}}'{{@key}}': [{{#this}}{
             TABLE: '{{TABLE}}',
