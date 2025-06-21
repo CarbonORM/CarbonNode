@@ -5,18 +5,16 @@ import isTest from "../../variables/isTest";
 import isVerbose from "../../variables/isVerbose";
 import convertForRequestBody from "../convertForRequestBody";
 import {eFetchDependencies} from "../types/dynamicFetching";
-import {Modify} from "../types/modifyTypes";
 import {
     apiReturn,
     DELETE, DetermineResponseDataType,
-    GET, iAPI,
+    GET,
     iCacheAPI,
     iConstraint,
     iGetC6RestResponse,
     iRestMethods,
     POST,
-    PUT,
-    RequestQueryBody
+    PUT, RequestQueryBody
 } from "../types/ormInterfaces";
 import {removeInvalidKeys, removePrefixIfExists, TestRestfulResponse} from "../utils/apiHelpers";
 import {apiRequestCache, checkCache, userCustomClearCache} from "../utils/cacheManager";
@@ -43,7 +41,12 @@ export class HttpExecutor<
 
     public putState(
         response: AxiosResponse<DetermineResponseDataType<RequestMethod, RestTableInterface>>,
-        request: iAPI<Modify<RestTableInterface, RequestTableOverrides>> & CustomAndRequiredFields,
+        request: RequestQueryBody<
+            RequestMethod,
+            RestTableInterface,
+            CustomAndRequiredFields,
+            RequestTableOverrides
+        >,
         callback: () => void
     ) {
         this.config.reactBootstrap?.updateRestfulObjectArrays<RestTableInterface>({
@@ -61,7 +64,12 @@ export class HttpExecutor<
 
     public postState(
         response: AxiosResponse<DetermineResponseDataType<RequestMethod, RestTableInterface>>,
-        request: iAPI<Modify<RestTableInterface, RequestTableOverrides>> & CustomAndRequiredFields,
+        request: RequestQueryBody<
+            RequestMethod,
+            RestTableInterface,
+            CustomAndRequiredFields,
+            RequestTableOverrides
+        >,
         callback: () => void
     ) {
 
@@ -101,7 +109,12 @@ export class HttpExecutor<
 
     public deleteState(
         _response: AxiosResponse<DetermineResponseDataType<RequestMethod, RestTableInterface>>,
-        request: iAPI<Modify<RestTableInterface, RequestTableOverrides>> & CustomAndRequiredFields,
+        request: RequestQueryBody<
+            RequestMethod,
+            RestTableInterface,
+            CustomAndRequiredFields,
+            RequestTableOverrides
+        >,
         callback: () => void
     ) {
         this.config.reactBootstrap?.deleteRestfulObjectArrays<RestTableInterface>({
@@ -172,17 +185,9 @@ export class HttpExecutor<
 
         // an undefined query would indicate queryCallback returned undefined,
         // thus the request shouldn't fire as is in custom cache
-        let query: RequestQueryBody<Modify<RestTableInterface, RequestTableOverrides>> | undefined | null;
+        if (undefined === this.request || null === this.request) {
 
-        if (undefined === query || null === query) {
-
-            if (this.request.debug && isLocal) {
-
-                toast.warning("DEV: queryCallback returned undefined, signaling in Custom Cache. (returning null)", toastOptionsDevs)
-
-            }
-
-            console.groupCollapsed('%c API: (' + requestMethod + ') Request Query for (' + tableName + ') undefined, returning null (will not fire ajax)!', 'color: #c00')
+            console.groupCollapsed('%c API: (' + requestMethod + ') Request Query for (' + tableName + ') undefined, returning null (will not fire)!', 'color: #c00')
 
             console.log('%c Returning (undefined|null) for a query would indicate a custom cache hit (outside API.tsx), thus the request should not fire.', 'color: #c00')
 
@@ -193,6 +198,8 @@ export class HttpExecutor<
             return null;
 
         }
+
+        let query = this.request;
 
         if (C6.GET === requestMethod) {
 
@@ -251,7 +258,12 @@ export class HttpExecutor<
 
                     if (undefined === query || null === query) {
 
-                        query = {}
+                        query = {} as RequestQueryBody<
+                            RequestMethod,
+                            RestTableInterface,
+                            CustomAndRequiredFields,
+                            RequestTableOverrides
+                        >
 
                     }
 
@@ -412,8 +424,13 @@ export class HttpExecutor<
                 const removedPkValue = query[primaryKey];
 
                 addBackPK = () => {
-                    query ??= {}
-                    query[primaryKey] = removedPkValue
+                    query ??= {} as RequestQueryBody<
+                        RequestMethod,
+                        RestTableInterface,
+                        CustomAndRequiredFields,
+                        RequestTableOverrides
+                    >;
+                    query[primaryKey] = removedPkValue;
                 }
 
                 delete query[primaryKey]
@@ -448,61 +465,55 @@ export class HttpExecutor<
 
                 const axiosActiveRequest: AxiosPromise<ResponseDataType> = axios![requestMethod.toLowerCase()]<ResponseDataType>(
                     restRequestUri,
-                    ...((() => {
+                    ...(() => {
+                        const convert = (data: any) =>
+                            convertForRequestBody<
+                                RequestMethod,
+                                RestTableInterface,
+                                CustomAndRequiredFields,
+                                RequestTableOverrides
+                            >(
+                                data,
+                                fullTableList,
+                                C6,
+                                (message) => toast.error(message, toastOptions)
+                            );
 
-                        // @link - https://axios-http.com/docs/instance
-                        // How configuration vs data is passed is variable, use documentation above for reference
-                        if (requestMethod === GET) {
+                        const baseConfig = {
+                            withCredentials: withCredentials,
+                        };
 
-                            return [{
-                                withCredentials: withCredentials,
-                                params: query
-                            }]
+                        switch (requestMethod) {
+                            case GET:
+                                return [{
+                                    ...baseConfig,
+                                    params: query
+                                }];
 
-                        } else if (requestMethod === POST) {
-
-                            if (undefined !== dataInsertMultipleRows) {
-
-                                return [
-                                    dataInsertMultipleRows.map(data =>
-                                        convertForRequestBody<typeof data>(data, fullTableList, C6, (message) => toast.error(message, toastOptions))),
-                                    {
-                                        withCredentials: withCredentials,
-                                    }
-                                ]
-
-                            }
-
-                            return [
-                                convertForRequestBody<RestTableInterface>(query as RestTableInterface, fullTableList, C6, (message) => toast.error(message, toastOptions)),
-                                {
-                                    withCredentials: withCredentials,
+                            case POST:
+                                if (dataInsertMultipleRows !== undefined) {
+                                    return [
+                                        dataInsertMultipleRows.map(convert),
+                                        baseConfig
+                                    ];
                                 }
-                            ]
+                                return [convert(query), baseConfig];
 
-                        } else if (requestMethod === PUT) {
+                            case PUT:
+                                return [convert(query), baseConfig];
 
-                            return [
-                                convertForRequestBody<RestTableInterface>(query as RestTableInterface, fullTableList, C6, (message) => toast.error(message, toastOptions)),
-                                {
-                                    withCredentials: withCredentials,
-                                }
-                            ]
-                        } else if (requestMethod === DELETE) {
+                            case DELETE:
+                                return [{
+                                    ...baseConfig,
+                                    data: convert(query)
+                                }];
 
-                            return [{
-                                withCredentials: withCredentials,
-                                data: convertForRequestBody<RestTableInterface>(query as RestTableInterface, fullTableList, C6, (message) => toast.error(message, toastOptions))
-                            }]
-
-                        } else {
-
-                            throw new Error('The request method (' + requestMethod + ') was not recognized.')
-
+                            default:
+                                throw new Error(`The request method (${requestMethod}) was not recognized.`);
                         }
-
-                    })())
+                    })()
                 );
+
 
                 if (cachingConfirmed) {
 

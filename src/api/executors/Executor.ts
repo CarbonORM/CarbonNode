@@ -1,13 +1,12 @@
 import {
     apiReturn,
     DetermineResponseDataType,
-    iAPI,
     iRest,
     iRestMethods,
-    iRestReactiveLifecycle
+    iRestReactiveLifecycle,
+    RequestQueryBody
 } from "@carbonorm/carbonnode";
 import isVerbose from "../../variables/isVerbose";
-import { Modify } from "../types/modifyTypes";
 
 export abstract class Executor<
     RequestMethod extends iRestMethods,
@@ -23,7 +22,12 @@ export abstract class Executor<
             RestTableInterface,
             PrimaryKey
         >,
-        protected request: iAPI<Modify<RestTableInterface, RequestTableOverrides>> & CustomAndRequiredFields = {} as iAPI<Modify<RestTableInterface, RequestTableOverrides>> & CustomAndRequiredFields
+        protected request: RequestQueryBody<
+            RequestMethod,
+            RestTableInterface,
+            CustomAndRequiredFields,
+            RequestTableOverrides
+        >
     ) {}
 
     abstract execute(): Promise<apiReturn<DetermineResponseDataType<RequestMethod, RestTableInterface>>>;

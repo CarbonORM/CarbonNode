@@ -1,9 +1,7 @@
 import isNode from '../variables/isNode';
-import {Modify} from "./types/modifyTypes";
 import {
     apiReturn, DetermineResponseDataType,
-    iAPI,
-    iRest, iRestMethods
+    iRest, iRestMethods, RequestQueryBody
 } from "./types/ormInterfaces";
 
 /**
@@ -24,7 +22,12 @@ export default function restRequest<
     >
 ) {
     return async (
-        request: iAPI<Modify<RestTableInterface, RequestTableOverrides>> & CustomAndRequiredFields = {} as iAPI<Modify<RestTableInterface, RequestTableOverrides>> & CustomAndRequiredFields
+        request: RequestQueryBody<
+            RequestMethod,
+            RestTableInterface,
+            CustomAndRequiredFields,
+            RequestTableOverrides
+        >,
     ): Promise<apiReturn<DetermineResponseDataType<RequestMethod, RestTableInterface>>> => {
 
         // SQL path if on Node with a provided pool

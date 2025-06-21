@@ -1,109 +1,81 @@
-import {C6Constants} from "api/C6Constants";
-import {iC6Object, iC6RestfulModel} from "./types/ormInterfaces";
+import { C6Constants } from "api/C6Constants";
+import {iC6Object, iC6RestfulModel, iRestMethods, RequestQueryBody} from "./types/ormInterfaces";
 
-
-export default function <RestTableInterfaces extends { [key:string] : any }>(restfulObject: RestTableInterfaces, tableName: string | string[], C6: iC6Object, regexErrorHandler: (message:string) => void = alert) {
-
-    let payload = {};
-
+export default function <
+    RequestMethod extends iRestMethods,
+    RestTableInterface extends { [key: string]: any },
+    CustomAndRequiredFields extends { [key: string]: any } = {},
+    RequestTableOverrides extends { [K in keyof RestTableInterface]?: any } = {}
+>(
+    restfulObject: RequestQueryBody<RequestMethod, RestTableInterface, CustomAndRequiredFields, RequestTableOverrides>,
+    tableName: string | string[],
+    C6: iC6Object,
+    regexErrorHandler: (message: string) => void = alert
+) {
+    const payload: Record<string, any> = {};
     const tableNames = Array.isArray(tableName) ? tableName : [tableName];
 
-    let tableDefinitions : (iC6RestfulModel<any, any, any> & any)[] = [];
-
-    tableNames.forEach((tableName) => {
-
-        let tableDefinition = Object.values(C6.TABLES).find((tableDefinition) => tableDefinition.TABLE_NAME === tableName);
-
-        if (undefined === tableDefinition) {
-
-            console.error(`Table name (${tableName}) is not found in the C6.TABLES object.`, C6.TABLES);
-
-            throw new Error(`Table name (${tableName}) is not found in the C6.TABLES object.`);
-
+    const tableDefinitions: (iC6RestfulModel<any, any, any> & any)[] = tableNames.map((name) => {
+        const tableDefinition = Object.values(C6.TABLES).find((t) => t.TABLE_NAME === name);
+        if (!tableDefinition) {
+            console.error(`Table name (${name}) is not found in the C6.TABLES object.`, C6.TABLES);
+            throw new Error(`Table name (${name}) is not found in the C6.TABLES object.`);
         }
+        return tableDefinition;
+    });
 
-        tableDefinitions.push(tableDefinition);
+    for (const tableDefinition of tableDefinitions) {
+        for (const value of Object.keys(restfulObject)) {
+            const shortReference = value.toUpperCase();
 
-    })
-
-    tableDefinitions.forEach((tableDefinition) => {
-
-        Object.keys(restfulObject).forEach(value => {
-
-            let shortReference = value.toUpperCase();
-
-            switch (value) {
-                case C6Constants.GET:
-                case C6Constants.POST:
-                case C6Constants.UPDATE:
-                case C6Constants.REPLACE:
-                case C6Constants.DELETE:
-                case C6Constants.WHERE:
-                case C6Constants.JOIN:
-                case C6Constants.PAGINATION:
-                    if (Array.isArray(restfulObject[value])) {
-                        payload[value] = restfulObject[value].sort()
-                    } else if (typeof restfulObject[value] === 'object' && restfulObject[value] !== null) {
-                        payload[value] = Object.keys(restfulObject[value])
-                            .sort()
-                            .reduce((acc, key) => ({
-                                ...acc, [key]: restfulObject[value][key]
-                            }), {})
-                    }
-                    return
-                default:
+            if ([
+                C6Constants.GET,
+                C6Constants.POST,
+                C6Constants.UPDATE,
+                C6Constants.REPLACE,
+                C6Constants.DELETE,
+                C6Constants.WHERE,
+                C6Constants.JOIN,
+                C6Constants.PAGINATION
+            ].includes(value)) {
+                const val = restfulObject[value];
+                if (Array.isArray(val)) {
+                    payload[value] = val.sort();
+                } else if (typeof val === 'object' && val !== null) {
+                    payload[value] = Object.keys(val)
+                        .sort()
+                        .reduce((acc, key) => ({ ...acc, [key]: val[key] }), {});
+                }
+                continue;
             }
 
             if (shortReference in tableDefinition) {
-
                 const longName = tableDefinition[shortReference];
+                const columnValue = restfulObject[value];
+                payload[longName] = columnValue;
 
-                payload[longName] = restfulObject[value]
-
-                const regexValidations = tableDefinition.REGEX_VALIDATION[longName]
+                const regexValidations = tableDefinition.REGEX_VALIDATION[longName];
 
                 if (regexValidations instanceof RegExp) {
-
-                    if (false === regexValidations.test(restfulObject[value])) {
-
-                        regexErrorHandler('Failed to match regex (' + regexValidations + ') for column (' + longName + ')')
-
-                        throw Error('Failed to match regex (' + regexValidations + ') for column (' + longName + ')')
-
+                    if (!regexValidations.test(columnValue)) {
+                        regexErrorHandler(`Failed to match regex (${regexValidations}) for column (${longName})`);
+                        throw new Error(`Failed to match regex (${regexValidations}) for column (${longName})`);
                     }
-
                 } else if (typeof regexValidations === 'object' && regexValidations !== null) {
-
-                    Object.keys(regexValidations)?.forEach((errorMessage) => {
-
-                        const regex : RegExp = regexValidations[errorMessage];
-
-                        if (false === regex.test(restfulObject[value])) {
-
-                            const devErrorMessage = 'Failed to match regex (' + regex + ') for column (' + longName + ')';
-
-                            regexErrorHandler(errorMessage ?? devErrorMessage)
-
-                            throw Error(devErrorMessage)
-
+                    for (const errorMessage in regexValidations) {
+                        const regex: RegExp = regexValidations[errorMessage];
+                        if (!regex.test(columnValue)) {
+                            const devErrorMessage = `Failed to match regex (${regex}) for column (${longName})`;
+                            regexErrorHandler(errorMessage || devErrorMessage);
+                            throw new Error(devErrorMessage);
                         }
-
-                    })
-
+                    }
                 }
-
             }
-
-        })
-
-        return true;
-
-    });
+        }
+    }
 
     return Object.keys(payload)
         .sort()
-        .reduce((acc, key) => ({
-            ...acc, [key]: payload[key]
-        }), {})
-
-};
+        .reduce((acc, key) => ({ ...acc, [key]: payload[key] }), {});
+}

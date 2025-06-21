@@ -460,6 +460,7 @@ const parseSQLToTypeScript = (sql: string) => {
     return {
         C6VERSION: version,
         PREFIX: MySQLDump.DB_PREFIX,
+        REST_URL_EXPRESSION: argMap['--restUrlExpression'] || '"/rest/"',
         TABLES: tables,
         RestTableNames: tables.map(table => "'" + table.TABLE_NAME + "'").join('\n | '),
         RestShortTableNames: tables.map(table => "'" + table.TABLE_NAME_SHORT + "'").join('\n | '),
