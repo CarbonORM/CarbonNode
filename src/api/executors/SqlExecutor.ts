@@ -24,6 +24,7 @@ export class SqlExecutor<
     public execute() {
         switch (this.config.requestMethod) {
             case 'GET':
+                // were about to use this and its fucked
                 return (this.select(
                     this.config.restModel.TABLE_NAME,
                     undefined,

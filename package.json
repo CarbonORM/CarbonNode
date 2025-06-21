@@ -1,6 +1,6 @@
 {
   "name": "@carbonorm/carbonnode",
-  "version": "3.0.7",
+  "version": "3.0.9",
   "browser": "dist/index.umd.js",
   "exports": {
     ".": {
@@ -26,7 +26,7 @@
   },
   "peerDependenciesMeta": {
     "axios": {
-      "optional": true
+      "optional": false
     },
     "express": {
       "optional": true

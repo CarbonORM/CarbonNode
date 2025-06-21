@@ -205,11 +205,11 @@ export const {{TABLE_NAME_SHORT_PASCAL_CASE}} = restOrm<
     i{{TABLE_NAME_SHORT_PASCAL_CASE}},
     {{TABLE_NAME_SHORT_PASCAL_CASE}}PrimaryKeys{{#if INTERFACE_OVERRIDES}},
     {{{INTERFACE_OVERRIDES}}}{{/if}}
->(() => {
+>(() => ({
     ...GLOBAL_REST_PARAMETERS,
     restModel: {{TABLE_NAME_SHORT}}{{#if OBJECT_OVERRIDES}},
     {{{OBJECT_OVERRIDES}}}{{/if}}
-});
+}));
 
 {{/TABLES}}
 

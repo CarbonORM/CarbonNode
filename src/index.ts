@@ -16,6 +16,7 @@ export * from "./api/builders/sqlBuilder";
 export * from "./api/executors/Executor";
 export * from "./api/executors/HttpExecutor";
 export * from "./api/executors/SqlExecutor";
+export * from "./api/handlers/ExpressHandler";
 export * from "./api/types/dynamicFetching";
 export * from "./api/types/modifyTypes";
 export * from "./api/types/mysqlTypes";
