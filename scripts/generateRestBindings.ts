@@ -460,6 +460,9 @@ const parseSQLToTypeScript = (sql: string) => {
     return {
         C6VERSION: version,
         PREFIX: MySQLDump.DB_PREFIX,
+        OBJECT_OVERRIDES: argMap['--objectOverrides'] || '',
+        INTERFACE_OVERRIDES: argMap['--interfaceOverrides'] || '',
+        CUSTOM_IMPORTS: argMap['--customImports'] || '',
         REST_URL_EXPRESSION: argMap['--restUrlExpression'] || '"/rest/"',
         TABLES: tables,
         RestTableNames: tables.map(table => "'" + table.TABLE_NAME + "'").join('\n | '),

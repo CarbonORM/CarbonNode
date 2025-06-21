@@ -10,7 +10,8 @@ import {
     restOrm,
     iRest
 } from "@carbonorm/carbonnode";
-import * as GeoJSON from 'geojson';
+import * as GeoJSON from 'geojson';{{#if CUSTOM_IMPORTS}},
+{{{CUSTOM_IMPORTS}}}{{/if}}
 
 export const RestTablePrefix = '{{{PREFIX}}}';
 

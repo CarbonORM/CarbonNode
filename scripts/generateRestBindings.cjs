@@ -383,6 +383,9 @@ var parseSQLToTypeScript = function (sql) {
     return {
         C6VERSION: package_json_1.version,
         PREFIX: MySQLDump.DB_PREFIX,
+        OBJECT_OVERRIDES: argMap['--objectOverrides'] || '',
+        INTERFACE_OVERRIDES: argMap['--interfaceOverrides'] || '',
+        CUSTOM_IMPORTS: argMap['--customImports'] || '',
         REST_URL_EXPRESSION: argMap['--restUrlExpression'] || '"/rest/"',
         TABLES: tables,
         RestTableNames: tables.map(function (table) { return "'" + table.TABLE_NAME + "'"; }).join('\n | '),

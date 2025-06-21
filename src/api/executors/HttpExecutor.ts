@@ -189,6 +189,8 @@ export class HttpExecutor<
 
             console.groupCollapsed('%c API: (' + requestMethod + ') Request Query for (' + tableName + ') undefined, returning null (will not fire)!', 'color: #c00')
 
+            console.log('request', this.request)
+
             console.log('%c Returning (undefined|null) for a query would indicate a custom cache hit (outside API.tsx), thus the request should not fire.', 'color: #c00')
 
             console.trace();
