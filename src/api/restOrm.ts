@@ -7,11 +7,12 @@ export function restOrm<
     PrimaryKey extends Extract<keyof RestTableInterface, string> = Extract<keyof RestTableInterface, string>,
     CustomAndRequiredFields extends { [key: string]: any } = any,
     RequestTableOverrides extends { [key in keyof RestTableInterface]: any } = { [key in keyof RestTableInterface]: any }
->(config: Omit<iRest<
+>(config: () => Omit<iRest<
     RestShortTableName,
     RestTableInterface,
     PrimaryKey
 >, "requestMethod">) {
+
     return {
         Get: restRequest<
             "GET",
@@ -20,10 +21,10 @@ export function restOrm<
             PrimaryKey,
             CustomAndRequiredFields,
             RequestTableOverrides
-        >({
-            ...config,
+        >(() => ({
+            ...config(),
             requestMethod: "GET",
-        }),
+        })),
         Put: restRequest<
             "PUT",
             RestShortTableName,
@@ -31,10 +32,10 @@ export function restOrm<
             PrimaryKey,
             CustomAndRequiredFields,
             RequestTableOverrides
-        >({
-            ...config,
+        >(() => ({
+            ...config(),
             requestMethod: "PUT",
-        }),
+        })),
         Post: restRequest<
             "POST",
             RestShortTableName,
@@ -42,10 +43,10 @@ export function restOrm<
             PrimaryKey,
             CustomAndRequiredFields,
             RequestTableOverrides
-        >({
-                ...config,
-                requestMethod: "POST",
-            }),
+        >(() => ({
+            ...config(),
+            requestMethod: "POST",
+        })),
         Delete: restRequest<
             "DELETE",
             RestShortTableName,
@@ -53,9 +54,14 @@ export function restOrm<
             PrimaryKey,
             CustomAndRequiredFields,
             RequestTableOverrides
-        >({
-            ...config,
+        >(() => ({
+            ...config(),
             requestMethod: "DELETE",
-        }),
+        })),
     }
 }
+
+
+
+
+

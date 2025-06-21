@@ -15,7 +15,7 @@ export default function restRequest<
     CustomAndRequiredFields extends { [key: string]: any } = any,
     RequestTableOverrides extends { [key in keyof RestTableInterface]: any } = { [key in keyof RestTableInterface]: any }
 >(
-    config: iRest<
+    configFn: () => iRest<
         RestShortTableName,
         RestTableInterface,
         PrimaryKey
@@ -29,6 +29,8 @@ export default function restRequest<
             RequestTableOverrides
         >,
     ): Promise<apiReturn<DetermineResponseDataType<RequestMethod, RestTableInterface>>> => {
+
+        const config = configFn();
 
         // SQL path if on Node with a provided pool
         if (isNode && config.mysqlPool) {
