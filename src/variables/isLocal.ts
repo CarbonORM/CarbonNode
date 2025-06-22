@@ -1,6 +1,7 @@
 import {getEnvVar} from "./getEnvVar";
 
 
-const isDevelopment = getEnvVar('NODE_ENV', '') === 'development';
 
-export default isDevelopment;
+export default function () {
+    return  getEnvVar('NODE_ENV', '') === 'development';
+};

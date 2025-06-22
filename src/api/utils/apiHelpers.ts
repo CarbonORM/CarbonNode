@@ -79,7 +79,7 @@ export function removeInvalidKeys<iRestObject>(request: any, c6Tables: {
 
     });
 
-    isTest || console.log('intersection', intersection)
+    isTest() || console.log('intersection', intersection)
 
     return intersection
 

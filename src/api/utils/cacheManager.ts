@@ -45,7 +45,7 @@ export function checkCache<ResponseDataType = any, RestShortTableNames = string>
 
     if (true === cacheResult?.final) {
 
-        if (false === isTest || true === isVerbose) {
+        if (false === isTest() || true === isVerbose()) {
 
             console.groupCollapsed('%c API: Rest api cache (' + requestMethod + '  ' + tableName + ') has reached the final result. Returning undefined!', 'color: #cc0')
 

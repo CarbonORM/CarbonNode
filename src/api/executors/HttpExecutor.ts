@@ -303,7 +303,7 @@ export class HttpExecutor<
 
                         } while (undefined !== cacheResult)
 
-                        if (debug && isLocal) {
+                        if (debug && isLocal()) {
 
                             toast.warning("DEVS: Request in cache. (" + apiRequestCache.findIndex(cache => cache.requestArgumentsSerialized === querySerialized) + "). Returning function to request page (" + query[C6.PAGINATION][C6.PAGE] + ")", toastOptionsDevs);
 
@@ -318,7 +318,7 @@ export class HttpExecutor<
 
                 } else {
 
-                    if (debug && isLocal) {
+                    if (debug && isLocal()) {
 
                         toast.info("DEVS: Ignore cache was set to true.", toastOptionsDevs);
 
@@ -326,7 +326,7 @@ export class HttpExecutor<
 
                 }
 
-                if (debug && isLocal) {
+                if (debug && isLocal()) {
 
                     toast.success("DEVS: Request not in cache." + (requestMethod === C6.GET ? "Page (" + query[C6.PAGINATION][C6.PAGE] + ")." : '') + " Logging cache 2 console.", toastOptionsDevs);
 
@@ -390,7 +390,7 @@ export class HttpExecutor<
                         || null === query
                         || false === primaryKey in query) {
 
-                        if (true === debug && isLocal) {
+                        if (true === debug && isLocal()) {
 
                             toast.error('DEVS: The primary key (' + primaryKey + ') was not provided!!')
 
@@ -538,7 +538,7 @@ export class HttpExecutor<
                         // noinspection SuspiciousTypeOfGuard
                         if (typeof response.data === 'string') {
 
-                            if (isTest) {
+                            if (isTest()) {
 
                                 console.trace()
 
@@ -575,7 +575,7 @@ export class HttpExecutor<
 
 
 
-                            if (debug && isLocal) {
+                            if (debug && isLocal()) {
 
                                 toast.warning("DEVS: TestRestfulResponse returned false for (" + operatingTable + ").", toastOptionsDevs);
 
@@ -624,7 +624,7 @@ export class HttpExecutor<
                             returnGetNextPageFunction = 1 !== query?.[C6.PAGINATION]?.[C6.LIMIT] &&
                                 query?.[C6.PAGINATION]?.[C6.LIMIT] === responseData.rest.length
 
-                            if (false === isTest || true === isVerbose) {
+                            if (false === isTest() || true === isVerbose()) {
 
                                 console.groupCollapsed('%c API: Response (' + requestMethod + ' ' + tableName + ') returned length (' + responseData.rest?.length + ') of possible (' + query?.[C6.PAGINATION]?.[C6.LIMIT] + ') limit!', 'color: #0c0')
 
@@ -644,7 +644,7 @@ export class HttpExecutor<
 
                             if (false === returnGetNextPageFunction
                                 && true === debug
-                                && isLocal) {
+                                && isLocal()) {
 
                                 toast.success("DEVS: Response returned length (" + responseData.rest?.length + ") less than limit (" + query?.[C6.PAGINATION]?.[C6.LIMIT] + ").", toastOptionsDevs);
 
@@ -889,7 +889,7 @@ export class HttpExecutor<
 
                         }
 
-                        if (debug && isLocal) {
+                        if (debug && isLocal()) {
 
                             toast.success("DEVS: (" + requestMethod + ") request complete.", toastOptionsDevs);
 
@@ -902,7 +902,7 @@ export class HttpExecutor<
 
             } catch (throwableError) {
 
-                if (isTest) {
+                if (isTest()) {
 
                     throw new Error(JSON.stringify(throwableError))
 

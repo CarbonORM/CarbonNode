@@ -1,3 +1,4 @@
+import { SqlBuilder } from "api/builders/sqlBuilder";
 import {
     apiReturn,
     DetermineResponseDataType,
@@ -5,10 +6,8 @@ import {
     iPutC6RestResponse,
     iDeleteC6RestResponse,
     iRestMethods
-} from "@carbonorm/carbonnode";
+} from "../types/ormInterfaces";
 import { PoolConnection, RowDataPacket, ResultSetHeader } from 'mysql2/promise';
-import { buildSelectQuery } from "../builders/sqlBuilder";
-import { Executor } from "./Executor";
 
 export class SqlExecutor<
     RequestMethod extends iRestMethods,
@@ -16,8 +15,8 @@ export class SqlExecutor<
     RestTableInterface extends Record<string, any> = any,
     PrimaryKey extends Extract<keyof RestTableInterface, string> = Extract<keyof RestTableInterface, string>,
     CustomAndRequiredFields extends Record<string, any> = any,
-    RequestTableOverrides extends{ [key in keyof RestTableInterface]: any; } = { [key in keyof RestTableInterface]: any }
-> extends Executor<
+    RequestTableOverrides extends { [key in keyof RestTableInterface]: any } = { [key in keyof RestTableInterface]: any }
+> extends SqlBuilder<
     RequestMethod,
     RestShortTableName,
     RestTableInterface,
@@ -25,48 +24,74 @@ export class SqlExecutor<
     CustomAndRequiredFields,
     RequestTableOverrides
 > {
-    async execute(): Promise<apiReturn<DetermineResponseDataType<RequestMethod, RestTableInterface>>> {
-        const { TABLE_NAME, PRIMARY } = this.config.restModel;
 
-        switch (this.config.requestMethod) {
+    async execute(): Promise<apiReturn<DetermineResponseDataType<RequestMethod, RestTableInterface>>> {
+        const { TABLE_NAME } = this.config.restModel;
+        const method = this.config.requestMethod;
+
+        console.log(`[SQL EXECUTOR] ▶️ Executing ${method} on table "${TABLE_NAME}"`);
+        console.log(`[SQL EXECUTOR] 🧾 Request payload:`, this.request);
+
+        switch (method) {
             case 'GET': {
                 const rest = await this.select(TABLE_NAME, undefined, this.request);
+                console.log(`[SQL EXECUTOR] ✅ GET result:`, rest);
                 return { rest } as apiReturn<DetermineResponseDataType<RequestMethod, RestTableInterface>>;
             }
+
             case 'POST': {
                 const result = await this.insert(TABLE_NAME, this.request);
+                console.log(`[SQL EXECUTOR] ✅ POST result:`, result);
                 const created: iPostC6RestResponse = { rest: result, created: true };
                 return created as apiReturn<DetermineResponseDataType<RequestMethod, RestTableInterface>>;
             }
+
             case 'PUT': {
-                const result = await this.update(TABLE_NAME, PRIMARY, this.request);
-                const updated: iPutC6RestResponse = { rest: result, updated: true, rowCount: (result as ResultSetHeader).affectedRows };
+                const result = await this.update(TABLE_NAME, [], this.request);
+                console.log(`[SQL EXECUTOR] ✅ PUT result:`, result);
+                const updated: iPutC6RestResponse = {
+                    rest: result,
+                    updated: true,
+                    rowCount: (result as ResultSetHeader).affectedRows
+                };
                 return updated as apiReturn<DetermineResponseDataType<RequestMethod, RestTableInterface>>;
             }
+
             case 'DELETE': {
-                const result = await this.delete(TABLE_NAME, PRIMARY, this.request);
-                const deleted: iDeleteC6RestResponse = { rest: result, deleted: true, rowCount: (result as ResultSetHeader).affectedRows };
+                const result = await this.delete(TABLE_NAME, [], this.request);
+                console.log(`[SQL EXECUTOR] ✅ DELETE result:`, result);
+                const deleted: iDeleteC6RestResponse = {
+                    rest: result,
+                    deleted: true,
+                    rowCount: (result as ResultSetHeader).affectedRows
+                };
                 return deleted as apiReturn<DetermineResponseDataType<RequestMethod, RestTableInterface>>;
             }
+
             default:
-                throw new Error(`Unsupported request method: ${this.config.requestMethod}`);
+                throw new Error(`Unsupported request method: ${method}`);
         }
     }
 
     private async withConnection<T>(cb: (conn: PoolConnection) => Promise<T>): Promise<T> {
+        console.log(`[SQL EXECUTOR] 📡 Getting DB connection`);
         const conn = await this.config.mysqlPool!.getConnection();
         try {
+            console.log(`[SQL EXECUTOR] ✅ Connection acquired`);
             return await cb(conn);
         } finally {
+            console.log(`[SQL EXECUTOR] 🔌 Releasing DB connection`);
             conn.release();
         }
     }
 
     async select<TName extends string>(table: TName, primary: string | undefined, args: any) {
-        const sql = buildSelectQuery<TName>(table, primary, args);
+        const sql = this.buildSelectQuery<TName>(table, primary, args);
+        console.log(`[SQL EXECUTOR] 🧠 Generated SELECT SQL:`, sql);
+
         return await this.withConnection(async (conn) => {
-            console.log(sql);
             const [rows] = await conn.query<RowDataPacket[]>(sql);
+            console.log(`[SQL EXECUTOR] 📦 Rows fetched:`, rows);
             return rows;
         });
     }
@@ -76,6 +101,10 @@ export class SqlExecutor<
         const values = keys.map(k => data[k]);
         const placeholders = keys.map(() => '?').join(', ');
         const sql = `INSERT INTO \`${table}\` (${keys.join(', ')}) VALUES (${placeholders})`;
+
+        console.log(`[SQL EXECUTOR] 🧠 Generated INSERT SQL:`, sql);
+        console.log(`[SQL EXECUTOR] 🔢 Values:`, values);
+
         return await this.withConnection(async (conn) => {
             const [result] = await conn.execute<ResultSetHeader>(sql, values);
             return result;
@@ -89,6 +118,10 @@ export class SqlExecutor<
         const updates = keys.map(k => `\`${k}\` = ?`).join(', ');
         const sql = `UPDATE \`${table}\` SET ${updates} WHERE \`${primary[0]}\` = ?`;
         values.push(data[primary[0]]);
+
+        console.log(`[SQL EXECUTOR] 🧠 Generated UPDATE SQL:`, sql);
+        console.log(`[SQL EXECUTOR] 🔢 Values:`, values);
+
         return await this.withConnection(async (conn) => {
             const [result] = await conn.execute<ResultSetHeader>(sql, values);
             return result;
@@ -99,6 +132,10 @@ export class SqlExecutor<
         const key = primary?.[0];
         if (!key || !args?.[key]) throw new Error('Primary key and value required for delete');
         const sql = `DELETE FROM \`${table}\` WHERE \`${key}\` = ?`;
+
+        console.log(`[SQL EXECUTOR] 🧠 Generated DELETE SQL:`, sql);
+        console.log(`[SQL EXECUTOR] 🔢 Value:`, args[key]);
+
         return await this.withConnection(async (conn) => {
             const [result] = await conn.execute<ResultSetHeader>(sql, [args[key]]);
             return result;
