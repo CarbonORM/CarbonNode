@@ -37,7 +37,7 @@ export default function restRequest<
         const config = typeof configX === "function" ? configX() : configX;
 
         // SQL path if on Node with a provided pool
-        if (isNode && config.mysqlPool) {
+        if (isNode() && config.mysqlPool) {
             const {SqlExecutor} = await import('./executors/SqlExecutor');
             const executor = new SqlExecutor<
                 RequestMethod,
