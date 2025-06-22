@@ -289,7 +289,7 @@ export class HttpExecutor<
 
                             if (false !== cacheCheck) {
 
-                                return cacheCheck;
+                                return (await cacheCheck)?.data;
 
                             }
 
@@ -339,7 +339,7 @@ export class HttpExecutor<
 
                     if (false !== cacheCheck) {
 
-                        return cacheCheck;
+                        return (await cacheCheck)?.data;
 
                     }
                 }
@@ -898,7 +898,7 @@ export class HttpExecutor<
                         return response;
 
                     }
-                );
+                ).then(response => response.data);
 
             } catch (throwableError) {
 

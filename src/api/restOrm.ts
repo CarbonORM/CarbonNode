@@ -1,5 +1,5 @@
 import restRequest from "./restRequest";
-import {iRest} from "./types/ormInterfaces";
+import { iRest, iRestMethods } from "./types/ormInterfaces";
 
 export function restOrm<
     RestShortTableName extends string = any,
@@ -7,61 +7,24 @@ export function restOrm<
     PrimaryKey extends Extract<keyof RestTableInterface, string> = Extract<keyof RestTableInterface, string>,
     CustomAndRequiredFields extends { [key: string]: any } = any,
     RequestTableOverrides extends { [key in keyof RestTableInterface]: any } = { [key in keyof RestTableInterface]: any }
->(config: () => Omit<iRest<
-    RestShortTableName,
-    RestTableInterface,
-    PrimaryKey
->, "requestMethod">) {
+>(config: () => Omit<iRest<RestShortTableName, RestTableInterface, PrimaryKey>, "requestMethod">) {
 
-    return {
-        Get: restRequest<
-            "GET",
-            RestShortTableName,
-            RestTableInterface,
-            PrimaryKey,
-            CustomAndRequiredFields,
-            RequestTableOverrides
-        >(() => ({
-            ...config(),
-            requestMethod: "GET",
-        })),
-        Put: restRequest<
-            "PUT",
-            RestShortTableName,
-            RestTableInterface,
-            PrimaryKey,
-            CustomAndRequiredFields,
-            RequestTableOverrides
-        >(() => ({
-            ...config(),
-            requestMethod: "PUT",
-        })),
-        Post: restRequest<
-            "POST",
-            RestShortTableName,
-            RestTableInterface,
-            PrimaryKey,
-            CustomAndRequiredFields,
-            RequestTableOverrides
-        >(() => ({
-            ...config(),
-            requestMethod: "POST",
-        })),
-        Delete: restRequest<
-            "DELETE",
-            RestShortTableName,
-            RestTableInterface,
-            PrimaryKey,
-            CustomAndRequiredFields,
-            RequestTableOverrides
-        >(() => ({
-            ...config(),
-            requestMethod: "DELETE",
-        })),
-    }
+    const methods: iRestMethods[] = ["GET", "PUT", "POST", "DELETE"];
+
+    return Object.fromEntries(
+        methods.map(method => [
+            method[0] + method.slice(1).toLowerCase(), // Capitalize e.g. "Get"
+            restRequest<
+                typeof method,
+                RestShortTableName,
+                RestTableInterface,
+                PrimaryKey,
+                CustomAndRequiredFields,
+                RequestTableOverrides
+            >(() => ({
+                ...config(),
+                requestMethod: method as iRestMethods,
+            }))
+        ])
+    )
 }
-
-
-
-
-

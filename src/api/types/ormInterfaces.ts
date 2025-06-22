@@ -114,7 +114,7 @@ export type iGetC6RestResponse<ResponseDataType, ResponseDataOverrides = {}> = i
 export type apiReturn<Response> =
     | null
     | undefined
-    | AxiosPromise<Response>
+    | Response
     | (Response extends iPutC6RestResponse | iDeleteC6RestResponse | iPostC6RestResponse ? null : () => apiReturn<Response>);
 
 export type DetermineResponseDataType<

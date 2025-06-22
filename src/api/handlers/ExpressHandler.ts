@@ -45,7 +45,9 @@ export function ExpressHandler({C6, mysqlPool}: { C6: iC6Object, mysqlPool: Pool
                 restModel: C6.TABLES[table]
             })(payload);
 
-            res.status(200).json({success: true, rest: response});
+            console.log('response', JSON.stringify(response));
+
+            res.status(200).json({success: true, ...response});
         } catch (err) {
             next(err);
         }
