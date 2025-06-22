@@ -88,9 +88,11 @@ export class SqlExecutor<
     async select<TName extends string>(table: TName, primary: string | undefined, args: any) {
         const sql = this.buildSelectQuery<TName>(table, primary, args);
         console.log(`[SQL EXECUTOR] 🧠 Generated SELECT SQL:`, sql);
+        const formatted = this.formatSQLWithParams(sql.sql, sql.params);
+        console.log(`[SQL EXECUTOR] 🧠 Formatted SELECT SQL:`, formatted);
 
         return await this.withConnection(async (conn) => {
-            const [rows] = await conn.query<RowDataPacket[]>(sql);
+            const [rows] = await conn.query<RowDataPacket[]>(sql.sql, sql.params);
             console.log(`[SQL EXECUTOR] 📦 Rows fetched:`, rows);
             return rows;
         });
@@ -141,4 +143,21 @@ export class SqlExecutor<
             return result;
         });
     }
+
+
+    public formatSQLWithParams(sql: string, params: any[]): string {
+        let index = 0;
+
+        return sql.replace(/\?/g, () => {
+            if (index >= params.length) return '?'; // fallback if params are missing
+            const val = params[index++];
+            if (val === null || val === undefined) return 'NULL';
+            if (Buffer.isBuffer(val)) return `UNHEX('${val.toString('hex')}')`;
+            if (typeof val === 'string') return `'${val.replace(/'/g, "''")}'`;
+            if (typeof val === 'number') return val.toString();
+            if (val instanceof Date) return `'${val.toISOString().slice(0, 19).replace('T', ' ')}'`;
+            return `'${JSON.stringify(val)}'`;
+        });
+    }
+
 }
