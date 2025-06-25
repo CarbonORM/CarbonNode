@@ -5,6 +5,7 @@ import isTest from "../../variables/isTest";
 import isVerbose from "../../variables/isVerbose";
 import convertForRequestBody from "../convertForRequestBody";
 import {eFetchDependencies} from "../types/dynamicFetching";
+import {OrmGenerics} from "../types/ormGenerics";
 import {
     apiReturn,
     DELETE, DetermineResponseDataType,
@@ -12,7 +13,6 @@ import {
     iCacheAPI,
     iConstraint,
     iGetC6RestResponse,
-    iRestMethods,
     POST,
     PUT, RequestQueryBody
 } from "../types/ormInterfaces";
@@ -23,36 +23,24 @@ import {Executor} from "./Executor";
 import {toastOptions, toastOptionsDevs} from "variables/toastOptions";
 
 export class HttpExecutor<
-    RequestMethod extends iRestMethods,
-    RestShortTableName extends string = any,
-    RestTableInterface extends { [key: string]: any } = any,
-    PrimaryKey extends Extract<keyof RestTableInterface, string> = Extract<keyof RestTableInterface, string>,
-    CustomAndRequiredFields extends { [key: string]: any } = any,
-    RequestTableOverrides extends { [key in keyof RestTableInterface]: any } = { [key in keyof RestTableInterface]: any }
+    G extends OrmGenerics
 >
-    extends Executor<
-        RequestMethod,
-        RestShortTableName,
-        RestTableInterface,
-        PrimaryKey,
-        CustomAndRequiredFields,
-        RequestTableOverrides
-    > {
+    extends Executor<G> {
 
     public putState(
-        response: AxiosResponse<DetermineResponseDataType<RequestMethod, RestTableInterface>>,
+        response: AxiosResponse<DetermineResponseDataType<G['RequestMethod'], G['RestTableInterface']>>,
         request: RequestQueryBody<
-            RequestMethod,
-            RestTableInterface,
-            CustomAndRequiredFields,
-            RequestTableOverrides
+            G['RequestMethod'],
+            G['RestTableInterface'],
+            G['CustomAndRequiredFields'],
+            G['RequestTableOverrides']
         >,
         callback: () => void
     ) {
-        this.config.reactBootstrap?.updateRestfulObjectArrays<RestTableInterface>({
+        this.config.reactBootstrap?.updateRestfulObjectArrays<G['RestTableInterface']>({
             callback,
             dataOrCallback: [
-                removeInvalidKeys<RestTableInterface>({
+                removeInvalidKeys<G['RestTableInterface']>({
                     ...request,
                     ...response?.data?.rest,
                 }, this.config.C6.TABLES)
@@ -63,12 +51,12 @@ export class HttpExecutor<
     }
 
     public postState(
-        response: AxiosResponse<DetermineResponseDataType<RequestMethod, RestTableInterface>>,
+        response: AxiosResponse<DetermineResponseDataType<G['RequestMethod'], G['RestTableInterface']>>,
         request: RequestQueryBody<
-            RequestMethod,
-            RestTableInterface,
-            CustomAndRequiredFields,
-            RequestTableOverrides
+            G['RequestMethod'],
+            G['RestTableInterface'],
+            G['CustomAndRequiredFields'],
+            G['RequestTableOverrides']
         >,
         callback: () => void
     ) {
@@ -87,49 +75,49 @@ export class HttpExecutor<
 
         }
 
-        this.config.reactBootstrap?.updateRestfulObjectArrays<RestTableInterface>({
+        this.config.reactBootstrap?.updateRestfulObjectArrays<G['RestTableInterface']>({
             callback,
             dataOrCallback: undefined !== request.dataInsertMultipleRows
                 ? request.dataInsertMultipleRows.map((request, index) => {
-                    return removeInvalidKeys<RestTableInterface>({
+                    return removeInvalidKeys<G['RestTableInterface']>({
                         ...request,
                         ...(index === 0 ? response?.data?.rest : {}),
                     }, this.config.C6.TABLES)
                 })
                 : [
-                    removeInvalidKeys<RestTableInterface>({
+                    removeInvalidKeys<G['RestTableInterface']>({
                         ...request,
                         ...response?.data?.rest,
                     }, this.config.C6.TABLES)
                 ],
             stateKey: this.config.restModel.TABLE_NAME,
-            uniqueObjectId: this.config.restModel.PRIMARY_SHORT as (keyof RestTableInterface)[]
+            uniqueObjectId: this.config.restModel.PRIMARY_SHORT as (keyof G['RestTableInterface'])[]
         })
     }
 
     public deleteState(
-        _response: AxiosResponse<DetermineResponseDataType<RequestMethod, RestTableInterface>>,
+        _response: AxiosResponse<DetermineResponseDataType<G['RequestMethod'], G['RestTableInterface']>>,
         request: RequestQueryBody<
-            RequestMethod,
-            RestTableInterface,
-            CustomAndRequiredFields,
-            RequestTableOverrides
+            G['RequestMethod'],
+            G['RestTableInterface'],
+            G['CustomAndRequiredFields'],
+            G['RequestTableOverrides']
         >,
         callback: () => void
     ) {
-        this.config.reactBootstrap?.deleteRestfulObjectArrays<RestTableInterface>({
+        this.config.reactBootstrap?.deleteRestfulObjectArrays<G['RestTableInterface']>({
             callback,
             dataOrCallback: [
-                request as unknown as RestTableInterface,
+                request as unknown as G['RestTableInterface'],
             ],
             stateKey: this.config.restModel.TABLE_NAME,
-            uniqueObjectId: this.config.restModel.PRIMARY_SHORT as (keyof RestTableInterface)[]
+            uniqueObjectId: this.config.restModel.PRIMARY_SHORT as (keyof G['RestTableInterface'])[]
         })
     }
 
-    public async execute(): Promise<apiReturn<DetermineResponseDataType<RequestMethod, RestTableInterface>>> {
+    public async execute(): Promise<apiReturn<DetermineResponseDataType<G['RequestMethod'], G['RestTableInterface']>>> {
 
-        type ResponseDataType = DetermineResponseDataType<RequestMethod, RestTableInterface>;
+        type ResponseDataType = DetermineResponseDataType<G['RequestMethod'], G['RestTableInterface']>;
 
         const {
             C6,
@@ -151,7 +139,7 @@ export class HttpExecutor<
             });
 
 
-        const tableName = restModel.TABLE_NAME;
+        const tableName = restModel.TABLE_NAME as string;
 
         const fullTableList = Array.isArray(tableName) ? tableName : [tableName];
 
@@ -218,7 +206,7 @@ export class HttpExecutor<
         }
 
         // this could return itself with a new page number, or undefined if the end is reached
-        const apiRequest = async (): Promise<apiReturn<DetermineResponseDataType<RequestMethod, RestTableInterface>>> => {
+        const apiRequest = async (): Promise<apiReturn<DetermineResponseDataType<G['RequestMethod'], G['RestTableInterface']>>> => {
 
             const {
                 debug,
@@ -261,10 +249,10 @@ export class HttpExecutor<
                     if (undefined === query || null === query) {
 
                         query = {} as RequestQueryBody<
-                            RequestMethod,
-                            RestTableInterface,
-                            CustomAndRequiredFields,
-                            RequestTableOverrides
+                            G['RequestMethod'],
+                            G['RestTableInterface'],
+                            G['CustomAndRequiredFields'],
+                            G['RequestTableOverrides']
                         >
 
                     }
@@ -351,7 +339,7 @@ export class HttpExecutor<
 
             let addBackPK: (() => void) | undefined;
 
-            let apiResponse: RestTableInterface[PrimaryKey] | string | boolean | number | undefined;
+            let apiResponse: G['RestTableInterface'][G['PrimaryKey']] | string | boolean | number | undefined;
 
             let returnGetNextPageFunction = false;
 
@@ -427,10 +415,10 @@ export class HttpExecutor<
 
                 addBackPK = () => {
                     query ??= {} as RequestQueryBody<
-                        RequestMethod,
-                        RestTableInterface,
-                        CustomAndRequiredFields,
-                        RequestTableOverrides
+                        G['RequestMethod'],
+                        G['RestTableInterface'],
+                        G['CustomAndRequiredFields'],
+                        G['RequestTableOverrides']
                     >;
                     query[primaryKey] = removedPkValue;
                 }
@@ -470,10 +458,10 @@ export class HttpExecutor<
                     ...(() => {
                         const convert = (data: any) =>
                             convertForRequestBody<
-                                RequestMethod,
-                                RestTableInterface,
-                                CustomAndRequiredFields,
-                                RequestTableOverrides
+                                G['RequestMethod'],
+                                G['RestTableInterface'],
+                                G['CustomAndRequiredFields'],
+                                G['RequestTableOverrides']
                             >(
                                 data,
                                 fullTableList,
@@ -574,7 +562,6 @@ export class HttpExecutor<
                         if (false === apiResponse) {
 
 
-
                             if (debug && isLocal()) {
 
                                 toast.warning("DEVS: TestRestfulResponse returned false for (" + operatingTable + ").", toastOptionsDevs);
@@ -596,10 +583,10 @@ export class HttpExecutor<
                         if (undefined !== reactBootstrap && response) {
                             switch (requestMethod) {
                                 case GET:
-                                    reactBootstrap.updateRestfulObjectArrays<RestTableInterface>({
+                                    reactBootstrap.updateRestfulObjectArrays<G['RestTableInterface']>({
                                         dataOrCallback: Array.isArray(response.data.rest) ? response.data.rest : [response.data.rest],
                                         stateKey: this.config.restModel.TABLE_NAME,
-                                        uniqueObjectId: this.config.restModel.PRIMARY_SHORT as (keyof RestTableInterface)[],
+                                        uniqueObjectId: this.config.restModel.PRIMARY_SHORT as (keyof G['RestTableInterface'])[],
                                         callback
                                     })
                                     break;

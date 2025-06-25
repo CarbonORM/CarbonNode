@@ -194,7 +194,7 @@ function determineTypeScriptType(mysqlType, enumValues) {
         case 'tinyblob':
         case 'mediumblob':
         case 'longblob':
-            return 'Buffer'; // todo - we should pass driver specific types here
+            return 'Buffer | string'; // todo - we should pass driver specific types here
         default:
             return 'string';
     }

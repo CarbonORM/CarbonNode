@@ -6,6 +6,7 @@ import { eFetchDependencies } from "./dynamicFetching";
 import { Modify } from "./modifyTypes";
 import { JoinType, OrderDirection, SQLComparisonOperator, SQLFunction } from "./mysqlTypes";
 import { CarbonReact } from "@carbonorm/carbonreact";
+import {OrmGenerics} from "./ormGenerics";
 
 export type iRestMethods = 'GET' | 'POST' | 'PUT' | 'DELETE';
 export const POST = 'POST';
@@ -132,8 +133,8 @@ export type DetermineResponseDataType<
 
 export interface iRest<
     RestShortTableName extends string = any,
-    RestTableInterface extends { [key: string]: any } = any,
-    PrimaryKey extends keyof RestTableInterface & string = any
+    RestTableInterface extends Record<string, any> = any,
+    PrimaryKey extends keyof RestTableInterface & string = keyof RestTableInterface & string
 > {
     C6: iC6Object;
     axios?: AxiosInstance;
@@ -159,69 +160,53 @@ export type tColumns<TableName extends string, T extends { [key: string]: any }>
 
 export type tPrimaryKeys<TableName extends string, PK extends string> = `${TableName}.${PK}`;
 
-export interface iC6RestfulModel<RestShortTableNames extends string, RestTableInterfaces extends { [key: string]: any }, PK extends keyof RestTableInterfaces & string> {
-    TABLE_NAME: RestShortTableNames;
-    PRIMARY: tPrimaryKeys<RestShortTableNames, PK>[];
-    PRIMARY_SHORT: PK[];
-    COLUMNS: tColumns<RestShortTableNames, RestTableInterfaces>;
+export interface iC6RestfulModel<
+    RestShortTableName extends string,
+    RestTableInterface extends Record<string, any> = any,
+    PrimaryKey extends keyof RestTableInterface & string = keyof RestTableInterface & string,
+> {
+    TABLE_NAME: RestShortTableName;
+    PRIMARY: tPrimaryKeys<RestShortTableName, PrimaryKey>[];
+    PRIMARY_SHORT: PrimaryKey[];
+    COLUMNS: tColumns<RestShortTableName, RestTableInterface>;
     TYPE_VALIDATION: { [key: string]: iTypeValidation };
     REGEX_VALIDATION: RegExpMap;
-    LIFECYCLE_HOOKS: iRestHooks<RestShortTableNames, RestTableInterfaces, PK>;
+    LIFECYCLE_HOOKS: iRestHooks<OrmGenerics<any, RestShortTableName, RestTableInterface, PrimaryKey>>;
     TABLE_REFERENCES: { [columnName: string]: iConstraint[] };
     TABLE_REFERENCED_BY: { [columnName: string]: iConstraint[] };
 }
 
-export type iRestReactiveLifecycle<
-    Method extends iRestMethods,
-    RestShortTableName extends string,
-    RestTableInterface extends { [key: string]: any },
-    PrimaryKey extends keyof RestTableInterface & string,
-    CustomAndRequiredFields extends { [key: string]: any },
-    RequestTableOverrides extends { [key: string]: any }
-> = {
+export type iRestReactiveLifecycle<G extends OrmGenerics> = {
     beforeProcessing?: {
         [key: string]: (args: {
-            config: iRest<RestShortTableName, RestTableInterface, PrimaryKey>;
-            request: RequestQueryBody<Method, RestTableInterface, CustomAndRequiredFields, RequestTableOverrides>;
+            config: iRest<G['RestShortTableName'], G['RestTableInterface'], G['PrimaryKey']>;
+            request: RequestQueryBody<G['RequestMethod'], G['RestTableInterface'], G['CustomAndRequiredFields'], G['RequestTableOverrides']>;
         }) => void | Promise<void>;
     };
     beforeExecution?: {
         [key: string]: (args: {
-            config: iRest<RestShortTableName, RestTableInterface, PrimaryKey>;
-            request: RequestQueryBody<Method, RestTableInterface, CustomAndRequiredFields, RequestTableOverrides>;
+            config: iRest<G['RestShortTableName'], G['RestTableInterface'], G['PrimaryKey']>;
+            request: RequestQueryBody<G['RequestMethod'], G['RestTableInterface'], G['CustomAndRequiredFields'], G['RequestTableOverrides']>;
         }) => void | Promise<void>;
     };
     afterExecution?: {
         [key: string]: (args: {
-            config: iRest<RestShortTableName, RestTableInterface, PrimaryKey>;
-            request: RequestQueryBody<Method, RestTableInterface, CustomAndRequiredFields, RequestTableOverrides>;
-            response: AxiosResponse<DetermineResponseDataType<Method, RestTableInterface>>;
+            config: iRest<G['RestShortTableName'], G['RestTableInterface'], G['PrimaryKey']>;
+            request: RequestQueryBody<G['RequestMethod'], G['RestTableInterface'], G['CustomAndRequiredFields'], G['RequestTableOverrides']>;
+            response: AxiosResponse<DetermineResponseDataType<G['RequestMethod'], G['RestTableInterface']>>;
         }) => void | Promise<void>;
     };
     afterCommit?: {
         [key: string]: (args: {
-            config: iRest<RestShortTableName, RestTableInterface, PrimaryKey>;
-            request: RequestQueryBody<Method, RestTableInterface, CustomAndRequiredFields, RequestTableOverrides>;
-            response: AxiosResponse<DetermineResponseDataType<Method, RestTableInterface>>;
+            config: iRest<G['RestShortTableName'], G['RestTableInterface'], G['PrimaryKey']>;
+            request: RequestQueryBody<G['RequestMethod'], G['RestTableInterface'], G['CustomAndRequiredFields'], G['RequestTableOverrides']>;
+            response: AxiosResponse<DetermineResponseDataType<G['RequestMethod'], G['RestTableInterface']>>;
         }) => void | Promise<void>;
     };
 };
 
-export type iRestHooks<
-    RestShortTableName extends string,
-    RestTableInterface extends { [key: string]: any },
-    PrimaryKey extends keyof RestTableInterface & string,
-    CustomAndRequiredFields extends { [key: string]: any } = any,
-    RequestTableOverrides extends { [key: string]: any } = { [key in keyof RestTableInterface]: any }
-> = {
-    [Method in iRestMethods]: iRestReactiveLifecycle<
-        Method,
-        RestShortTableName,
-        RestTableInterface,
-        PrimaryKey,
-        CustomAndRequiredFields,
-        RequestTableOverrides
-    >;
+export type iRestHooks<G extends OrmGenerics> = {
+    [Method in iRestMethods]: iRestReactiveLifecycle<G>;
 };
 
 export interface iDynamicApiImport<RestData extends { [key: string]: any } = any> {
@@ -241,7 +226,7 @@ export interface iRestApiFunctions<RestData extends { [key: string]: any } = any
 export interface iC6Object<
     RestShortTableName extends string = any,
     RestTableInterface extends { [key: string]: any } = any,
-    PrimaryKey extends Extract<keyof RestTableInterface, string> = Extract<keyof RestTableInterface, string>
+    PrimaryKey extends keyof RestTableInterface & string = keyof RestTableInterface & string
 > {
     C6VERSION: string;
     TABLES: {
@@ -257,7 +242,7 @@ export interface iC6Object<
 export interface tC6Tables<
     RestShortTableName extends string = any,
     RestTableInterface extends { [key: string]: any } = any,
-    PrimaryKey extends Extract<keyof RestTableInterface, string> = Extract<keyof RestTableInterface, string>
+    PrimaryKey extends keyof RestTableInterface & string = keyof RestTableInterface & string
 > {
     [key: string]: iC6RestfulModel<RestShortTableName, RestTableInterface, PrimaryKey> & { [key: string]: any };
 }

@@ -74,6 +74,7 @@ export const C6Constants = {
 
     MAKEDATE: 'MAKEDATE',
     MAKETIME: 'MAKETIME',
+    MATCH_AGAINST: 'MATCH_AGAINST',
     MONTHNAME: 'MONTHNAME',
     MICROSECOND: 'MICROSECOND',
     MINUTE: 'MINUTE',
@@ -98,6 +99,39 @@ export const C6Constants = {
     SECOND: 'SECOND',
     SECOND_MICROSECOND: 'SECOND_MICROSECOND',
     SELECT: 'SELECT',
+
+    // MySQL Spatial Functions
+    ST_AREA: 'ST_Area',
+    ST_ASBINARY: 'ST_AsBinary',
+    ST_ASTEXT: 'ST_AsText',
+    ST_BUFFER: 'ST_Buffer',
+    ST_CONTAINS: 'ST_Contains',
+    ST_CROSSES: 'ST_Crosses',
+    ST_DIFFERENCE: 'ST_Difference',
+    ST_DIMENSION: 'ST_Dimension',
+    ST_DISJOINT: 'ST_Disjoint',
+    ST_DISTANCE: 'ST_Distance',
+    ST_DISTANCE_SPHERE: 'ST_Distance_Sphere',
+    ST_ENDPOINT: 'ST_EndPoint',
+    ST_ENVELOPE: 'ST_Envelope',
+    ST_EQUALS: 'ST_Equals',
+    ST_GEOMFROMGEOJSON: 'ST_GeomFromGeoJSON',
+    ST_GEOMFROMTEXT: 'ST_GeomFromText',
+    ST_GEOMFROMWKB: 'ST_GeomFromWKB',
+    ST_INTERSECTS: 'ST_Intersects',
+    ST_LENGTH: 'ST_Length',
+    ST_OVERLAPS: 'ST_Overlaps',
+    ST_POINT: 'ST_Point',
+    ST_SETSRID: 'ST_SetSRID',
+    ST_SRID: 'ST_SRID',
+    ST_STARTPOINT: 'ST_StartPoint',
+    ST_SYMDIFFERENCE: 'ST_SymDifference',
+    ST_TOUCHES: 'ST_Touches',
+    ST_UNION: 'ST_Union',
+    ST_WITHIN: 'ST_Within',
+    ST_X: 'ST_X',
+    ST_Y: 'ST_Y',
+
     STR_TO_DATE: 'STR_TO_DATE',
     SUBDATE: 'SUBDATE',
     SUBTIME: 'SUBTIME',
@@ -130,7 +164,6 @@ export const C6Constants = {
 
     YEARWEEK: 'YEARWEEK',
 
-
     // carbon identifiers
     DEPENDANT_ON_ENTITY: 'DEPENDANT_ON_ENTITY',
 
@@ -148,3 +181,6 @@ export const C6Constants = {
     VALIDATE_C6_ENTITY_ID_REGEX: '#^([a-fA-F0-9]{20,35})$#',
 
 };
+
+
+export const C6C = C6Constants;

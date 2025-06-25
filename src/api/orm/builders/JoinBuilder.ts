@@ -1,0 +1,25 @@
+import isVerbose from "../../../variables/isVerbose";
+import {OrmGenerics} from "../../types/ormGenerics";
+import {ConditionBuilder} from "./ConditionBuilder";
+
+export class JoinBuilder<G extends OrmGenerics> extends ConditionBuilder<G>{
+
+    buildJoinClauses(joinArgs: any, params: any[] | Record<string, any>): string {
+        let sql = '';
+
+        for (const joinType in joinArgs) {
+            const joinKind = joinType.replace('_', ' ').toUpperCase();
+
+            for (const raw in joinArgs[joinType]) {
+                const [table, alias] = raw.split(' ');
+                const onClause = this.buildBooleanJoinedConditions(joinArgs[joinType][raw], true, params);
+                const joinSql = alias ? `\`${table}\` AS \`${alias}\`` : `\`${table}\``;
+                sql += ` ${joinKind} JOIN ${joinSql} ON ${onClause}`;
+            }
+        }
+
+        isVerbose() && console.log(`[JOIN] ${sql.trim()}`);
+
+        return sql;
+    }
+}

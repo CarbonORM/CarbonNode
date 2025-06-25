@@ -38,6 +38,7 @@ export function ExpressHandler({C6, mysqlPool}: { C6: iC6Object, mysqlPool: Pool
                     res.status(405).json({error: `Method ${method} not allowed`});
                     return;
             }
+
             const response = await restRequest({
                 C6,
                 mysqlPool,
@@ -45,10 +46,10 @@ export function ExpressHandler({C6, mysqlPool}: { C6: iC6Object, mysqlPool: Pool
                 restModel: C6.TABLES[table]
             })(payload);
 
-            console.log('response', JSON.stringify(response));
-
             res.status(200).json({success: true, ...response});
+
         } catch (err) {
+            res.status(500).json({success: false, error: err});
             next(err);
         }
     };

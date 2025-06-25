@@ -1,58 +1,39 @@
+import {OrmGenerics} from "../types/ormGenerics";
 import {
     apiReturn,
     DetermineResponseDataType,
     iRest,
-    iRestMethods,
     iRestReactiveLifecycle,
     RequestQueryBody
 } from "../types/ormInterfaces";
 import isVerbose from "../../variables/isVerbose";
 
 export abstract class Executor<
-    RequestMethod extends iRestMethods,
-    RestShortTableName extends string = any,
-    RestTableInterface extends { [key: string]: any } = any,
-    PrimaryKey extends Extract<keyof RestTableInterface, string> = Extract<keyof RestTableInterface, string>,
-    CustomAndRequiredFields extends { [key: string]: any } = any,
-    RequestTableOverrides extends { [key in keyof RestTableInterface]: any } = { [key in keyof RestTableInterface]: any }
+    G extends OrmGenerics
 > {
     public constructor(
         protected config: iRest<
-            RestShortTableName,
-            RestTableInterface,
-            PrimaryKey
+            G['RestShortTableName'],
+            G['RestTableInterface'],
+            G['PrimaryKey']
         >,
         protected request: RequestQueryBody<
-            RequestMethod,
-            RestTableInterface,
-            CustomAndRequiredFields,
-            RequestTableOverrides
-        >
-    ) {}
+            G['RequestMethod'],
+            G['RestTableInterface'],
+            G['CustomAndRequiredFields'],
+            G['RequestTableOverrides']
+        >,
+        protected useNamedParams: boolean = false,
+    ) {
+    }
 
-    abstract execute(): Promise<apiReturn<DetermineResponseDataType<RequestMethod, RestTableInterface>>>;
+    abstract execute(): Promise<apiReturn<DetermineResponseDataType<G['RequestMethod'], G['RestTableInterface']>>>;
 
     async runLifecycleHooks<
-        Phase extends keyof iRestReactiveLifecycle<
-            RequestMethod,
-            RestShortTableName,
-            RestTableInterface,
-            PrimaryKey,
-            CustomAndRequiredFields,
-            RequestTableOverrides
-        >
+        Phase extends keyof iRestReactiveLifecycle<G>
     >(
         phase: Phase,
-        args: Parameters<NonNullable<
-            iRestReactiveLifecycle<
-                RequestMethod,
-                RestShortTableName,
-                RestTableInterface,
-                PrimaryKey,
-                CustomAndRequiredFields,
-                RequestTableOverrides
-            >[Phase]
-        >[string]>[0]
+        args: Parameters<NonNullable<iRestReactiveLifecycle<G>[Phase]>[string]>[0]
     ): Promise<void> {
         const lifecycleGroup = this.config.restModel.LIFECYCLE_HOOKS[this.config.requestMethod]?.[phase];
 
@@ -71,7 +52,8 @@ export abstract class Executor<
                 }
 
                 try {
-                    await fn(args);
+                    // todo - this
+                    await fn(args  as any);
                 } catch (err) {
                     console.error(`[LIFECYCLE ERROR] ${this.config.requestMethod}.${String(phase)}:${key}`, err);
                     throw err;
