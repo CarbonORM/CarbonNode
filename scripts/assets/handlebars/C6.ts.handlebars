@@ -6,6 +6,7 @@ import {
     iC6RestfulModel,
     tC6Tables,
     iDynamicApiImport,
+    OrmGenerics,
     removePrefixIfExists,
     restOrm,
     iRest
@@ -201,10 +202,7 @@ export const GLOBAL_REST_PARAMETERS: Omit<iRest<
 
 {{#TABLES}}
 export const {{TABLE_NAME_SHORT_PASCAL_CASE}} = restOrm<
-    '{{TABLE_NAME_SHORT}}',
-    i{{TABLE_NAME_SHORT_PASCAL_CASE}},
-    {{TABLE_NAME_SHORT_PASCAL_CASE}}PrimaryKeys{{#if INTERFACE_OVERRIDES}},
-    {{{INTERFACE_OVERRIDES}}}{{/if}}
+    OrmGenerics<any, '{{TABLE_NAME_SHORT}}', i{{TABLE_NAME_SHORT_PASCAL_CASE}}, {{TABLE_NAME_SHORT_PASCAL_CASE}}PrimaryKeys{{#if INTERFACE_OVERRIDES}}, {{{INTERFACE_OVERRIDES}}}{{/if}}>
 >(() => ({
     ...GLOBAL_REST_PARAMETERS,
     restModel: {{TABLE_NAME_SHORT}}{{#if OBJECT_OVERRIDES}},
