@@ -1,5 +1,5 @@
 // Alias a table name with a given alias
-import {C6Constants as C6C} from "@carbonorm/carbonnode";
+import {C6C} from "../C6Constants";
 
 export const A = (tableName: string, alias: string): string =>
     `${tableName} ${alias}`;
