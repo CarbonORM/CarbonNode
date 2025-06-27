@@ -5,15 +5,44 @@ import {JoinBuilder} from "./JoinBuilder";
 
 export class PaginationBuilder<G extends OrmGenerics> extends JoinBuilder<G> {
 
+    /**
+     * MySQL ORDER/LIMIT/OFFSET generator.
+     *
+     * Accepted structures:
+     * ```ts
+     * ORDER: {
+     *   // simple column with direction
+     *   [property_units.UNIT_ID]: "DESC",
+     *	 // function call (array of arguments)
+     *   [C6Constants.ST_DISTANCE_SPHERE]: [property_units.LOCATION, F(property_units.LOCATION, "pu_target")]
+     * }
+     * ```
+     */
     buildPaginationClause(pagination: any): string {
-        let sql = '';
+        let sql = "";
 
+        /* -------- ORDER BY -------- */
         if (pagination?.[C6Constants.ORDER]) {
-            const orderParts = Object.entries(pagination[C6Constants.ORDER])
-                .map(([col, dir]) => `${Array.isArray(col) ? this.buildAggregateField(col) : col} ${String(dir).toUpperCase()}`);
-            sql += ` ORDER BY ${orderParts.join(', ')}`;
+            const orderParts: string[] = [];
+
+            for (const [key, val] of Object.entries(pagination[C6Constants.ORDER])) {
+                // FUNCTION CALL: val is an array of args
+                if (Array.isArray(val)) {
+                    const args = val
+                        .map((arg) => Array.isArray(arg) ? this.buildAggregateField(arg) : String(arg))
+                        .join(", ");
+                    orderParts.push(`${key}(${args})`);
+                }
+                // SIMPLE COLUMN + DIR (ASC/DESC)
+                else {
+                    orderParts.push(`${key} ${String(val).toUpperCase()}`);
+                }
+            }
+
+            if (orderParts.length) sql += ` ORDER BY ${orderParts.join(", ")}`;
         }
 
+        /* -------- LIMIT / OFFSET -------- */
         if (pagination?.[C6Constants.LIMIT] != null) {
             const lim = parseInt(pagination[C6Constants.LIMIT], 10);
             const page = parseInt(pagination[C6Constants.PAGE] ?? 1, 10);
@@ -22,7 +51,6 @@ export class PaginationBuilder<G extends OrmGenerics> extends JoinBuilder<G> {
         }
 
         isVerbose() && console.log(`[PAGINATION] ${sql.trim()}`);
-
         return sql;
     }
 }
