@@ -1,7 +1,6 @@
 import {SelectQueryBuilder} from "../orm/queries/SelectQueryBuilder";
 import {OrmGenerics} from "../types/ormGenerics";
 import {
-    apiReturn,
     DetermineResponseDataType,
     iPostC6RestResponse,
     iPutC6RestResponse,
@@ -16,7 +15,7 @@ export class SqlExecutor<
     G extends OrmGenerics
 > extends Executor<G>{
 
-    async execute(): Promise<apiReturn<DetermineResponseDataType<G['RequestMethod'], G['RestTableInterface']>>> {
+    async execute(): Promise<DetermineResponseDataType<G['RequestMethod'], G['RestTableInterface']>> {
         const {TABLE_NAME} = this.config.restModel;
         const method = this.config.requestMethod;
 
@@ -27,14 +26,14 @@ export class SqlExecutor<
             case 'GET': {
                 const rest = await this.select(TABLE_NAME, undefined, this.request);
                 console.log(`[SQL EXECUTOR] ✅ GET result:`, rest);
-                return rest as apiReturn<DetermineResponseDataType<G['RequestMethod'], G['RestTableInterface']>>;
+                return rest as DetermineResponseDataType<G['RequestMethod'], G['RestTableInterface']>;
             }
 
             case 'POST': {
                 const result = await this.insert(TABLE_NAME, this.request);
                 console.log(`[SQL EXECUTOR] ✅ POST result:`, result);
                 const created: iPostC6RestResponse = {rest: result, created: true};
-                return created as apiReturn<DetermineResponseDataType<G['RequestMethod'], G['RestTableInterface']>>;
+                return created as DetermineResponseDataType<G['RequestMethod'], G['RestTableInterface']>;
             }
 
             case 'PUT': {
@@ -45,7 +44,7 @@ export class SqlExecutor<
                     updated: true,
                     rowCount: result.rest.affectedRows
                 };
-                return updated as apiReturn<DetermineResponseDataType<G['RequestMethod'], G['RestTableInterface']>>;
+                return updated as DetermineResponseDataType<G['RequestMethod'], G['RestTableInterface']>;
             }
 
             case 'DELETE': {
@@ -56,7 +55,7 @@ export class SqlExecutor<
                     deleted: true,
                     rowCount: result.rest.affectedRows
                 };
-                return deleted as apiReturn<DetermineResponseDataType<G['RequestMethod'], G['RestTableInterface']>>;
+                return deleted as DetermineResponseDataType<G['RequestMethod'], G['RestTableInterface']>;
             }
 
             default:

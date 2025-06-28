@@ -7,7 +7,6 @@ import convertForRequestBody from "../convertForRequestBody";
 import {eFetchDependencies} from "../types/dynamicFetching";
 import {OrmGenerics} from "../types/ormGenerics";
 import {
-    apiReturn,
     DELETE, DetermineResponseDataType,
     GET,
     iCacheAPI,
@@ -115,7 +114,7 @@ export class HttpExecutor<
         })
     }
 
-    public async execute(): Promise<apiReturn<DetermineResponseDataType<G['RequestMethod'], G['RestTableInterface']>>> {
+    public async execute(): Promise<DetermineResponseDataType<G['RequestMethod'], G['RestTableInterface']>> {
 
         type ResponseDataType = DetermineResponseDataType<G['RequestMethod'], G['RestTableInterface']>;
 
@@ -205,8 +204,8 @@ export class HttpExecutor<
 
         }
 
-        // this could return itself with a new page number, or undefined if the end is reached
-        const apiRequest = async (): Promise<apiReturn<DetermineResponseDataType<G['RequestMethod'], G['RestTableInterface']>>> => {
+        // this is parameterless and could return itself with a new page number, or undefined if the end is reached
+        const apiRequest = async (): Promise<DetermineResponseDataType<G['RequestMethod'], G['RestTableInterface']>> => {
 
             const {
                 debug,
@@ -269,7 +268,7 @@ export class HttpExecutor<
                 if (true === cacheResults) {
 
                     // just find the next, non-fetched, page and return a function to request it
-                    if (undefined !== cacheResult) {
+                    if (undefined !== cacheResult) { // we will return in this loop
 
                         do {
 
@@ -542,6 +541,7 @@ export class HttpExecutor<
 
                             const cacheIndex = apiRequestCache.findIndex(cache => cache.requestArgumentsSerialized === querySerialized);
 
+                            // TODO - currently nonthing is setting this correctly
                             apiRequestCache[cacheIndex].final = false === returnGetNextPageFunction
 
                             // only cache get method requests
@@ -561,7 +561,6 @@ export class HttpExecutor<
 
                         if (false === apiResponse) {
 
-
                             if (debug && isLocal()) {
 
                                 toast.warning("DEVS: TestRestfulResponse returned false for (" + operatingTable + ").", toastOptionsDevs);
@@ -571,7 +570,6 @@ export class HttpExecutor<
                             return response;
 
                         }
-
 
                         const callback = () => this.runLifecycleHooks<"afterCommit">(
                             "afterCommit", {
@@ -583,7 +581,7 @@ export class HttpExecutor<
                         if (undefined !== reactBootstrap && response) {
                             switch (requestMethod) {
                                 case GET:
-                                    reactBootstrap.updateRestfulObjectArrays<G['RestTableInterface']>({
+                                    response.data && reactBootstrap.updateRestfulObjectArrays<G['RestTableInterface']>({
                                         dataOrCallback: Array.isArray(response.data.rest) ? response.data.rest : [response.data.rest],
                                         stateKey: this.config.restModel.TABLE_NAME,
                                         uniqueObjectId: this.config.restModel.PRIMARY_SHORT as (keyof G['RestTableInterface'])[],
@@ -621,7 +619,7 @@ export class HttpExecutor<
 
                                 console.log('%c Response Data:', 'color: #0c0', responseData.rest)
 
-                                console.log('%c Will return get next page function:' + (1 !== query?.[C6.PAGINATION]?.[C6.LIMIT] ? '' : ' (Will not return with explicit limit 1 set)'), 'color: #0c0', true === returnGetNextPageFunction)
+                                console.log('%c Will return get next page function:' + (returnGetNextPageFunction ? '' : ' (Will not return with explicit limit 1 set)'), 'color: #0c0', true === returnGetNextPageFunction)
 
                                 console.trace();
 
@@ -629,12 +627,18 @@ export class HttpExecutor<
 
                             }
 
-                            if (false === returnGetNextPageFunction
-                                && true === debug
-                                && isLocal()) {
+                            if (false === returnGetNextPageFunction) {
 
-                                toast.success("DEVS: Response returned length (" + responseData.rest?.length + ") less than limit (" + query?.[C6.PAGINATION]?.[C6.LIMIT] + ").", toastOptionsDevs);
+                                responseData.next = apiRequest
 
+                            } else {
+
+                                responseData.next = undefined;
+
+                                if (true === debug
+                                    && isLocal()) {
+                                    toast.success("DEVS: Response returned length (" + responseData.rest?.length + ") less than limit (" + query?.[C6.PAGINATION]?.[C6.LIMIT] + ").", toastOptionsDevs);
+                                }
                             }
 
 
@@ -657,6 +661,7 @@ export class HttpExecutor<
                                     [key: string]: iConstraint[]
                                 } = {};
 
+                                // Remember this is a binary bitwise operation, so we can check for multiple dependencies at once
                                 if (fetchDependencies & eFetchDependencies.C6ENTITY) {
 
                                     dependencies = operatingTable.endsWith("carbon_carbons")
@@ -713,7 +718,7 @@ export class HttpExecutor<
                                     }
                                 } = {}
 
-                                let apiRequestPromises: Array<apiReturn<iGetC6RestResponse<any>>> = []
+                                let apiRequestPromises: Array<iGetC6RestResponse<any>> = []
 
                                 console.log('%c Dependencies', 'color: #005555', dependencies)
 
@@ -882,10 +887,11 @@ export class HttpExecutor<
 
                         }
 
+                        // this is the literal axios return
                         return response;
 
                     }
-                ).then(response => response.data);
+                ).then(response => response.data); // this escapes from axios context
 
             } catch (throwableError) {
 

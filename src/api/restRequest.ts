@@ -1,7 +1,7 @@
 import isNode from '../variables/isNode';
 import {OrmGenerics} from "./types/ormGenerics";
 import {
-    apiReturn, DetermineResponseDataType,
+    DetermineResponseDataType,
     iRest, RequestQueryBody
 } from "./types/ormInterfaces";
 
@@ -28,7 +28,7 @@ export default function restRequest<
             G['CustomAndRequiredFields'],
             G['RequestTableOverrides']
         >,
-    ): Promise<apiReturn<DetermineResponseDataType<G['RequestMethod'], G['RestTableInterface']>>> => {
+    ): Promise<DetermineResponseDataType<G['RequestMethod'], G['RestTableInterface']>> => {
 
         const config = typeof configX === "function" ? configX() : configX;
 

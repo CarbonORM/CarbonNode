@@ -1,6 +1,4 @@
 import {AxiosPromise} from "axios";
-import isTest from "../../variables/isTest";
-import isVerbose from "../../variables/isVerbose";
 import { iCacheAPI } from "api/types/ormInterfaces";
 
 // do not remove entries from this array. It is used to track the progress of API requests.
@@ -29,39 +27,20 @@ export function clearCache(props?: iClearCache) {
 
 export function checkCache<ResponseDataType = any, RestShortTableNames = string>(cacheResult: iCacheAPI<ResponseDataType>, requestMethod: string, tableName: RestShortTableNames | RestShortTableNames[], request: any): false | undefined | null | AxiosPromise<ResponseDataType> {
 
-    if (undefined === cacheResult?.response) {
+    if (undefined === cacheResult) {
 
-        console.groupCollapsed('%c API: The request on (' + tableName + ') is in cache and the response is undefined. The request has not finished. Returning the request Promise!', 'color: #0c0')
-
-        console.log('%c ' + requestMethod + ' ' + tableName, 'color: #0c0')
-
-        console.log('%c Request Data (note you may see the success and/or error prompt):', 'color: #0c0', request)
-
-        console.groupEnd()
-
-        return cacheResult.request;
+        return false;
 
     }
 
-    if (true === cacheResult?.final) {
+    console.groupCollapsed('%c API: The request on (' + tableName + ') is in cache. Returning the request Promise!', 'color: #0c0')
 
-        if (false === isTest() || true === isVerbose()) {
+    console.log('%c ' + requestMethod + ' ' + tableName, 'color: #0c0')
 
-            console.groupCollapsed('%c API: Rest api cache (' + requestMethod + '  ' + tableName + ') has reached the final result. Returning undefined!', 'color: #cc0')
+    console.log('%c Request Data (note you may see the success and/or error prompt):', 'color: #0c0', request)
 
-            console.log('%c ' + requestMethod + ' ' + tableName, 'color: #cc0')
+    console.groupEnd()
 
-            console.log('%c Request Data (note you may see the success and/or error prompt):', 'color: #cc0', request)
+    return cacheResult.request;
 
-            console.log('%c Response Data:', 'color: #cc0', cacheResult?.response?.data?.rest || cacheResult?.response?.data || cacheResult?.response)
-
-            console.groupEnd()
-
-        }
-
-        return undefined;
-
-    }
-
-    return false;
 }

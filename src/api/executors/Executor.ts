@@ -1,6 +1,5 @@
 import {OrmGenerics} from "../types/ormGenerics";
 import {
-    apiReturn,
     DetermineResponseDataType,
     iRest,
     iRestReactiveLifecycle,
@@ -27,7 +26,7 @@ export abstract class Executor<
     ) {
     }
 
-    abstract execute(): Promise<apiReturn<DetermineResponseDataType<G['RequestMethod'], G['RestTableInterface']>>>;
+    abstract execute(): Promise<DetermineResponseDataType<G['RequestMethod'], G['RestTableInterface']>>;
 
     async runLifecycleHooks<
         Phase extends keyof iRestReactiveLifecycle<G>

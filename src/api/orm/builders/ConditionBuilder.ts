@@ -1,14 +1,14 @@
 import {C6Constants} from "api/C6Constants";
 import isVerbose from "../../../variables/isVerbose";
 import {OrmGenerics} from "../../types/ormGenerics";
-import {apiReturn, DetermineResponseDataType} from "../../types/ormInterfaces";
+import {DetermineResponseDataType} from "../../types/ormInterfaces";
 import {convertHexIfBinary} from "../utils/sqlUtils";
 import {AggregateBuilder} from "./AggregateBuilder";
 
 export class ConditionBuilder<
     G extends OrmGenerics
 > extends AggregateBuilder<G> {
-    execute(): Promise<apiReturn<DetermineResponseDataType<G['RequestMethod'], G['RestTableInterface']>>> {
+    execute(): Promise<DetermineResponseDataType<G['RequestMethod'], G['RestTableInterface']>> {
         throw new Error("Method not implemented.");
     }
 

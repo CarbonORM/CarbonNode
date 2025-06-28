@@ -1,11 +1,11 @@
 // Refined TypeScript types for CarbonORM
 
-import { AxiosInstance, AxiosPromise, AxiosResponse } from "axios";
-import { Pool } from "mysql2/promise";
-import { eFetchDependencies } from "./dynamicFetching";
-import { Modify } from "./modifyTypes";
-import { JoinType, OrderDirection, SQLComparisonOperator, SQLFunction } from "./mysqlTypes";
-import { CarbonReact } from "@carbonorm/carbonreact";
+import {AxiosInstance, AxiosPromise, AxiosResponse} from "axios";
+import {Pool} from "mysql2/promise";
+import {eFetchDependencies} from "./dynamicFetching";
+import {Modify} from "./modifyTypes";
+import {JoinType, OrderDirection, SQLComparisonOperator, SQLFunction} from "./mysqlTypes";
+import {CarbonReact} from "@carbonorm/carbonreact";
 import {OrmGenerics} from "./ormGenerics";
 
 export type iRestMethods = 'GET' | 'POST' | 'PUT' | 'DELETE';
@@ -14,10 +14,21 @@ export const PUT = 'PUT';
 export const GET = 'GET';
 export const DELETE = 'DELETE';
 
-export interface stringMap { [key: string]: string; }
-export interface stringNumberMap { [key: string]: string | number; }
-export interface RegExpMap { [key: string]: RegExp | RegExpMap; }
-export interface complexMap { [key: string]: stringMap | stringNumberMap | stringMap[] | RegExpMap; }
+export interface stringMap {
+    [key: string]: string;
+}
+
+export interface stringNumberMap {
+    [key: string]: string | number;
+}
+
+export interface RegExpMap {
+    [key: string]: RegExp | RegExpMap;
+}
+
+export interface complexMap {
+    [key: string]: stringMap | stringNumberMap | stringMap[] | RegExpMap;
+}
 
 export interface iTypeValidation {
     MYSQL_TYPE: string;
@@ -66,7 +77,7 @@ export type RequestGetPutDeleteBody<T extends { [key: string]: any } = any> = {
 export type iAPI<T extends { [key: string]: any }> = T & {
     dataInsertMultipleRows?: T[];
     cacheResults?: boolean;
-    fetchDependencies?: number | eFetchDependencies | Awaited<apiReturn<iGetC6RestResponse<any>>>[];
+    fetchDependencies?: number | eFetchDependencies | Awaited<iGetC6RestResponse<any>>[];
     debug?: boolean;
     success?: string | ((r: AxiosResponse) => string | void);
     error?: string | ((r: AxiosResponse) => string | void);
@@ -88,7 +99,9 @@ export interface iCacheAPI<ResponseDataType = any> {
     final?: boolean;
 }
 
-export interface iChangeC6Data { rowCount: number; }
+export interface iChangeC6Data {
+    rowCount: number;
+}
 
 export interface iDeleteC6RestResponse<RestData = any, RequestData = any> extends iChangeC6Data, iC6RestResponse<RestData> {
     deleted: boolean | number | string | RequestData;
@@ -108,28 +121,31 @@ export interface iC6RestResponse<RestData> {
     sql?: any;
 }
 
-export type iGetC6RestResponse<ResponseDataType, ResponseDataOverrides = {}> = iC6RestResponse<
+export interface iGetC6RestResponse<
+    ResponseDataType extends { [key: string]: any },
+    ResponseDataOverrides = {}
+> extends iC6RestResponse<
     Modify<ResponseDataType, ResponseDataOverrides> | Modify<ResponseDataType, ResponseDataOverrides>[]
->;
-
-export type apiReturn<Response> =
-    | null
-    | undefined
-    | Response
-    | (Response extends iPutC6RestResponse | iDeleteC6RestResponse | iPostC6RestResponse ? null : () => apiReturn<Response>);
+> {
+    next?: () => Promise<DetermineResponseDataType<"GET", ResponseDataType, ResponseDataOverrides>>;
+}
 
 export type DetermineResponseDataType<
     Method extends iRestMethods,
-    RestTableInterface extends { [key: string]: any }
-> = Method extends 'POST'
+    RestTableInterface extends { [key: string]: any },
+    ResponseDataOverrides = {}
+> =
+    null
+    | undefined
+    | (Method extends 'POST'
     ? iPostC6RestResponse<RestTableInterface>
     : Method extends 'GET'
-        ? iGetC6RestResponse<RestTableInterface>
+        ? iGetC6RestResponse<RestTableInterface, ResponseDataOverrides>
         : Method extends 'PUT'
             ? iPutC6RestResponse<RestTableInterface>
             : Method extends 'DELETE'
                 ? iDeleteC6RestResponse<RestTableInterface>
-                : never;
+                : never);
 
 export interface iRest<
     RestShortTableName extends string = any,
@@ -217,10 +233,10 @@ export interface iDynamicApiImport<RestData extends { [key: string]: any } = any
 }
 
 export interface iRestApiFunctions<RestData extends { [key: string]: any } = any> {
-    Delete: (request?: RequestQueryBody<'DELETE', RestData>) => apiReturn<iDeleteC6RestResponse<RestData>>;
-    Post: (request?: RequestQueryBody<'POST', RestData>) => apiReturn<iPostC6RestResponse<RestData>>;
-    Get: (request?: RequestQueryBody<'GET', RestData>) => apiReturn<iGetC6RestResponse<RestData>>;
-    Put: (request?: RequestQueryBody<'PUT', RestData>) => apiReturn<iPutC6RestResponse<RestData>>;
+    Delete: (request?: RequestQueryBody<'DELETE', RestData>) => iDeleteC6RestResponse<RestData>;
+    Post: (request?: RequestQueryBody<'POST', RestData>) => iPostC6RestResponse<RestData>;
+    Get: (request?: RequestQueryBody<'GET', RestData>) => iGetC6RestResponse<RestData>;
+    Put: (request?: RequestQueryBody<'PUT', RestData>) => iPutC6RestResponse<RestData>;
 }
 
 export interface iC6Object<
@@ -236,6 +252,7 @@ export interface iC6Object<
     };
     PREFIX: string;
     IMPORT: (tableName: string) => Promise<iDynamicApiImport>;
+
     [key: string]: any;
 }
 
