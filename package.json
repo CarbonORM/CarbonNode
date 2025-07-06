@@ -1,6 +1,6 @@
 {
   "name": "@carbonorm/carbonnode",
-  "version": "3.2.1",
+  "version": "3.2.2",
   "browser": "dist/index.umd.js",
   "exports": {
     ".": {
@@ -12,7 +12,7 @@
   "type": "module",
   "license": "MIT",
   "dependencies": {
-    "@carbonorm/carbonreact": "^4.0.24",
+    "@carbonorm/carbonreact": "^4.0.25",
     "buffer": "^6.0.3",
     "geojson": "^0.5.0",
     "handlebars": "^4.7.8",
@@ -75,7 +75,6 @@
     "build:index": "npx barrelsby -d ./src --delete --exclude '(jestHoc|\\.test|\\.d).(js|tsx?)$' --exportDefault --verbose",
     "build:generateRestBindings": "cd ./scripts/ && tsc --downlevelIteration --resolveJsonModule generateRestBindings.ts && mv generateRestBindings.js generateRestBindings.cjs",
     "generateRestBindings": "npm run build:generateRestBindings && node ./scripts/generateRestBindings.cjs",
-    "generateRestBindings:assessorly": "npm run build:generateRestBindings && node ./scripts/generateRestBindings.cjs --react 'import Assessorly from \"../../fed/src/Assessorly\"; Assessorly.instance'",
     "c6": "npm run generateRestBindings"
   },
   "bin": {

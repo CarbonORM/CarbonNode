@@ -38,9 +38,13 @@ interface iDefine{{TABLE_NAME_SHORT_PASCAL_CASE}} {
 {{/each}}
 }
 
-export type {{TABLE_NAME_SHORT_PASCAL_CASE}}PrimaryKeys = {{#PRIMARY_SHORT}}
-    '{{this}}'{{#unless @last}} |{{else}};{{/unless}}
-{{/PRIMARY_SHORT}}
+export type {{TABLE_NAME_SHORT_PASCAL_CASE}}PrimaryKeys = {{#if PRIMARY_SHORT.length}}
+    {{#each PRIMARY_SHORT}}
+        '{{this}}'{{#unless @last}} |{{/unless}}
+    {{/each}};
+{{else}}
+    never;
+{{/if}}
 
 export const {{TABLE_NAME_SHORT}}:
     iC6RestfulModel<

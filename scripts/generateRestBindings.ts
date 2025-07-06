@@ -315,6 +315,10 @@ const parseSQLToTypeScript = (sql: string) => {
             ? primaryKeyMatch[1].split(',').map(key => key.trim().replace(/`/g, ''))
             : [];
 
+        const primaryKeysType = primaryKeys.length > 0
+            ? primaryKeys.map(pk => `'${pk}'`).join(' | ')
+            : 'never';
+
         // Extract foreign keys
         const foreignKeyRegex: RegExp = /CONSTRAINT `([^`]+)` FOREIGN KEY \(`([^`]+)`\) REFERENCES `([^`]+)` \(`([^`]+)`\)( ON DELETE (\w+))?( ON UPDATE (\w+))?/g;
         let foreignKeyMatch: RegExpExecArray | null;
@@ -369,6 +373,7 @@ const parseSQLToTypeScript = (sql: string) => {
             TABLE_NAME_SHORT_PASCAL_CASE: tableName.replace(MySQLDump.DB_PREFIX, '').split('_').map(capitalizeFirstLetter).join('_'),
             PRIMARY: primaryKeys.map(pk => `${tableName}.${pk}`),
             PRIMARY_SHORT: primaryKeys,
+            PRIMARY_KEYS_TYPE: primaryKeysType,
             COLUMNS: {},
             COLUMNS_UPPERCASE: {},
             TYPE_VALIDATION: {},

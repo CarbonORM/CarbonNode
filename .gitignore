@@ -93,6 +93,9 @@ web_modules/
 .cache
 .parcel-cache
 
+# Carbon Generations
+rest/
+
 # Next.js build output
 .next
 out
