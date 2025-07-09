@@ -253,6 +253,8 @@ export interface iC6Object<
     PREFIX: string;
     IMPORT: (tableName: string) => Promise<iDynamicApiImport>;
 
+    GLOBAL_REGEX_VALIDATION?: RegExpMap;
+
     [key: string]: any;
 }
 
