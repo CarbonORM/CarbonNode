@@ -1,4 +1,4 @@
-import {C6Constants} from "api/C6Constants";
+import {C6C} from "api/C6Constants";
 import isVerbose from "../../../variables/isVerbose";
 import {OrmGenerics} from "../../types/ormGenerics";
 import {DetermineResponseDataType} from "../../types/ormInterfaces";
@@ -13,10 +13,13 @@ export class ConditionBuilder<
     }
 
     private readonly OPERATORS = new Set([
-        '=', '!=', '<', '<=', '>', '>=',
-        'LIKE', 'NOT LIKE', 'IN', 'NOT IN',
-        'IS', 'IS NOT', 'BETWEEN', 'NOT BETWEEN',
-        C6Constants.MATCH_AGAINST
+        C6C.EQUAL, C6C.NOT_EQUAL, C6C.LESS_THAN, C6C.LESS_THAN_OR_EQUAL_TO,
+        C6C.GREATER_THAN, C6C.GREATER_THAN_OR_EQUAL_TO,
+        C6C.LIKE, C6C.NOT_LIKE,
+        C6C.IN, C6C.NOT_IN, 'NOT IN',
+        C6C.IS, C6C.IS_NOT,
+        C6C.BETWEEN, 'NOT BETWEEN',
+        C6C.MATCH_AGAINST
     ]);
 
     private validateOperator(op: string) {
@@ -54,7 +57,7 @@ export class ConditionBuilder<
             this.validateOperator(op);
 
 
-            if (op === C6Constants.MATCH_AGAINST && Array.isArray(value)) {
+            if (op === C6C.MATCH_AGAINST && Array.isArray(value)) {
                 const [search, mode] = value;
                 const paramName = this.useNamedParams ? `param${Object.keys(params).length}` : null;
                 if (this.useNamedParams) {
@@ -82,6 +85,12 @@ export class ConditionBuilder<
                 return matchClause;
             }
 
+            if ((op === C6C.IN || op === C6C.NOT_IN || op === 'NOT IN') && Array.isArray(value)) {
+                const placeholders = value.map(v => this.addParam(params, column, v)).join(', ');
+                const normalized = op.replace('_', ' ');
+                return `( ${column} ${normalized} (${placeholders}) )`;
+            }
+
             // handle other operators
             return `( ${column} ${op} ${this.addParam(params, column, value)} )`;
         };
@@ -92,6 +101,9 @@ export class ConditionBuilder<
             for (const [key, value] of Object.entries(set)) {
                 if (typeof value === 'object' && value !== null && Object.keys(value).length === 1) {
                     const [op, val] = Object.entries(value)[0];
+                    parts.push(addCondition(key, op, val));
+                } else if (Array.isArray(value) && value.length === 2 && typeof value[0] === 'string') {
+                    const [op, val] = value as [string, any];
                     parts.push(addCondition(key, op, val));
                 } else {
                     parts.push(addCondition(key, '=', value));
