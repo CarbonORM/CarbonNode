@@ -101,13 +101,12 @@ const {{TABLE_NAME_SHORT}}:
         },{{/this}}],{{/each}}
     }
 }
-
 {{/TABLES}}
 
 export const TABLES: tC6Tables = {
-{{#TABLES}}
-    {{TABLE_NAME_SHORT}}: {{TABLE_NAME_SHORT}},
-{{/TABLES}}
+{{#TABLES}}{{TABLE_NAME_SHORT}},{{/TABLES}}
+} satisfies {
+    [K in keyof RestTableInterfaces]: C6RestfulModel<K, RestTableInterfaces[K], keyof RestTableInterfaces[K] & string>;
 };
 
 let dynamicImportCache : Record<string, iDynamicApiImport> = {};
@@ -116,48 +115,35 @@ let dynamicImportCache : Record<string, iDynamicApiImport> = {};
 async function dynamicRestImport(tableName: string) : Promise<iDynamicApiImport> {
 
     tableName = tableName.toLowerCase();
-
     if (dynamicImportCache[tableName]) {
-
             return dynamicImportCache[tableName]
-
     }
 
     // if tableName is not a key in the TABLES object then throw an error
-    if (!TABLES[tableName]) {
-
+    if (!TABLES[tableName as RestShortTableNames]) {
         const error = (table: string) => {
             throw Error('Table (' + table + ') does not exist in the TABLES object. Possible values include (' + Object.keys(TABLES).join(', ') + ')');
         }
-
         if (!tableName.startsWith(RestTablePrefix.toLowerCase())) {
-
             error(tableName);
-
         }
-
         tableName = removePrefixIfExists(tableName, RestTablePrefix);
-
-        if (!TABLES[tableName]) {
-
+        if (!TABLES[tableName as RestShortTableNames]) {
             error(tableName);
-
         }
-
     }
-
     // This will rightfully throw a dynamic import warning in the console, but it is necessary to use dynamic imports
     const module = await import(/* @vite-ignore */ './' + (tableName.split('_')
             .map(word => word.charAt(0).toUpperCase() + word.slice(1))
             .join('_')) + '.ts');
 
     dynamicImportCache[tableName] = module
-
     return module
-
 }
 
-export const C6 : iC6Object = {
+export type RestTableInterfaces = {{{RestTableInterfaces}}};
+
+export const C6 : iC6Object<RestTableInterfaces> = {
     ...C6Constants,
     C6VERSION: '{{C6VERSION}}',
     IMPORT: dynamicRestImport,
@@ -165,8 +151,6 @@ export const C6 : iC6Object = {
     TABLES: TABLES,
     ...TABLES
 };
-
-export type RestTableInterfaces = {{{RestTableInterfaces}}};
 
 export type tStatefulApiData<T> = T[] | undefined | null;
 

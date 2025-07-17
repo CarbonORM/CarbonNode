@@ -130,13 +130,13 @@ export class HttpExecutor<
             clearCache,
         } = this.config
 
+        console.log('this.config', this.config)
 
         await this.runLifecycleHooks<"beforeProcessing">(
             "beforeProcessing", {
                 config: this.config,
                 request: this.request,
             });
-
 
         const tableName = restModel.TABLE_NAME as string;
 

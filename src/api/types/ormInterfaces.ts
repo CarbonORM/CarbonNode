@@ -174,12 +174,18 @@ export type tColumns<TableName extends string, T extends { [key: string]: any }>
     [K in keyof T & string as `${TableName}.${K}`]: K;
 };
 
-export type tPrimaryKeys<TableName extends string, PK extends string> = `${TableName}.${PK}`;
+export type tPrimaryKeys<TableName extends string, PK extends string> =
+    PK extends any ? `${TableName}.${PK}` : never;
+
+
+type UppercaseFieldMap<T> = {
+    [K in keyof T as Uppercase<string & K>]: any;
+};
 
 export type C6RestfulModel<
     RestShortTableName extends string,
     RestTableInterface extends Record<string, any> = any,
-    PrimaryKey extends keyof RestTableInterface & string = keyof RestTableInterface & string
+    PrimaryKey extends (keyof RestTableInterface & string) = keyof RestTableInterface & string
 > = {
     TABLE_NAME: RestShortTableName;
     PRIMARY: Array<tPrimaryKeys<RestShortTableName, PrimaryKey>>;
@@ -190,7 +196,7 @@ export type C6RestfulModel<
     LIFECYCLE_HOOKS: iRestHooks<OrmGenerics<any, RestShortTableName, RestTableInterface, PrimaryKey>>;
     TABLE_REFERENCES: { [columnName: string]: iConstraint[] };
     TABLE_REFERENCED_BY: { [columnName: string]: iConstraint[] };
-} & Required<{ [K in keyof RestTableInterface as Uppercase<string & K>]: string }>
+} & Required<UppercaseFieldMap<RestTableInterface>>;
 
 export type iRestReactiveLifecycle<G extends OrmGenerics> = {
     beforeProcessing?: {
@@ -239,11 +245,14 @@ export interface iRestApiFunctions<RestData extends { [key: string]: any } = any
     Put: (request?: RequestQueryBody<'PUT', RestData>) => iPutC6RestResponse<RestData>;
 }
 
+// TODO - remove the key
 export interface iC6Object<
-    Tables extends Record<string, C6RestfulModel<any, any, any>> = Record<string, C6RestfulModel<any, any, any>>
+    RestTableInterfaces extends { [key: string]: any } = { [key: string]: any },
 > {
     C6VERSION: string;
-    TABLES: Tables;
+    TABLES: {
+        [K in Extract<keyof RestTableInterfaces, string>]: C6RestfulModel<K, RestTableInterfaces[K], keyof RestTableInterfaces[K] & string>;
+    };
     PREFIX: string;
     IMPORT: (tableName: string) => Promise<iDynamicApiImport>;
     [key: string]: any;

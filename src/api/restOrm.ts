@@ -15,12 +15,11 @@ export function restOrm<
 
     const methods: iRestMethods[] = ["GET", "PUT", "POST", "DELETE"];
 
-    const userConfig = configFn();
-
     return methods.reduce((acc, method) => ({
         ...acc,
         [method[0] + method.slice(1).toLowerCase()]: restRequest<G>(() => ({
-            ...userConfig,
+            // configFn - absolutely must be called and deconstructed here, not earlier
+            ...configFn(),
             requestMethod: method as iRestMethods,
         }))
     }), {} as { [key in iCallRest]: ReturnType<typeof restRequest<G>> })
