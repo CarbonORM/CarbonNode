@@ -85,7 +85,7 @@ export class ConditionBuilder<
                 return matchClause;
             }
 
-            if ((op === C6C.IN || op === C6C.NOT_IN || op === 'NOT IN') && Array.isArray(value)) {
+            if ((op === C6C.IN || op === C6C.NOT_IN) && Array.isArray(value)) {
                 const placeholders = value.map(v => this.addParam(params, column, v)).join(', ');
                 const normalized = op.replace('_', ' ');
                 return `( ${column} ${normalized} (${placeholders}) )`;
