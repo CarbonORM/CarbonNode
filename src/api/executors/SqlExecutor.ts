@@ -6,6 +6,7 @@ import {
     iPutC6RestResponse,
     iDeleteC6RestResponse
 } from "../types/ormInterfaces";
+import {AxiosResponse} from "axios";
 import namedPlaceholders from 'named-placeholders';
 import {PoolConnection, RowDataPacket, ResultSetHeader} from 'mysql2/promise';
 import {Buffer} from 'buffer';
@@ -19,48 +20,80 @@ export class SqlExecutor<
         const {TABLE_NAME} = this.config.restModel;
         const method = this.config.requestMethod;
 
+        await this.runLifecycleHooks("beforeProcessing", {
+            config: this.config,
+            request: this.request,
+        });
+
         console.log(`[SQL EXECUTOR] ▶️ Executing ${method} on table "${TABLE_NAME}"`);
         console.log(`[SQL EXECUTOR] 🧾 Request payload:`, this.request);
+
+        await this.runLifecycleHooks("beforeExecution", {
+            config: this.config,
+            request: this.request,
+        });
+
+        let result: DetermineResponseDataType<G['RequestMethod'], G['RestTableInterface']>;
 
         switch (method) {
             case 'GET': {
                 const rest = await this.select(TABLE_NAME, undefined, this.request);
                 console.log(`[SQL EXECUTOR] ✅ GET result:`, rest);
-                return rest as DetermineResponseDataType<G['RequestMethod'], G['RestTableInterface']>;
+                result = rest as DetermineResponseDataType<G['RequestMethod'], G['RestTableInterface']>;
+                break;
             }
 
             case 'POST': {
-                const result = await this.insert(TABLE_NAME, this.request);
-                console.log(`[SQL EXECUTOR] ✅ POST result:`, result);
-                const created: iPostC6RestResponse = {rest: result, created: true};
-                return created as DetermineResponseDataType<G['RequestMethod'], G['RestTableInterface']>;
+                const insertResult = await this.insert(TABLE_NAME, this.request);
+                console.log(`[SQL EXECUTOR] ✅ POST result:`, insertResult);
+                const created: iPostC6RestResponse = {rest: insertResult, created: true};
+                result = created as DetermineResponseDataType<G['RequestMethod'], G['RestTableInterface']>;
+                break;
             }
 
             case 'PUT': {
-                const result = await this.update(TABLE_NAME, [], this.request);
-                console.log(`[SQL EXECUTOR] ✅ PUT result:`, result);
+                const updateResult = await this.update(TABLE_NAME, [], this.request);
+                console.log(`[SQL EXECUTOR] ✅ PUT result:`, updateResult);
                 const updated: iPutC6RestResponse = {
-                    ...result,
+                    ...updateResult,
                     updated: true,
-                    rowCount: result.rest.affectedRows
+                    rowCount: updateResult.rest.affectedRows
                 };
-                return updated as DetermineResponseDataType<G['RequestMethod'], G['RestTableInterface']>;
+                result = updated as DetermineResponseDataType<G['RequestMethod'], G['RestTableInterface']>;
+                break;
             }
 
             case 'DELETE': {
-                const result = await this.delete(TABLE_NAME, [], this.request);
-                console.log(`[SQL EXECUTOR] ✅ DELETE result:`, result);
+                const deleteResult = await this.delete(TABLE_NAME, [], this.request);
+                console.log(`[SQL EXECUTOR] ✅ DELETE result:`, deleteResult);
                 const deleted: iDeleteC6RestResponse = {
-                    rest: result,
+                    rest: deleteResult,
                     deleted: true,
-                    rowCount: result.rest.affectedRows
+                    rowCount: deleteResult.rest.affectedRows
                 };
-                return deleted as DetermineResponseDataType<G['RequestMethod'], G['RestTableInterface']>;
+                result = deleted as DetermineResponseDataType<G['RequestMethod'], G['RestTableInterface']>;
+                break;
             }
 
             default:
                 throw new Error(`Unsupported request method: ${method}`);
         }
+
+        const axiosResponse = { data: result } as AxiosResponse<DetermineResponseDataType<G['RequestMethod'], G['RestTableInterface']>>;
+
+        await this.runLifecycleHooks("afterExecution", {
+            config: this.config,
+            request: this.request,
+            response: axiosResponse,
+        });
+
+        await this.runLifecycleHooks("afterCommit", {
+            config: this.config,
+            request: this.request,
+            response: axiosResponse,
+        });
+
+        return result;
     }
 
     private async withConnection<T>(cb: (conn: PoolConnection) => Promise<T>): Promise<T> {
