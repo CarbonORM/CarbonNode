@@ -3,7 +3,7 @@ import {toast} from "react-toastify";
 import isTest from "../../variables/isTest";
 import { AxiosResponse } from "axios";
 import {toastOptions} from "../../variables/toastOptions";
-import {iC6RestfulModel} from "../types/ormInterfaces";
+import {C6RestfulModel} from "../types/ormInterfaces";
 
 
 
@@ -50,7 +50,7 @@ export function removePrefixIfExists(tableName: string, prefix: string): string 
 }
 
 export function removeInvalidKeys<iRestObject>(request: any, c6Tables: {
-    [key: string]: (iC6RestfulModel<any,any,any> & { [key: string]: any })
+    [key: string]: (C6RestfulModel<any,any,any> & { [key: string]: any })
 }): iRestObject {
 
     let intersection: iRestObject = {} as iRestObject

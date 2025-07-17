@@ -1,4 +1,4 @@
-import {iC6RestfulModel} from "../types/ormInterfaces";
+import {C6RestfulModel} from "../types/ormInterfaces";
 
 type JsPrimitive = 'string' | 'number' | 'boolean' | 'buffer' | 'object';
 
@@ -26,7 +26,7 @@ export function determineRuntimeJsType(mysqlType: string): JsPrimitive {
 }
 
 export function getPrimaryKeyTypes(
-    table: iC6RestfulModel<string, any, any>
+    table: C6RestfulModel<string, any, any>
 ): Record<string, JsPrimitive> {
     const result: Record<string, JsPrimitive> = {};
 

@@ -3,7 +3,7 @@
 import {
     C6Constants,
     iC6Object,
-    iC6RestfulModel,
+    C6RestfulModel,
     tC6Tables,
     iDynamicApiImport,
     OrmGenerics,
@@ -32,12 +32,6 @@ export interface i{{TABLE_NAME_SHORT_PASCAL_CASE}} {
 {{/each}}
 }
 
-interface iDefine{{TABLE_NAME_SHORT_PASCAL_CASE}} {
-{{#each COLUMNS_UPPERCASE}}
-    '{{@key}}': string;
-{{/each}}
-}
-
 export type {{TABLE_NAME_SHORT_PASCAL_CASE}}PrimaryKeys = {{#if PRIMARY_SHORT.length}}
     {{#each PRIMARY_SHORT}}
         '{{this}}'{{#unless @last}} |{{/unless}}
@@ -47,12 +41,12 @@ export type {{TABLE_NAME_SHORT_PASCAL_CASE}}PrimaryKeys = {{#if PRIMARY_SHORT.le
 {{/if}}
 
 export const {{TABLE_NAME_SHORT}}:
-    iC6RestfulModel<
+    C6RestfulModel<
         '{{TABLE_NAME_SHORT}}',
         i{{TABLE_NAME_SHORT_PASCAL_CASE}},
         {{TABLE_NAME_SHORT_PASCAL_CASE}}PrimaryKeys
     >
-    & iDefine{{TABLE_NAME_SHORT_PASCAL_CASE}} = {
+    &  {  [K in keyof  i{{TABLE_NAME_SHORT_PASCAL_CASE}} as Uppercase<string & K>]: string } = {
     TABLE_NAME: '{{TABLE_NAME}}',
     {{#each COLUMNS_UPPERCASE}}
     {{@key}}: '{{this}}',

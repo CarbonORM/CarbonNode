@@ -157,7 +157,7 @@ export interface iRest<
     restURL?: string;
     mysqlPool?: Pool;
     withCredentials?: boolean;
-    restModel: iC6RestfulModel<RestShortTableName, RestTableInterface, PrimaryKey>;
+    restModel: C6RestfulModel<RestShortTableName, RestTableInterface, PrimaryKey>;
     reactBootstrap?: CarbonReact<any, any>;
     requestMethod: iRestMethods;
     clearCache?: () => void;
@@ -176,11 +176,11 @@ export type tColumns<TableName extends string, T extends { [key: string]: any }>
 
 export type tPrimaryKeys<TableName extends string, PK extends string> = `${TableName}.${PK}`;
 
-export interface iC6RestfulModel<
+export type C6RestfulModel<
     RestShortTableName extends string,
     RestTableInterface extends Record<string, any> = any,
-    PrimaryKey extends keyof RestTableInterface & string = keyof RestTableInterface & string,
-> {
+    PrimaryKey extends keyof RestTableInterface & string = keyof RestTableInterface & string
+> = {
     TABLE_NAME: RestShortTableName;
     PRIMARY: tPrimaryKeys<RestShortTableName, PrimaryKey>[];
     PRIMARY_SHORT: PrimaryKey[];
@@ -190,7 +190,10 @@ export interface iC6RestfulModel<
     LIFECYCLE_HOOKS: iRestHooks<OrmGenerics<any, RestShortTableName, RestTableInterface, PrimaryKey>>;
     TABLE_REFERENCES: { [columnName: string]: iConstraint[] };
     TABLE_REFERENCED_BY: { [columnName: string]: iConstraint[] };
-}
+} & {
+    [K in keyof RestTableInterface as Uppercase<string & K>]: NonNullable<string>;
+};
+
 
 export type iRestReactiveLifecycle<G extends OrmGenerics> = {
     beforeProcessing?: {
@@ -246,7 +249,7 @@ export interface iC6Object<
 > {
     C6VERSION: string;
     TABLES: {
-        [key: string]: iC6RestfulModel<RestShortTableName, RestTableInterface, PrimaryKey> & {
+        [key: string]: C6RestfulModel<RestShortTableName, RestTableInterface, PrimaryKey> & {
             [key: string]: string | number;
         };
     };
@@ -261,7 +264,7 @@ export interface tC6Tables<
     RestTableInterface extends { [key: string]: any } = any,
     PrimaryKey extends keyof RestTableInterface & string = keyof RestTableInterface & string
 > {
-    [key: string]: iC6RestfulModel<RestShortTableName, RestTableInterface, PrimaryKey> & { [key: string]: any };
+    [key: string]: C6RestfulModel<RestShortTableName, RestTableInterface, PrimaryKey> & { [key: string]: any };
 }
 
 export interface tC6RestApi {

@@ -1,5 +1,5 @@
 import { C6Constants } from "api/C6Constants";
-import {iC6Object, iC6RestfulModel, iRestMethods, RequestQueryBody} from "./types/ormInterfaces";
+import {iC6Object, C6RestfulModel, iRestMethods, RequestQueryBody} from "./types/ormInterfaces";
 
 export default function <
     RequestMethod extends iRestMethods,
@@ -15,7 +15,7 @@ export default function <
     const payload: Record<string, any> = {};
     const tableNames = Array.isArray(tableName) ? tableName : [tableName];
 
-    const tableDefinitions: (iC6RestfulModel<any, any, any> & any)[] = tableNames.map((name) => {
+    const tableDefinitions: (C6RestfulModel<any, any, any> & any)[] = tableNames.map((name) => {
         const tableDefinition = Object.values(C6.TABLES).find((t) => t.TABLE_NAME === name);
         if (!tableDefinition) {
             console.error(`Table name (${name}) is not found in the C6.TABLES object.`, C6.TABLES);
