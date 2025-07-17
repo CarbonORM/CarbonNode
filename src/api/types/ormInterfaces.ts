@@ -182,18 +182,15 @@ export type C6RestfulModel<
     PrimaryKey extends keyof RestTableInterface & string = keyof RestTableInterface & string
 > = {
     TABLE_NAME: RestShortTableName;
-    PRIMARY: tPrimaryKeys<RestShortTableName, PrimaryKey>[];
-    PRIMARY_SHORT: PrimaryKey[];
+    PRIMARY: Array<tPrimaryKeys<RestShortTableName, PrimaryKey>>;
+    PRIMARY_SHORT: Array<PrimaryKey>;
     COLUMNS: tColumns<RestShortTableName, RestTableInterface>;
     TYPE_VALIDATION: { [key: string]: iTypeValidation };
     REGEX_VALIDATION: RegExpMap;
     LIFECYCLE_HOOKS: iRestHooks<OrmGenerics<any, RestShortTableName, RestTableInterface, PrimaryKey>>;
     TABLE_REFERENCES: { [columnName: string]: iConstraint[] };
     TABLE_REFERENCED_BY: { [columnName: string]: iConstraint[] };
-} & {
-    [K in keyof RestTableInterface as Uppercase<string & K>]: NonNullable<string>;
-};
-
+} & Required<{ [K in keyof RestTableInterface as Uppercase<string & K>]: string }>
 
 export type iRestReactiveLifecycle<G extends OrmGenerics> = {
     beforeProcessing?: {
@@ -243,28 +240,13 @@ export interface iRestApiFunctions<RestData extends { [key: string]: any } = any
 }
 
 export interface iC6Object<
-    RestShortTableName extends string = any,
-    RestTableInterface extends { [key: string]: any } = any,
-    PrimaryKey extends keyof RestTableInterface & string = keyof RestTableInterface & string
+    Tables extends Record<string, C6RestfulModel<any, any, any>> = Record<string, C6RestfulModel<any, any, any>>
 > {
     C6VERSION: string;
-    TABLES: {
-        [key: string]: C6RestfulModel<RestShortTableName, RestTableInterface, PrimaryKey> & {
-            [key: string]: string | number;
-        };
-    };
+    TABLES: Tables;
     PREFIX: string;
     IMPORT: (tableName: string) => Promise<iDynamicApiImport>;
-
     [key: string]: any;
-}
-
-export interface tC6Tables<
-    RestShortTableName extends string = any,
-    RestTableInterface extends { [key: string]: any } = any,
-    PrimaryKey extends keyof RestTableInterface & string = keyof RestTableInterface & string
-> {
-    [key: string]: C6RestfulModel<RestShortTableName, RestTableInterface, PrimaryKey> & { [key: string]: any };
 }
 
 export interface tC6RestApi {

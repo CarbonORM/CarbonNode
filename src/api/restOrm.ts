@@ -1,35 +1,27 @@
 import restRequest from "./restRequest";
-import { OrmGenerics } from "./types/ormGenerics";
-import { C6RestfulModel, iRest, iRestMethods } from "./types/ormInterfaces";
+import {OrmGenerics} from "./types/ormGenerics";
+import {iRest, iRestMethods} from "./types/ormInterfaces";
 
 type iCallRest = "Get" | "Put" | "Post" | "Delete";
-
-type RestOrmReturnType<G extends Omit<OrmGenerics, "requestMethod">> = {
-    [key in iCallRest]: ReturnType<typeof restRequest<G>>;
-} & C6RestfulModel<G['RestShortTableName'], G['RestTableInterface'], G['PrimaryKey']>; // TODO - add the iDefineRestfulModel type here
 
 export function restOrm<
     G extends Omit<OrmGenerics, "requestMethod">
 >(
-    configFn: () => (
+    configFn: () =>
         Omit<iRest<G['RestShortTableName'], G['RestTableInterface'], G['PrimaryKey']>, "requestMethod">
-        )
-): RestOrmReturnType<G> {
+): {
+    [key in iCallRest]: ReturnType<typeof restRequest<G>>;
+} {
 
     const methods: iRestMethods[] = ["GET", "PUT", "POST", "DELETE"];
 
     const userConfig = configFn();
 
-    const restMethods = methods.reduce((acc, method) => ({
+    return methods.reduce((acc, method) => ({
         ...acc,
         [method[0] + method.slice(1).toLowerCase()]: restRequest<G>(() => ({
             ...userConfig,
             requestMethod: method as iRestMethods,
         }))
-    }), {} as { [key in iCallRest]: ReturnType<typeof restRequest<G>> });
-
-    return {
-        ...userConfig.restModel,
-        ...restMethods,
-    };
+    }), {} as { [key in iCallRest]: ReturnType<typeof restRequest<G>> })
 }

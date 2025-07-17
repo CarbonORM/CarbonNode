@@ -40,13 +40,12 @@ export type {{TABLE_NAME_SHORT_PASCAL_CASE}}PrimaryKeys = {{#if PRIMARY_SHORT.le
     never;
 {{/if}}
 
-export const {{TABLE_NAME_SHORT}}:
+const {{TABLE_NAME_SHORT}}:
     C6RestfulModel<
         '{{TABLE_NAME_SHORT}}',
         i{{TABLE_NAME_SHORT_PASCAL_CASE}},
         {{TABLE_NAME_SHORT_PASCAL_CASE}}PrimaryKeys
-    >
-    &  {  [K in keyof  i{{TABLE_NAME_SHORT_PASCAL_CASE}} as Uppercase<string & K>]: string } = {
+    > = {
     TABLE_NAME: '{{TABLE_NAME}}',
     {{#each COLUMNS_UPPERCASE}}
     {{@key}}: '{{this}}',
@@ -199,13 +198,16 @@ export const GLOBAL_REST_PARAMETERS: Omit<iRest<
 };
 
 {{#TABLES}}
-export const {{TABLE_NAME_SHORT_PASCAL_CASE}} = restOrm<
-    OrmGenerics<any, '{{TABLE_NAME_SHORT}}', i{{TABLE_NAME_SHORT_PASCAL_CASE}}, {{TABLE_NAME_SHORT_PASCAL_CASE}}PrimaryKeys{{#if INTERFACE_OVERRIDES}}, {{{INTERFACE_OVERRIDES}}}{{/if}}>
->(() => ({
-    ...GLOBAL_REST_PARAMETERS,
-    restModel: {{TABLE_NAME_SHORT}}{{#if OBJECT_OVERRIDES}},
-    {{{OBJECT_OVERRIDES}}}{{/if}}
-}));
+export const {{TABLE_NAME_SHORT_PASCAL_CASE}} = {
+    ...{{TABLE_NAME_SHORT}},
+    ...restOrm<
+        OrmGenerics<any, '{{TABLE_NAME_SHORT}}', i{{TABLE_NAME_SHORT_PASCAL_CASE}}, {{TABLE_NAME_SHORT_PASCAL_CASE}}PrimaryKeys{{#if INTERFACE_OVERRIDES}}, {{{INTERFACE_OVERRIDES}}}{{/if}}>
+    >(() => ({
+        ...GLOBAL_REST_PARAMETERS,
+        restModel: {{TABLE_NAME_SHORT}}{{#if OBJECT_OVERRIDES}},
+        {{{OBJECT_OVERRIDES}}}{{/if}}
+    }))
+}
 
 {{/TABLES}}
 
