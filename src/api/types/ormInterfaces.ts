@@ -90,7 +90,9 @@ export type RequestQueryBody<
     Overrides extends { [key: string]: any } = {}
 > = Method extends 'GET' | 'PUT' | 'DELETE'
     ? iAPI<RequestGetPutDeleteBody<Modify<T, Overrides> & Custom>>
-    : iAPI<Modify<T, Overrides> & Custom>;
+    : Method extends 'POST'
+        ? iAPI<RequestGetPutDeleteBody<Modify<T, Overrides> & Custom> & Modify<T, Overrides> & Custom>
+        : iAPI<Modify<T, Overrides> & Custom>;
 
 export interface iCacheAPI<ResponseDataType = any> {
     requestArgumentsSerialized: string;
