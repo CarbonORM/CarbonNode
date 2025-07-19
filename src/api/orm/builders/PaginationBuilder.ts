@@ -3,7 +3,7 @@ import isVerbose from "../../../variables/isVerbose";
 import {OrmGenerics} from "../../types/ormGenerics";
 import {JoinBuilder} from "./JoinBuilder";
 
-export class PaginationBuilder<G extends OrmGenerics> extends JoinBuilder<G> {
+export abstract class PaginationBuilder<G extends OrmGenerics> extends JoinBuilder<G> {
 
     /**
      * MySQL ORDER/LIMIT/OFFSET generator.

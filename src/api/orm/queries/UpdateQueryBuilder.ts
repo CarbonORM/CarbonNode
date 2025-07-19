@@ -1,3 +1,4 @@
+import {C6C} from "../../C6Constants";
 import {OrmGenerics} from "../../types/ormGenerics";
 import { PaginationBuilder } from '../builders/PaginationBuilder';
 import {SqlBuilderResult} from "../utils/sqlUtils";
@@ -6,9 +7,8 @@ export class UpdateQueryBuilder<G extends OrmGenerics> extends PaginationBuilder
 
     build(
         table: string,
-        data: Record<string, any>,
-        args: any = {}
     ): SqlBuilderResult {
+        const args = this.request;
         const params = this.useNamedParams ? {} : [];
         let sql = `UPDATE \`${table}\``;
 
@@ -16,16 +16,11 @@ export class UpdateQueryBuilder<G extends OrmGenerics> extends PaginationBuilder
             sql += this.buildJoinClauses(args.JOIN, params);
         }
 
-        const setClauses = Object.entries(data).map(([col, val]) => {
-            if (Array.isArray(params)) {
-                params.push(val);
-                return `\`${col}\` = ?`;
-            } else {
-                const key = `param${Object.keys(params).length}`;
-                params[key] = val;
-                return `\`${col}\` = :${key}`;
-            }
-        });
+        if (!(C6C.UPDATE in this.request)) {
+            throw new Error("No update data provided in the request.");
+        }
+
+        const setClauses = Object.entries(this.request[C6C.UPDATE]).map(([col, val]) => this.addParam(params, col, val));
 
         sql += ` SET ${setClauses.join(', ')}`;
 

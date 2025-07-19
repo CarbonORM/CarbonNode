@@ -169,6 +169,7 @@ export const C6Constants = {
 
     // PHP validation
     OPTIONS: 'OPTIONS',
+    INSERT: 'INSERT',
     GET: 'GET',
     POST: 'POST',
     PUT: 'PUT',

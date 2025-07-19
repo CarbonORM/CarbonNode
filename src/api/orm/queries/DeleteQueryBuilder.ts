@@ -4,22 +4,18 @@ import { JoinBuilder } from "../builders/JoinBuilder";
 
 export class DeleteQueryBuilder<G extends OrmGenerics> extends JoinBuilder<G> {
     build(
-        table: string,
-        args: {
-            JOIN?: any;
-            WHERE?: any;
-        }
+        table: string
     ): SqlBuilderResult {
         const params = this.useNamedParams ? {} : [];
 
         let sql = `DELETE \`${table}\` FROM \`${table}\``;
 
-        if (args.JOIN) {
-            sql += this.buildJoinClauses(args.JOIN, params);
+        if (this.request.JOIN) {
+            sql += this.buildJoinClauses(this.request.JOIN, params);
         }
 
-        if (args.WHERE) {
-            sql += this.buildWhereClause(args.WHERE, params);
+        if (this.request.WHERE) {
+            sql += this.buildWhereClause(this.request.WHERE, params);
         }
 
         return { sql, params };

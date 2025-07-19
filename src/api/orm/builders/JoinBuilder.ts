@@ -2,7 +2,7 @@ import isVerbose from "../../../variables/isVerbose";
 import {OrmGenerics} from "../../types/ormGenerics";
 import {ConditionBuilder} from "./ConditionBuilder";
 
-export class JoinBuilder<G extends OrmGenerics> extends ConditionBuilder<G>{
+export abstract class JoinBuilder<G extends OrmGenerics> extends ConditionBuilder<G>{
 
     buildJoinClauses(joinArgs: any, params: any[] | Record<string, any>): string {
         let sql = '';

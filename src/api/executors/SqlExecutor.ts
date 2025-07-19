@@ -1,4 +1,5 @@
 import {DeleteQueryBuilder} from "../orm/queries/DeleteQueryBuilder";
+import {PostQueryBuilder} from "../orm/queries/PostQueryBuilder";
 import {SelectQueryBuilder} from "../orm/queries/SelectQueryBuilder";
 import {UpdateQueryBuilder} from "../orm/queries/UpdateQueryBuilder";
 import {OrmGenerics} from "../types/ormGenerics";
@@ -9,11 +10,9 @@ import {
     iDeleteC6RestResponse
 } from "../types/ormInterfaces";
 import namedPlaceholders from 'named-placeholders';
-import {PoolConnection, ResultSetHeader} from 'mysql2/promise';
+import {PoolConnection} from 'mysql2/promise';
 import {Buffer} from 'buffer';
 import {Executor} from "./Executor";
-
-type QueryType = 'select' | 'update' | 'delete';
 
 export class SqlExecutor<
     G extends OrmGenerics
@@ -28,20 +27,20 @@ export class SqlExecutor<
 
         switch (method) {
             case 'GET': {
-                const rest = await this.runQuery('select', TABLE_NAME, this.request);
+                const rest = await this.runQuery();
                 console.log(`[SQL EXECUTOR] ✅ GET result:`, rest);
                 return rest as DetermineResponseDataType<G['RequestMethod'], G['RestTableInterface']>;
             }
 
             case 'POST': {
-                const result = await this.insert(TABLE_NAME, this.request);
+                const result = await this.runQuery();
                 console.log(`[SQL EXECUTOR] ✅ POST result:`, result);
                 const created: iPostC6RestResponse = {rest: result, created: true};
                 return created as DetermineResponseDataType<G['RequestMethod'], G['RestTableInterface']>;
             }
 
             case 'PUT': {
-                const result = await this.runQuery('update', TABLE_NAME, this.request);
+                const result = await this.runQuery();
                 const updated: iPutC6RestResponse = {
                     ...result,
                     updated: true,
@@ -51,7 +50,7 @@ export class SqlExecutor<
             }
 
             case 'DELETE': {
-                const result = await this.runQuery('delete', TABLE_NAME, this.request);
+                const result = await this.runQuery();
                 console.log(`[SQL EXECUTOR] ✅ DELETE result:`, result);
                 const deleted: iDeleteC6RestResponse = {
                     rest: result,
@@ -82,26 +81,6 @@ export class SqlExecutor<
         ([k, v]) => [k, Buffer.isBuffer(v) ? v.toString('hex').toUpperCase() : v]
     ));
 
-    async insert(table: G['RestShortTableName'], data: Record<string, any>) {
-        const keys = Object.keys(data);
-        const values = keys.map(k => data[k]);
-        const placeholders = keys.map(() => '?').join(', ');
-        const sql = `INSERT INTO \`${table}\` (${keys.join(', ')})
-                     VALUES (${placeholders})`;
-
-        console.log(`[SQL EXECUTOR] 🧠 Generated INSERT SQL:`, sql);
-        console.log(`[SQL EXECUTOR] 🔢 Values:`, values);
-
-        return await this.withConnection(async (conn) => {
-            const [result] = await conn.execute<ResultSetHeader>(sql, values);
-            return {
-                rest: result,
-                sql: {
-                    sql, placeholders
-                }
-            };
-        });
-    }
 
     public formatSQLWithParams(sql: string, params: any[] | { [key: string]: any }): string {
         if (Array.isArray(params)) {
@@ -128,29 +107,34 @@ export class SqlExecutor<
         return `'${JSON.stringify(val)}'`;
     }
 
-    async runQuery(type: QueryType, table: G['RestShortTableName'], args: any) {
+    async runQuery() {
+        const {TABLE_NAME} = this.config.restModel;
+        const method = this.config.requestMethod;
+        let builder: SelectQueryBuilder<G> | UpdateQueryBuilder<G> | DeleteQueryBuilder<G> | PostQueryBuilder<G>;
 
-        let builder: SelectQueryBuilder<G> | UpdateQueryBuilder<G> | DeleteQueryBuilder<G>;
-
-        switch (type) {
-            case 'select':
+        switch (method) {
+            case 'GET':
                 builder = new SelectQueryBuilder(this.config, this.request);
                 break;
-            case 'update':
+            case 'PUT':
                 builder = new UpdateQueryBuilder(this.config, this.request);
                 break;
-            case 'delete':
+            case 'DELETE':
                 builder = new DeleteQueryBuilder(this.config, this.request);
                 break;
+            case 'POST':
+                builder = new PostQueryBuilder(this.config, this.request);
+                break;
             default:
-                throw new Error(`Unsupported query type: ${type}`);
+                throw new Error(`Unsupported query method: ${method}`);
         }
 
-        const QueryResult = builder.build(table, args);
-        console.log(`[SQL EXECUTOR] 🧠 Generated ${type.toUpperCase()} SQL:`, QueryResult);
+        const QueryResult = builder.build(TABLE_NAME);
+
+        console.log(`[SQL EXECUTOR] 🧠 Generated ${method.toUpperCase()} SQL:`, QueryResult);
 
         const formatted = this.formatSQLWithParams(QueryResult.sql, QueryResult.params);
-        console.log(`[SQL EXECUTOR] 🧠 Formatted ${type.toUpperCase()} SQL:`, formatted);
+        console.log(`[SQL EXECUTOR] 🧠 Formatted ${method.toUpperCase()} SQL:`, formatted);
 
         const toUnnamed = namedPlaceholders();
         const [sql, values] = toUnnamed(QueryResult.sql, QueryResult.params);
@@ -158,7 +142,7 @@ export class SqlExecutor<
         return await this.withConnection(async (conn) => {
             const [result] = await conn.query<any>(sql, values);
 
-            if (type === 'select') {
+            if (method === 'GET') {
                 console.log(`[SQL EXECUTOR] 📦 Rows fetched:`, result);
                 return {
                     rest: result.map(this.serialize),

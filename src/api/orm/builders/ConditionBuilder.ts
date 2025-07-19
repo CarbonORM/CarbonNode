@@ -2,12 +2,15 @@ import {C6C} from "api/C6Constants";
 import isVerbose from "../../../variables/isVerbose";
 import {OrmGenerics} from "../../types/ormGenerics";
 import {DetermineResponseDataType} from "../../types/ormInterfaces";
-import {convertHexIfBinary} from "../utils/sqlUtils";
+import {convertHexIfBinary, SqlBuilderResult} from "../utils/sqlUtils";
 import {AggregateBuilder} from "./AggregateBuilder";
 
-export class ConditionBuilder<
+export abstract class ConditionBuilder<
     G extends OrmGenerics
 > extends AggregateBuilder<G> {
+
+    abstract build(table: string): SqlBuilderResult;
+
     execute(): Promise<DetermineResponseDataType<G['RequestMethod'], G['RestTableInterface']>> {
         throw new Error("Method not implemented.");
     }
@@ -28,7 +31,7 @@ export class ConditionBuilder<
         }
     }
 
-    private addParam(
+    public addParam(
         params: any[] | Record<string, any>,
         column: string,
         value: any

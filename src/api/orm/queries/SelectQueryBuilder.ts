@@ -6,12 +6,10 @@ export class SelectQueryBuilder<G extends OrmGenerics> extends PaginationBuilder
 
     build(
         table: string,
-        args: any,
-        primary?: string,
         isSubSelect: boolean = false
     ): SqlBuilderResult {
+        const args = this.request;
         const params = this.useNamedParams ? {} : [];
-
         const selectList = args.SELECT ?? ['*'];
         const selectFields = selectList
             .map((f: any) => this.buildAggregateField(f))
@@ -41,7 +39,7 @@ export class SelectQueryBuilder<G extends OrmGenerics> extends PaginationBuilder
         if (args.PAGINATION) {
             sql += this.buildPaginationClause(args.PAGINATION);
         } else if (!isSubSelect) {
-            sql += primary ? ` ORDER BY ${primary} ASC LIMIT 1` : ` LIMIT 100`;
+            sql += ` LIMIT 100`;
         }
 
         return { sql, params };
