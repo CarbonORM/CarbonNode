@@ -22,6 +22,7 @@ export * from "./api/orm/builders/ConditionBuilder";
 export * from "./api/orm/builders/JoinBuilder";
 export * from "./api/orm/builders/PaginationBuilder";
 export * from "./api/orm/queries/DeleteQueryBuilder";
+export * from "./api/orm/queries/PostQueryBuilder";
 export * from "./api/orm/queries/SelectQueryBuilder";
 export * from "./api/orm/queries/UpdateQueryBuilder";
 export * from "./api/orm/utils/sqlUtils";

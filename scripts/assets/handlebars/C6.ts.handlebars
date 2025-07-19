@@ -4,7 +4,6 @@ import {
     C6Constants,
     iC6Object,
     C6RestfulModel,
-    tC6Tables,
     iDynamicApiImport,
     OrmGenerics,
     removePrefixIfExists,
@@ -103,7 +102,7 @@ const {{TABLE_NAME_SHORT}}:
 }
 {{/TABLES}}
 
-export const TABLES: tC6Tables = {
+export const TABLES = {
 {{#TABLES}}{{TABLE_NAME_SHORT}},{{/TABLES}}
 } satisfies {
     [K in keyof RestTableInterfaces]: C6RestfulModel<K, RestTableInterfaces[K], keyof RestTableInterfaces[K] & string>;
