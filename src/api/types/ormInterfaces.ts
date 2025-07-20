@@ -164,6 +164,7 @@ export interface iRest<
     requestMethod: iRestMethods;
     clearCache?: () => void;
     skipPrimaryCheck?: boolean;
+    verbose?: boolean;
 }
 
 export interface iConstraint {

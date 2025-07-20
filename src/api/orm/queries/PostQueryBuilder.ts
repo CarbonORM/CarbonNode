@@ -15,11 +15,14 @@ export class PostQueryBuilder<G extends OrmGenerics> extends ConditionBuilder<G>
 
     build(table: string) {
         const verb = C6C.REPLACE in this.request ? C6C.REPLACE : C6C.INSERT;
-        const keys = Object.keys(verb in this.request ? this.request[verb] : this.request);
+        const body = verb in this.request ? this.request[verb] : this.request;
+        const keys = Object.keys(body);
         const params: any[] = []
         const placeholders: string[] = []
+
+
         for (const key of keys) {
-            const value = this.request[key];
+            const value = body[key];
             const placeholder = this.addParam(params, key, value);
             placeholders.push(placeholder);
         }

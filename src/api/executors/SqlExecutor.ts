@@ -5,9 +5,6 @@ import {UpdateQueryBuilder} from "../orm/queries/UpdateQueryBuilder";
 import {OrmGenerics} from "../types/ormGenerics";
 import {
     DetermineResponseDataType,
-    iPostC6RestResponse,
-    iPutC6RestResponse,
-    iDeleteC6RestResponse
 } from "../types/ormInterfaces";
 import namedPlaceholders from 'named-placeholders';
 import {PoolConnection} from 'mysql2/promise';
@@ -23,41 +20,26 @@ export class SqlExecutor<
         const method = this.config.requestMethod;
 
         console.log(`[SQL EXECUTOR] ▶️ Executing ${method} on table "${TABLE_NAME}"`);
-        console.log(`[SQL EXECUTOR] 🧾 Request payload:`, this.request);
 
         switch (method) {
             case 'GET': {
                 const rest = await this.runQuery();
-                console.log(`[SQL EXECUTOR] ✅ GET result:`, rest);
                 return rest as DetermineResponseDataType<G['RequestMethod'], G['RestTableInterface']>;
             }
 
             case 'POST': {
                 const result = await this.runQuery();
-                console.log(`[SQL EXECUTOR] ✅ POST result:`, result);
-                const created: iPostC6RestResponse = {rest: result, created: true};
-                return created as DetermineResponseDataType<G['RequestMethod'], G['RestTableInterface']>;
+                return result as DetermineResponseDataType<G['RequestMethod'], G['RestTableInterface']>;
             }
 
             case 'PUT': {
                 const result = await this.runQuery();
-                const updated: iPutC6RestResponse = {
-                    ...result,
-                    updated: true,
-                    rowCount: result.rest.affectedRows
-                };
-                return updated as DetermineResponseDataType<G['RequestMethod'], G['RestTableInterface']>;
+                return result as DetermineResponseDataType<G['RequestMethod'], G['RestTableInterface']>;
             }
 
             case 'DELETE': {
                 const result = await this.runQuery();
-                console.log(`[SQL EXECUTOR] ✅ DELETE result:`, result);
-                const deleted: iDeleteC6RestResponse = {
-                    rest: result,
-                    deleted: true,
-                    rowCount: result.rest.affectedRows
-                };
-                return deleted as DetermineResponseDataType<G['RequestMethod'], G['RestTableInterface']>;
+                return result as DetermineResponseDataType<G['RequestMethod'], G['RestTableInterface']>;
             }
 
             default:
@@ -69,10 +51,10 @@ export class SqlExecutor<
         console.log(`[SQL EXECUTOR] 📡 Getting DB connection`);
         const conn = await this.config.mysqlPool!.getConnection();
         try {
-            console.log(`[SQL EXECUTOR] ✅ Connection acquired`);
+            this.config.verbose && console.log(`[SQL EXECUTOR] ✅ Connection acquired`);
             return await cb(conn);
         } finally {
-            console.log(`[SQL EXECUTOR] 🔌 Releasing DB connection`);
+            this.config.verbose && console.log(`[SQL EXECUTOR] 🔌 Releasing DB connection`);
             conn.release();
         }
     }
@@ -131,10 +113,10 @@ export class SqlExecutor<
 
         const QueryResult = builder.build(TABLE_NAME);
 
-        console.log(`[SQL EXECUTOR] 🧠 Generated ${method.toUpperCase()} SQL:`, QueryResult);
+        this.config.verbose && console.log(`[SQL EXECUTOR] 🧠 Generated ${method.toUpperCase()} SQL:`, QueryResult);
 
         const formatted = this.formatSQLWithParams(QueryResult.sql, QueryResult.params);
-        console.log(`[SQL EXECUTOR] 🧠 Formatted ${method.toUpperCase()} SQL:`, formatted);
+        this.config.verbose && console.log(`[SQL EXECUTOR] 🧠 Formatted ${method.toUpperCase()} SQL:`, formatted);
 
         const toUnnamed = namedPlaceholders();
         const [sql, values] = toUnnamed(QueryResult.sql, QueryResult.params);
@@ -143,13 +125,13 @@ export class SqlExecutor<
             const [result] = await conn.query<any>(sql, values);
 
             if (method === 'GET') {
-                console.log(`[SQL EXECUTOR] 📦 Rows fetched:`, result);
+                this.config.verbose && console.log(`[SQL EXECUTOR] 📦 Rows fetched:`, result);
                 return {
                     rest: result.map(this.serialize),
                     sql: {sql, values}
                 };
             } else {
-                console.log(`[SQL EXECUTOR] ✏️ Rows affected:`, result.affectedRows);
+                this.config.verbose &&  console.log(`[SQL EXECUTOR] ✏️ Rows affected:`, result.affectedRows);
                 return {
                     affected: result.affectedRows,
                     rest: [],
