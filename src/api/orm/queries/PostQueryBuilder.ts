@@ -1,4 +1,4 @@
-import {C6C} from "@carbonorm/carbonnode";
+import {C6C} from "../../C6Constants";
 import {ConditionBuilder} from "../builders/ConditionBuilder";
 import {OrmGenerics} from "../../types/ormGenerics";
 

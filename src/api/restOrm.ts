@@ -3,26 +3,26 @@ import {OrmGenerics} from "./types/ormGenerics";
 import {iRest} from "./types/ormInterfaces";
 
 export function restOrm<
-    G extends Omit<OrmGenerics, "requestMethod">
+    G extends Omit<OrmGenerics, "RequestMethod">
 >(
     configFn: () =>
         Omit<iRest<G['RestShortTableName'], G['RestTableInterface'], G['PrimaryKey']>, "requestMethod">
 ) {
 
     return {
-        Get: restRequest<G & { requestMethod: "GET" }>(() => ({
+        Get: restRequest<G & { RequestMethod: "GET" }>(() => ({
             ...configFn(),
             requestMethod: "GET"
         })),
-        Put: restRequest<G & { requestMethod: "PUT" }>(() => ({
+        Put: restRequest<G & { RequestMethod: "PUT" }>(() => ({
             ...configFn(),
             requestMethod: "PUT"
         })),
-        Post: restRequest<G & { requestMethod: "POST" }>(() => ({
+        Post: restRequest<G & { RequestMethod: "POST" }>(() => ({
             ...configFn(),
             requestMethod: "POST"
         })),
-        Delete: restRequest<G & { requestMethod: "DELETE" }>(() => ({
+        Delete: restRequest<G & { RequestMethod: "DELETE" }>(() => ({
             ...configFn(),
             requestMethod: "DELETE"
         }))
