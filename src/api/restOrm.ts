@@ -1,26 +1,31 @@
 import restRequest from "./restRequest";
 import {OrmGenerics} from "./types/ormGenerics";
-import {iRest, iRestMethods} from "./types/ormInterfaces";
-
-type iCallRest = "Get" | "Put" | "Post" | "Delete";
+import {iRest} from "./types/ormInterfaces";
 
 export function restOrm<
     G extends Omit<OrmGenerics, "requestMethod">
 >(
     configFn: () =>
         Omit<iRest<G['RestShortTableName'], G['RestTableInterface'], G['PrimaryKey']>, "requestMethod">
-): {
-    [key in iCallRest]: ReturnType<typeof restRequest<G>>;
-} {
+) {
 
-    const methods: iRestMethods[] = ["GET", "PUT", "POST", "DELETE"];
-
-    return methods.reduce((acc, method) => ({
-        ...acc,
-        [method[0] + method.slice(1).toLowerCase()]: restRequest<G>(() => ({
-            // configFn - absolutely must be called and deconstructed here, not earlier
+    return {
+        Get: restRequest<G & { requestMethod: "GET" }>(() => ({
             ...configFn(),
-            requestMethod: method as iRestMethods,
+            requestMethod: "GET"
+        })),
+        Put: restRequest<G & { requestMethod: "PUT" }>(() => ({
+            ...configFn(),
+            requestMethod: "PUT"
+        })),
+        Post: restRequest<G & { requestMethod: "POST" }>(() => ({
+            ...configFn(),
+            requestMethod: "POST"
+        })),
+        Delete: restRequest<G & { requestMethod: "DELETE" }>(() => ({
+            ...configFn(),
+            requestMethod: "DELETE"
         }))
-    }), {} as { [key in iCallRest]: ReturnType<typeof restRequest<G>> })
+    };
+
 }
