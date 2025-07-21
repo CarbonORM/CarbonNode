@@ -26,6 +26,12 @@ export abstract class ConditionBuilder<
         C6C.ST_DISTANCE_SPHERE
     ]);
 
+    private isTableReference(val: any): boolean {
+        return typeof val === 'string' &&
+            typeof this.config.C6?.COLUMNS === 'object' &&
+            val in this.config.C6.COLUMNS;
+    }
+
     private validateOperator(op: string) {
         if (!this.OPERATORS.has(op)) {
             throw new Error(`Invalid or unsupported SQL operator detected: '${op}'`);
@@ -72,6 +78,7 @@ export abstract class ConditionBuilder<
             }
 
             this.validateOperator(op);
+            const leftIsRef: boolean = this.isTableReference(column);
 
             if (op === C6C.MATCH_AGAINST && Array.isArray(value)) {
                 const [search, mode] = value;
@@ -91,11 +98,14 @@ export abstract class ConditionBuilder<
                     case 'WITH QUERY EXPANSION':
                         againstClause = this.useNamedParams ? `AGAINST(:${paramName} WITH QUERY EXPANSION)` : `AGAINST(? WITH QUERY EXPANSION)`;
                         break;
-                    default:
+                    default: // NATURAL or undefined
                         againstClause = this.useNamedParams ? `AGAINST(:${paramName})` : `AGAINST(?)`;
                         break;
                 }
 
+                if (!leftIsRef) {
+                    throw new Error(`MATCH_AGAINST requires a table reference as the left operand. Column '${column}' is not a valid table reference.`);
+                }
                 const matchClause = `(MATCH(${column}) ${againstClause})`;
                 isVerbose() && console.log(`[MATCH_AGAINST] ${matchClause}`);
                 return matchClause;
@@ -104,18 +114,35 @@ export abstract class ConditionBuilder<
             if ((op === C6C.IN || op === C6C.NOT_IN) && Array.isArray(value)) {
                 const placeholders = value.map(v => this.addParam(params, column, v)).join(', ');
                 const normalized = op.replace('_', ' ');
+                if (!leftIsRef) {
+                    throw new Error(`IN operator requires a table reference as the left operand. Column '${column}' is not a valid table reference.`);
+                }
                 return `( ${column} ${normalized} (${placeholders}) )`;
             }
 
             if (op === C6C.BETWEEN || op === 'NOT BETWEEN') {
                 if (!Array.isArray(value) || value.length !== 2) {
-                    throw new Error(`BETWEEN operator requires an array of two values for column ${column}`);
+                    throw new Error(`BETWEEN operator requires an array of two values`);
                 }
                 const [start, end] = value;
-                return `( ${column} ${op.replace('_', ' ')} ${this.addParam(params, column, start)} AND ${this.addParam(params, column, end)} )`;
+                if (!leftIsRef) {
+                    throw new Error(`BETWEEN operator requires a table reference as the left operand. Column '${column}' is not a valid table reference.`);
+                }
+                return `(${column}) ${op.replace('_', ' ')} ${this.addParam(params, column, start)} AND ${this.addParam(params, column, end)}`;
             }
 
-            return `( ${column} ${op} ${this.addParam(params, column, value)} )`;
+            const rightIsRef: boolean = this.isTableReference(value);
+
+            if (leftIsRef && rightIsRef) {
+                return `(${column}) ${op} ${value}`;
+            }
+
+            if (rightIsRef) {
+                return `(${this.addParam(params, column, column)}) ${op} ${value}`;
+            }
+
+            throw new Error(`Neither operand appears to be a table reference`);
+
         };
 
         const parts: string[] = [];
@@ -123,6 +150,7 @@ export abstract class ConditionBuilder<
         const buildFromObject = (obj: Record<string, any>, mode: boolean) => {
             const subParts: string[] = [];
             for (const [k, v] of Object.entries(obj)) {
+                // numeric keys represent nested OR groups
                 if (!isNaN(Number(k))) {
                     const sub = this.buildBooleanJoinedConditions(v, false, params);
                     if (sub) subParts.push(sub);
