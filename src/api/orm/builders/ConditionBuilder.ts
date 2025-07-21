@@ -100,18 +100,40 @@ export abstract class ConditionBuilder<
 
         const parts: string[] = [];
 
-        if (typeof set === 'object' && !Array.isArray(set)) {
-            for (const [key, value] of Object.entries(set)) {
-                if (typeof value === 'object' && value !== null && Object.keys(value).length === 1) {
-                    const [op, val] = Object.entries(value)[0];
-                    parts.push(addCondition(key, op, val));
-                } else if (Array.isArray(value) && value.length === 2 && typeof value[0] === 'string') {
-                    const [op, val] = value as [string, any];
-                    parts.push(addCondition(key, op, val));
+        const buildFromObject = (obj: Record<string, any>, mode: boolean) => {
+            const subParts: string[] = [];
+            for (const [k, v] of Object.entries(obj)) {
+                // numeric keys represent nested OR groups
+                if (!isNaN(Number(k))) {
+                    const sub = this.buildBooleanJoinedConditions(v, false, params);
+                    if (sub) subParts.push(sub);
+                    continue;
+                }
+
+                if (typeof v === 'object' && v !== null && Object.keys(v).length === 1) {
+                    const [op, val] = Object.entries(v)[0];
+                    subParts.push(addCondition(k, op, val));
+                } else if (Array.isArray(v) && v.length >= 2 && typeof v[0] === 'string') {
+                    const [op, val] = v as [string, any];
+                    subParts.push(addCondition(k, op, val));
+                } else if (typeof v === 'object' && v !== null) {
+                    const sub = this.buildBooleanJoinedConditions(v, mode, params);
+                    if (sub) subParts.push(sub);
                 } else {
-                    parts.push(addCondition(key, '=', value));
+                    subParts.push(addCondition(k, '=', v));
                 }
             }
+            return subParts.join(` ${mode ? 'AND' : 'OR'} `);
+        };
+
+        if (Array.isArray(set)) {
+            for (const item of set) {
+                const sub = this.buildBooleanJoinedConditions(item, false, params);
+                if (sub) parts.push(sub);
+            }
+        } else if (typeof set === 'object' && set !== null) {
+            const sub = buildFromObject(set, andMode);
+            if (sub) parts.push(sub);
         }
 
         const clause = parts.join(` ${booleanOperator} `);
