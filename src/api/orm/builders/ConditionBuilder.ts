@@ -27,9 +27,13 @@ export abstract class ConditionBuilder<
     ]);
 
     private isTableReference(val: any): boolean {
-        return typeof val === 'string' &&
-            typeof this.config.C6?.COLUMNS === 'object' &&
-            val in this.config.C6.COLUMNS;
+        console.log(val)
+        const [tableName] = val.split('.');
+        const is  =  typeof val === 'string' &&
+            typeof this.config.C6?.TABLES[tableName] === 'object' &&
+            val in this.config.C6.TABLES[tableName].COLUMNS;
+        console.log(val, is)
+        return is
     }
 
     private validateOperator(op: string) {
