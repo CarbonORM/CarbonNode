@@ -136,18 +136,16 @@ export type DetermineResponseDataType<
     Method extends iRestMethods,
     RestTableInterface extends { [key: string]: any },
     ResponseDataOverrides = {}
-> =
-    null
-    | undefined
-    | (Method extends 'POST'
-    ? iPostC6RestResponse<RestTableInterface>
-    : Method extends 'GET'
-        ? iGetC6RestResponse<RestTableInterface, ResponseDataOverrides>
-        : Method extends 'PUT'
-            ? iPutC6RestResponse<RestTableInterface>
-            : Method extends 'DELETE'
-                ? iDeleteC6RestResponse<RestTableInterface>
-                : never);
+> = null |
+    (Method extends 'POST'
+        ? iPostC6RestResponse<RestTableInterface>
+        : Method extends 'GET'
+            ? iGetC6RestResponse<RestTableInterface, ResponseDataOverrides>
+            : Method extends 'PUT'
+                ? iPutC6RestResponse<RestTableInterface>
+                : Method extends 'DELETE'
+                    ? iDeleteC6RestResponse<RestTableInterface>
+                    : never);
 
 export interface iRest<
     RestShortTableName extends string = any,
@@ -258,6 +256,7 @@ export interface iC6Object<
     };
     PREFIX: string;
     IMPORT: (tableName: string) => Promise<iDynamicApiImport>;
+
     [key: string]: any;
 }
 

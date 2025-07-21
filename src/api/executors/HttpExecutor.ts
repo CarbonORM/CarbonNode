@@ -276,7 +276,7 @@ export class HttpExecutor<
 
                             if (false !== cacheCheck) {
 
-                                return (await cacheCheck)?.data;
+                                return (await cacheCheck).data;
 
                             }
 
@@ -326,7 +326,7 @@ export class HttpExecutor<
 
                     if (false !== cacheCheck) {
 
-                        return (await cacheCheck)?.data;
+                        return (await cacheCheck).data;
 
                     }
                 }
