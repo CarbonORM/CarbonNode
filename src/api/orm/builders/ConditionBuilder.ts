@@ -22,7 +22,8 @@ export abstract class ConditionBuilder<
         C6C.IN, C6C.NOT_IN, 'NOT IN',
         C6C.IS, C6C.IS_NOT,
         C6C.BETWEEN, 'NOT BETWEEN',
-        C6C.MATCH_AGAINST
+        C6C.MATCH_AGAINST,
+        C6C.ST_DISTANCE_SPHERE
     ]);
 
     private validateOperator(op: string) {
@@ -56,9 +57,21 @@ export abstract class ConditionBuilder<
     ): string {
         const booleanOperator = andMode ? 'AND' : 'OR';
 
-        const addCondition = (column: string, op: string, value: any): string => {
-            this.validateOperator(op);
+        const addCondition = (column: any, op: any, value: any): string => {
+            // Support function-based expressions like [C6C.ST_DISTANCE_SPHERE, col1, col2]
+            if (
+                typeof column === 'string' &&
+                this.OPERATORS.has(column) &&
+                Array.isArray(op)
+            ) {
+                if (column === C6C.ST_DISTANCE_SPHERE) {
+                    const [col1, col2] = op;
+                    const threshold = Array.isArray(value) ? value[0] : value;
+                    return `ST_Distance_Sphere(${col1}, ${col2}) < ${this.addParam(params, '', threshold)}`;
+                }
+            }
 
+            this.validateOperator(op);
 
             if (op === C6C.MATCH_AGAINST && Array.isArray(value)) {
                 const [search, mode] = value;
@@ -78,7 +91,7 @@ export abstract class ConditionBuilder<
                     case 'WITH QUERY EXPANSION':
                         againstClause = this.useNamedParams ? `AGAINST(:${paramName} WITH QUERY EXPANSION)` : `AGAINST(? WITH QUERY EXPANSION)`;
                         break;
-                    default: // NATURAL or undefined
+                    default:
                         againstClause = this.useNamedParams ? `AGAINST(:${paramName})` : `AGAINST(?)`;
                         break;
                 }
@@ -94,7 +107,14 @@ export abstract class ConditionBuilder<
                 return `( ${column} ${normalized} (${placeholders}) )`;
             }
 
-            // handle other operators
+            if (op === C6C.BETWEEN || op === 'NOT BETWEEN') {
+                if (!Array.isArray(value) || value.length !== 2) {
+                    throw new Error(`BETWEEN operator requires an array of two values for column ${column}`);
+                }
+                const [start, end] = value;
+                return `( ${column} ${op.replace('_', ' ')} ${this.addParam(params, column, start)} AND ${this.addParam(params, column, end)} )`;
+            }
+
             return `( ${column} ${op} ${this.addParam(params, column, value)} )`;
         };
 
@@ -103,7 +123,6 @@ export abstract class ConditionBuilder<
         const buildFromObject = (obj: Record<string, any>, mode: boolean) => {
             const subParts: string[] = [];
             for (const [k, v] of Object.entries(obj)) {
-                // numeric keys represent nested OR groups
                 if (!isNaN(Number(k))) {
                     const sub = this.buildBooleanJoinedConditions(v, false, params);
                     if (sub) subParts.push(sub);
