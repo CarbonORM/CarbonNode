@@ -25,6 +25,17 @@ export abstract class ConditionBuilder<
         C6C.MATCH_AGAINST
     ]);
 
+    private isTableReference(val: any): boolean {
+        return typeof val === 'string' &&
+            typeof this.config.C6?.COLUMNS === 'object' &&
+            val in this.config.C6.COLUMNS;
+    }
+
+    private isNumericLiteral(val: any): boolean {
+        return typeof val === 'number' ||
+            (typeof val === 'string' && /^-?\d+(?:\.\d+)?$/.test(val));
+    }
+
     private validateOperator(op: string) {
         if (!this.OPERATORS.has(op)) {
             throw new Error(`Invalid or unsupported SQL operator detected: '${op}'`);
@@ -94,7 +105,22 @@ export abstract class ConditionBuilder<
                 return `( ${column} ${normalized} (${placeholders}) )`;
             }
 
-            // handle other operators
+            const leftIsRef = this.isTableReference(column);
+            const rightIsRef = this.isTableReference(value);
+
+            if (!leftIsRef && !rightIsRef &&
+                !(this.isNumericLiteral(column) && this.isNumericLiteral(value))) {
+                throw new Error(`Neither operand appears to be a table reference: '${column} ${op} ${value}'`);
+            }
+
+            if (rightIsRef) {
+                return `( ${column} ${op} ${value} )`;
+            }
+
+            if (!leftIsRef && !rightIsRef) {
+                return `( ${column} ${op} ${value} )`;
+            }
+
             return `( ${column} ${op} ${this.addParam(params, column, value)} )`;
         };
 
