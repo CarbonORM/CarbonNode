@@ -32,6 +32,8 @@ export default function restRequest<
 
         const config = typeof configX === "function" ? configX() : configX;
 
+        config.verbose ??= true; // Default to verbose logging if not set
+
         // SQL path if on Node with a provided pool
         if (isNode() && config.mysqlPool) {
             const {SqlExecutor} = await import('./executors/SqlExecutor');
