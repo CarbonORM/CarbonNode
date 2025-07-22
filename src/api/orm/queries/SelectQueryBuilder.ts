@@ -8,6 +8,7 @@ export class SelectQueryBuilder<G extends OrmGenerics> extends PaginationBuilder
         table: string,
         isSubSelect: boolean = false
     ): SqlBuilderResult {
+        this.aliasMappings = {};
         const args = this.request;
         const params = this.useNamedParams ? {} : [];
         const selectList = args.SELECT ?? ['*'];
