@@ -14,7 +14,6 @@ export class PostQueryBuilder<G extends OrmGenerics> extends ConditionBuilder<G>
     }
 
     build(table: string) {
-        this.aliasMappings = {};
         const verb = C6C.REPLACE in this.request ? C6C.REPLACE : C6C.INSERT;
         const body = verb in this.request ? this.request[verb] : this.request;
         const keys = Object.keys(body);

@@ -33,7 +33,9 @@ export abstract class ConditionBuilder<
 
         const fullKey = `${tableName}.${column}`;
         if (table.COLUMNS && (fullKey in table.COLUMNS)) return true;
-        if (table.COLUMNS && Object.values(table.COLUMNS).includes(column)) return true;
+        if (table.COLUMNS && Object.values(table.COLUMNS).includes(ref)) return true;
+
+        this.config.verbose && console.log(`[COLUMN REF] ${ref} is not a valid column reference`);
 
         return false;
     }
@@ -54,17 +56,6 @@ export abstract class ConditionBuilder<
         C6C.MATCH_AGAINST,
         C6C.ST_DISTANCE_SPHERE
     ]);
-
-    private isTableReference(val: any): boolean {
-        if (typeof val !== 'string' || !val.includes('.')) return false;
-        const [prefix, column] = val.split('.');
-        const tableName = this.aliasMappings[prefix] ?? prefix;
-        return (
-            typeof this.config.C6?.TABLES[tableName] === 'object' &&
-            val in this.config.C6.TABLES[tableName].COLUMNS &&
-            this.config.C6.TABLES[tableName].COLUMNS[val] === column
-        );
-    }
 
     private validateOperator(op: string) {
         if (!this.OPERATORS.has(op)) {
@@ -143,7 +134,7 @@ export abstract class ConditionBuilder<
                         break;
                 }
 
-                if (!leftIsRef) {
+                if (!leftIsCol) {
                     throw new Error(`MATCH_AGAINST requires a table reference as the left operand. Column '${column}' is not a valid table reference.`);
                 }
                 const matchClause = `(MATCH(${column}) ${againstClause})`;
@@ -156,7 +147,7 @@ export abstract class ConditionBuilder<
                     this.isColumnRef(v) ? v : this.addParam(params, column, v)
                 ).join(', ');
                 const normalized = op.replace('_', ' ');
-                if (!leftIsRef) {
+                if (!leftIsCol) {
                     throw new Error(`IN operator requires a table reference as the left operand. Column '${column}' is not a valid table reference.`);
                 }
                 return `( ${column} ${normalized} (${placeholders}) )`;
@@ -164,26 +155,25 @@ export abstract class ConditionBuilder<
 
             if (op === C6C.BETWEEN || op === 'NOT BETWEEN') {
                 if (!Array.isArray(value) || value.length !== 2) {
-                    throw new Error(`BETWEEN operator requires an array of two values`);
+                    throw new Error(`BETWEEN operator requires an array of two values. Received: ${JSON.stringify(value)}`);
                 }
                 const [start, end] = value;
-                if (!leftIsRef) {
+                if (!leftIsCol) {
                     throw new Error(`BETWEEN operator requires a table reference as the left operand. Column '${column}' is not a valid table reference.`);
                 }
                 return `(${column}) ${op.replace('_', ' ')} ${this.addParam(params, column, start)} AND ${this.addParam(params, column, end)}`;
             }
 
-            const rightIsRef: boolean = this.isTableReference(value);
 
-            if (leftIsRef && rightIsRef) {
+            if (leftIsCol && rightIsCol) {
                 return `(${column}) ${op} ${value}`;
             }
 
-            if (leftIsRef && !rightIsRef) {
+            if (leftIsCol && !rightIsCol) {
                 return `(${column}) ${op} ${this.addParam(params, column, value)}`;
             }
 
-            if (rightIsRef) {
+            if (rightIsCol) {
                 return `(${this.addParam(params, column, column)}) ${op} ${value}`;
             }
 

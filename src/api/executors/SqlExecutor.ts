@@ -20,8 +20,7 @@ export class SqlExecutor<
         const method = this.config.requestMethod;
 
         this.config.verbose && console.log(`[SQL EXECUTOR] ▶️ Executing ${method} on table "${TABLE_NAME}"`);
-        this.config.verbose && console.log(`[SQL EXECUTOR] 🧩 Request body:`, this.request.body);
-        this.config.verbose && console.log(`[SQL EXECUTOR] 🧩 Request query:`, this.request.query);
+        this.config.verbose && console.log(`[SQL EXECUTOR] 🧩 Request:`, JSON.stringify(this.request, undefined, 2));
 
 
         switch (method) {
