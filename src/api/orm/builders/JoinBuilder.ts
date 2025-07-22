@@ -12,6 +12,7 @@ export abstract class JoinBuilder<G extends OrmGenerics> extends ConditionBuilde
 
             for (const raw in joinArgs[joinType]) {
                 const [table, alias] = raw.split(' ');
+                this.aliasMap[alias || table] = table;
                 const onClause = this.buildBooleanJoinedConditions(joinArgs[joinType][raw], true, params);
                 const joinSql = alias ? `\`${table}\` AS \`${alias}\`` : `\`${table}\``;
                 sql += ` ${joinKind} JOIN ${joinSql} ON ${onClause}`;

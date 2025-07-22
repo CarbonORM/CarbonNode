@@ -10,6 +10,7 @@ export class UpdateQueryBuilder<G extends OrmGenerics> extends PaginationBuilder
     ): SqlBuilderResult {
         const args = this.request;
         const params = this.useNamedParams ? {} : [];
+        this.initAlias(table, args.JOIN);
         let sql = `UPDATE \`${table}\``;
 
         if (args.JOIN) {
