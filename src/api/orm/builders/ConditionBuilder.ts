@@ -33,7 +33,8 @@ export abstract class ConditionBuilder<
         const tableName = this.aliasMappings[prefix] ?? prefix;
         return (
             typeof this.config.C6?.TABLES[tableName] === 'object' &&
-            column in this.config.C6.TABLES[tableName].COLUMNS
+            val in this.config.C6.TABLES[tableName].COLUMNS &&
+            this.config.C6.TABLES[tableName].COLUMNS[val] === column
         );
     }
 
