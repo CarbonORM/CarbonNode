@@ -8,6 +8,8 @@ export abstract class ConditionBuilder<
     G extends OrmGenerics
 > extends AggregateBuilder<G> {
 
+    protected aliasMappings: Record<string, string> = {};
+
     abstract build(table: string): SqlBuilderResult;
 
     execute(): Promise<DetermineResponseDataType<G['RequestMethod'], G['RestTableInterface']>> {
@@ -26,13 +28,13 @@ export abstract class ConditionBuilder<
     ]);
 
     private isTableReference(val: any): boolean {
-        console.log(val)
-        const [tableName] = val.split('.');
-        const is  =  typeof val === 'string' &&
+        if (typeof val !== 'string' || !val.includes('.')) return false;
+        const [prefix, column] = val.split('.');
+        const tableName = this.aliasMappings[prefix] ?? prefix;
+        return (
             typeof this.config.C6?.TABLES[tableName] === 'object' &&
-            val in this.config.C6.TABLES[tableName].COLUMNS;
-        console.log(val, is)
-        return is
+            column in this.config.C6.TABLES[tableName].COLUMNS
+        );
     }
 
     private validateOperator(op: string) {
