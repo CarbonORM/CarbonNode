@@ -19,7 +19,10 @@ export class SqlExecutor<
         const {TABLE_NAME} = this.config.restModel;
         const method = this.config.requestMethod;
 
-        console.log(`[SQL EXECUTOR] ▶️ Executing ${method} on table "${TABLE_NAME}"`);
+        this.config.verbose && console.log(`[SQL EXECUTOR] ▶️ Executing ${method} on table "${TABLE_NAME}"`);
+        this.config.verbose && console.log(`[SQL EXECUTOR] 🧩 Request body:`, this.request.body);
+        this.config.verbose && console.log(`[SQL EXECUTOR] 🧩 Request query:`, this.request.query);
+
 
         switch (method) {
             case 'GET': {

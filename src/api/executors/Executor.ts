@@ -5,7 +5,6 @@ import {
     iRestReactiveLifecycle,
     RequestQueryBody
 } from "../types/ormInterfaces";
-import isVerbose from "../../variables/isVerbose";
 
 export abstract class Executor<
     G extends OrmGenerics
@@ -40,7 +39,7 @@ export abstract class Executor<
 
         for (const [key, fn] of Object.entries(lifecycleGroup)) {
             if (typeof fn === "function") {
-                if (isVerbose() || (args.request as any).debug) {
+                if (this.config.verbose || (args.request as any).debug) {
                     console.groupCollapsed(`[LIFECYCLE] ${this.config.requestMethod}.${String(phase)}:${key}`);
                     console.log("config:", args.config);
                     console.log("request:", args.request);

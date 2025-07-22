@@ -25,7 +25,7 @@ export function clearCache(props?: iClearCache) {
 
 }
 
-export function checkCache<ResponseDataType = any, RestShortTableNames = string>(cacheResult: iCacheAPI<ResponseDataType>, requestMethod: string, tableName: RestShortTableNames | RestShortTableNames[], request: any): false | undefined | null | AxiosPromise<ResponseDataType> {
+export function checkCache<ResponseDataType = any, RestShortTableNames = string>(cacheResult: iCacheAPI<ResponseDataType>, requestMethod: string, tableName: RestShortTableNames | RestShortTableNames[], request: any): false | AxiosPromise<ResponseDataType> {
 
     if (undefined === cacheResult) {
 

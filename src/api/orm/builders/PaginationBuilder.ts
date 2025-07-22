@@ -1,5 +1,4 @@
 import {C6Constants} from "api/C6Constants";
-import isVerbose from "../../../variables/isVerbose";
 import {OrmGenerics} from "../../types/ormGenerics";
 import {JoinBuilder} from "./JoinBuilder";
 
@@ -50,7 +49,7 @@ export abstract class PaginationBuilder<G extends OrmGenerics> extends JoinBuild
             sql += ` LIMIT ${offset}, ${lim}`;
         }
 
-        isVerbose() && console.log(`[PAGINATION] ${sql.trim()}`);
+        this.config.verbose && console.log(`[PAGINATION] ${sql.trim()}`);
         return sql;
     }
 }

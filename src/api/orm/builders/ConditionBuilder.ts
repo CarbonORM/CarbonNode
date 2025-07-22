@@ -1,5 +1,4 @@
 import {C6C} from "api/C6Constants";
-import isVerbose from "../../../variables/isVerbose";
 import {OrmGenerics} from "../../types/ormGenerics";
 import {DetermineResponseDataType} from "../../types/ormInterfaces";
 import {convertHexIfBinary, SqlBuilderResult} from "../utils/sqlUtils";
@@ -52,8 +51,20 @@ export abstract class ConditionBuilder<
         C6C.IN, C6C.NOT_IN, 'NOT IN',
         C6C.IS, C6C.IS_NOT,
         C6C.BETWEEN, 'NOT BETWEEN',
-        C6C.MATCH_AGAINST
+        C6C.MATCH_AGAINST,
+        C6C.ST_DISTANCE_SPHERE
     ]);
+
+    private isTableReference(val: any): boolean {
+        if (typeof val !== 'string' || !val.includes('.')) return false;
+        const [prefix, column] = val.split('.');
+        const tableName = this.aliasMappings[prefix] ?? prefix;
+        return (
+            typeof this.config.C6?.TABLES[tableName] === 'object' &&
+            val in this.config.C6.TABLES[tableName].COLUMNS &&
+            this.config.C6.TABLES[tableName].COLUMNS[val] === column
+        );
+    }
 
     private validateOperator(op: string) {
         if (!this.OPERATORS.has(op)) {
@@ -86,8 +97,19 @@ export abstract class ConditionBuilder<
     ): string {
         const booleanOperator = andMode ? 'AND' : 'OR';
 
-        const addCondition = (column: string, op: string, value: any): string => {
-            this.validateOperator(op);
+        const addCondition = (column: any, op: any, value: any): string => {
+            // Support function-based expressions like [C6C.ST_DISTANCE_SPHERE, col1, col2]
+            if (
+                typeof column === 'string' &&
+                this.OPERATORS.has(column) &&
+                Array.isArray(op)
+            ) {
+                if (column === C6C.ST_DISTANCE_SPHERE) {
+                    const [col1, col2] = op;
+                    const threshold = Array.isArray(value) ? value[0] : value;
+                    return `ST_Distance_Sphere(${col1}, ${col2}) < ${this.addParam(params, '', threshold)}`;
+                }
+            }
 
             const leftIsCol = this.isColumnRef(column);
             const rightIsCol = typeof value === 'string' && this.isColumnRef(value);
@@ -96,6 +118,7 @@ export abstract class ConditionBuilder<
                 throw new Error(`Potential SQL injection detected: '${column} ${op} ${value}'`);
             }
 
+            this.validateOperator(op);
 
             if (op === C6C.MATCH_AGAINST && Array.isArray(value)) {
                 const [search, mode] = value;
@@ -120,8 +143,11 @@ export abstract class ConditionBuilder<
                         break;
                 }
 
+                if (!leftIsRef) {
+                    throw new Error(`MATCH_AGAINST requires a table reference as the left operand. Column '${column}' is not a valid table reference.`);
+                }
                 const matchClause = `(MATCH(${column}) ${againstClause})`;
-                isVerbose() && console.log(`[MATCH_AGAINST] ${matchClause}`);
+                this.config.verbose && console.log(`[MATCH_AGAINST] ${matchClause}`);
                 return matchClause;
             }
 
@@ -130,15 +156,39 @@ export abstract class ConditionBuilder<
                     this.isColumnRef(v) ? v : this.addParam(params, column, v)
                 ).join(', ');
                 const normalized = op.replace('_', ' ');
+                if (!leftIsRef) {
+                    throw new Error(`IN operator requires a table reference as the left operand. Column '${column}' is not a valid table reference.`);
+                }
                 return `( ${column} ${normalized} (${placeholders}) )`;
             }
 
-            if (rightIsCol) {
-                return `( ${column} ${op} ${value} )`;
+            if (op === C6C.BETWEEN || op === 'NOT BETWEEN') {
+                if (!Array.isArray(value) || value.length !== 2) {
+                    throw new Error(`BETWEEN operator requires an array of two values`);
+                }
+                const [start, end] = value;
+                if (!leftIsRef) {
+                    throw new Error(`BETWEEN operator requires a table reference as the left operand. Column '${column}' is not a valid table reference.`);
+                }
+                return `(${column}) ${op.replace('_', ' ')} ${this.addParam(params, column, start)} AND ${this.addParam(params, column, end)}`;
             }
 
-            // handle other operators with parameterization
-            return `( ${column} ${op} ${this.addParam(params, column, value)} )`;
+            const rightIsRef: boolean = this.isTableReference(value);
+
+            if (leftIsRef && rightIsRef) {
+                return `(${column}) ${op} ${value}`;
+            }
+
+            if (leftIsRef && !rightIsRef) {
+                return `(${column}) ${op} ${this.addParam(params, column, value)}`;
+            }
+
+            if (rightIsRef) {
+                return `(${this.addParam(params, column, column)}) ${op} ${value}`;
+            }
+
+            throw new Error(`Neither operand appears to be a table reference`);
+
         };
 
         const parts: string[] = [];
@@ -187,7 +237,7 @@ export abstract class ConditionBuilder<
         const clause = this.buildBooleanJoinedConditions(whereArg, true, params);
         if (!clause) return '';
         const trimmed = clause.replace(/^\((.*)\)$/, '$1');
-        isVerbose() && console.log(`[WHERE] ${trimmed}`);
+        this.config.verbose && console.log(`[WHERE] ${trimmed}`);
         return ` WHERE ${trimmed}`;
     }
 }

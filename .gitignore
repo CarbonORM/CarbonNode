@@ -12,6 +12,7 @@ C6MySqlDump.json
 mysqldump.sql
 mysql.cnf
 C6.tsx
+src/*.js
 
 # Diagnostic reports (https://nodejs.org/api/report.html)
 report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json

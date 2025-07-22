@@ -1,4 +1,3 @@
-import isVerbose from "../../../variables/isVerbose";
 import {OrmGenerics} from "../../types/ormGenerics";
 import {ConditionBuilder} from "./ConditionBuilder";
 
@@ -19,7 +18,7 @@ export abstract class JoinBuilder<G extends OrmGenerics> extends ConditionBuilde
             }
         }
 
-        isVerbose() && console.log(`[JOIN] ${sql.trim()}`);
+        this.config.verbose && console.log(`[JOIN] ${sql.trim()}`);
 
         return sql;
     }

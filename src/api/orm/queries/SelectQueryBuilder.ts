@@ -8,6 +8,7 @@ export class SelectQueryBuilder<G extends OrmGenerics> extends PaginationBuilder
         table: string,
         isSubSelect: boolean = false
     ): SqlBuilderResult {
+        this.aliasMappings = {};
         const args = this.request;
         this.initAlias(table, args.JOIN);
         const params = this.useNamedParams ? {} : [];
@@ -42,6 +43,8 @@ export class SelectQueryBuilder<G extends OrmGenerics> extends PaginationBuilder
         } else if (!isSubSelect) {
             sql += ` LIMIT 100`;
         }
+
+        console.log(`[SELECT] ${sql.trim()}`);
 
         return { sql, params };
     }
