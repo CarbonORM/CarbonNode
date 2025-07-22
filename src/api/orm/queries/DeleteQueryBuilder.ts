@@ -8,6 +8,7 @@ export class DeleteQueryBuilder<G extends OrmGenerics> extends JoinBuilder<G> {
     ): SqlBuilderResult {
         this.aliasMappings = {};
         const params = this.useNamedParams ? {} : [];
+        this.initAlias(table, this.request.JOIN);
 
         let sql = `DELETE \`${table}\` FROM \`${table}\``;
 

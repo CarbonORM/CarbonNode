@@ -8,7 +8,35 @@ export abstract class ConditionBuilder<
     G extends OrmGenerics
 > extends AggregateBuilder<G> {
 
-    protected aliasMappings: Record<string, string> = {};
+    protected aliasMap: Record<string, string> = {};
+
+    protected initAlias(baseTable: string, joins?: any): void {
+        this.aliasMap = { [baseTable]: baseTable };
+
+        if (!joins) return;
+
+        for (const joinType in joins) {
+            for (const raw in joins[joinType]) {
+                const [table, alias] = raw.split(' ');
+                this.aliasMap[alias || table] = table;
+            }
+        }
+    }
+
+    protected isColumnRef(ref: string): boolean {
+        if (typeof ref !== 'string' || !ref.includes('.')) return false;
+
+        const [prefix, column] = ref.split('.', 2);
+        const tableName = this.aliasMap[prefix] || prefix;
+        const table = this.config.C6?.TABLES?.[tableName];
+        if (!table) return false;
+
+        const fullKey = `${tableName}.${column}`;
+        if (table.COLUMNS && (fullKey in table.COLUMNS)) return true;
+        if (table.COLUMNS && Object.values(table.COLUMNS).includes(column)) return true;
+
+        return false;
+    }
 
     abstract build(table: string): SqlBuilderResult;
 
@@ -83,8 +111,14 @@ export abstract class ConditionBuilder<
                 }
             }
 
+            const leftIsCol = this.isColumnRef(column);
+            const rightIsCol = typeof value === 'string' && this.isColumnRef(value);
+
+            if (!leftIsCol && !rightIsCol) {
+                throw new Error(`Potential SQL injection detected: '${column} ${op} ${value}'`);
+            }
+
             this.validateOperator(op);
-            const leftIsRef: boolean = this.isTableReference(column);
 
             if (op === C6C.MATCH_AGAINST && Array.isArray(value)) {
                 const [search, mode] = value;
@@ -118,7 +152,9 @@ export abstract class ConditionBuilder<
             }
 
             if ((op === C6C.IN || op === C6C.NOT_IN) && Array.isArray(value)) {
-                const placeholders = value.map(v => this.addParam(params, column, v)).join(', ');
+                const placeholders = value.map(v =>
+                    this.isColumnRef(v) ? v : this.addParam(params, column, v)
+                ).join(', ');
                 const normalized = op.replace('_', ' ');
                 if (!leftIsRef) {
                     throw new Error(`IN operator requires a table reference as the left operand. Column '${column}' is not a valid table reference.`);

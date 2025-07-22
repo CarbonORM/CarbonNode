@@ -10,6 +10,7 @@ export class SelectQueryBuilder<G extends OrmGenerics> extends PaginationBuilder
     ): SqlBuilderResult {
         this.aliasMappings = {};
         const args = this.request;
+        this.initAlias(table, args.JOIN);
         const params = this.useNamedParams ? {} : [];
         const selectList = args.SELECT ?? ['*'];
         const selectFields = selectList
