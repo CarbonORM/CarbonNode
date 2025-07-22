@@ -1,5 +1,4 @@
 import {C6C} from "api/C6Constants";
-import isVerbose from "../../../variables/isVerbose";
 import {OrmGenerics} from "../../types/ormGenerics";
 import {DetermineResponseDataType} from "../../types/ormInterfaces";
 import {convertHexIfBinary, SqlBuilderResult} from "../utils/sqlUtils";
@@ -111,7 +110,7 @@ export abstract class ConditionBuilder<
                     throw new Error(`MATCH_AGAINST requires a table reference as the left operand. Column '${column}' is not a valid table reference.`);
                 }
                 const matchClause = `(MATCH(${column}) ${againstClause})`;
-                isVerbose() && console.log(`[MATCH_AGAINST] ${matchClause}`);
+                this.config.verbose && console.log(`[MATCH_AGAINST] ${matchClause}`);
                 return matchClause;
             }
 
@@ -139,6 +138,10 @@ export abstract class ConditionBuilder<
 
             if (leftIsRef && rightIsRef) {
                 return `(${column}) ${op} ${value}`;
+            }
+
+            if (leftIsRef && !rightIsRef) {
+                return `(${column}) ${op} ${this.addParam(params, column, value)}`;
             }
 
             if (rightIsRef) {
@@ -195,7 +198,7 @@ export abstract class ConditionBuilder<
         const clause = this.buildBooleanJoinedConditions(whereArg, true, params);
         if (!clause) return '';
         const trimmed = clause.replace(/^\((.*)\)$/, '$1');
-        isVerbose() && console.log(`[WHERE] ${trimmed}`);
+        this.config.verbose && console.log(`[WHERE] ${trimmed}`);
         return ` WHERE ${trimmed}`;
     }
 }

@@ -1,4 +1,3 @@
-import isVerbose from "../../../variables/isVerbose";
 import {Executor} from "../../executors/Executor";
 import {OrmGenerics} from "../../types/ormGenerics";
 
@@ -31,7 +30,7 @@ export abstract class AggregateBuilder<G extends OrmGenerics> extends Executor<G
             expr += ` AS ${alias}`;
         }
 
-        isVerbose() && console.log(`[SELECT] ${expr}`);
+        this.config.verbose && console.log(`[SELECT] ${expr}`);
 
         return expr;
     }

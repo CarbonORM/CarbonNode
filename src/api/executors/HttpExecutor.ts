@@ -2,7 +2,6 @@ import {AxiosPromise, AxiosResponse} from "axios";
 import {toast} from "react-toastify";
 import isLocal from "../../variables/isLocal";
 import isTest from "../../variables/isTest";
-import isVerbose from "../../variables/isVerbose";
 import convertForRequestBody from "../convertForRequestBody";
 import {eFetchDependencies} from "../types/dynamicFetching";
 import {OrmGenerics} from "../types/ormGenerics";
@@ -609,7 +608,7 @@ export class HttpExecutor<
                             returnGetNextPageFunction = 1 !== query?.[C6.PAGINATION]?.[C6.LIMIT] &&
                                 query?.[C6.PAGINATION]?.[C6.LIMIT] === responseData.rest.length
 
-                            if (false === isTest() || true === isVerbose()) {
+                            if (false === isTest() || this.config.verbose) {
 
                                 console.groupCollapsed('%c API: Response (' + requestMethod + ' ' + tableName + ') returned length (' + responseData.rest?.length + ') of possible (' + query?.[C6.PAGINATION]?.[C6.LIMIT] + ') limit!', 'color: #0c0')
 
