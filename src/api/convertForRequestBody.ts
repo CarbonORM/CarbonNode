@@ -27,7 +27,7 @@ export default function <
     for (const tableDefinition of tableDefinitions) {
         for (const value of Object.keys(restfulObject)) {
             const shortReference = value.toUpperCase();
-
+            
             if ([
                 C6Constants.GET,
                 C6Constants.POST,
@@ -66,6 +66,28 @@ export default function <
                         const regex: RegExp = regexValidations[errorMessage];
                         if (!regex.test(columnValue)) {
                             const devErrorMessage = `Failed to match regex (${regex}) for column (${longName})`;
+                            regexErrorHandler(errorMessage || devErrorMessage);
+                            throw new Error(devErrorMessage);
+                        }
+                    }
+                }
+            } else if (Object.values(tableDefinition.COLUMNS).includes(value)) {
+                // Already a fully qualified column name
+                const columnValue = restfulObject[value];
+                payload[value] = columnValue;
+
+                const regexValidations = tableDefinition.REGEX_VALIDATION[value];
+
+                if (regexValidations instanceof RegExp) {
+                    if (!regexValidations.test(columnValue)) {
+                        regexErrorHandler(`Failed to match regex (${regexValidations}) for column (${value})`);
+                        throw new Error(`Failed to match regex (${regexValidations}) for column (${value})`);
+                    }
+                } else if (typeof regexValidations === 'object' && regexValidations !== null) {
+                    for (const errorMessage in regexValidations) {
+                        const regex: RegExp = regexValidations[errorMessage];
+                        if (!regex.test(columnValue)) {
+                            const devErrorMessage = `Failed to match regex (${regex}) for column (${value})`;
                             regexErrorHandler(errorMessage || devErrorMessage);
                             throw new Error(devErrorMessage);
                         }
