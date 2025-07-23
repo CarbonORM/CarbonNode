@@ -1,53 +1,66 @@
-const assert = require('assert');
-const howLongTillLunch = require('..');
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { SelectQueryBuilder, UpdateQueryBuilder, DeleteQueryBuilder, PostQueryBuilder, C6C } from '../dist/index.esm.js';
 
-function MockDate () {
-	this.date = 0;
-	this.hours = 0;
-	this.minutes = 0;
-	this.seconds = 0;
-	this.milliseconds = 0;
-};
-
-Object.assign(MockDate.prototype, {
-	getDate () { return this.date; },
-	setDate (date) { this.date = date; },
-	setHours (h) { this.hours = h; },
-	setMinutes (m) { this.minutes = m; },
-	setSeconds (s) { this.seconds = s; },
-	setMilliseconds (ms) { this.milliseconds = ms; },
-	valueOf () {
-		return (
-			this.milliseconds +
-			this.seconds * 1e3 +
-			this.minutes * 1e3 * 60 +
-			this.hours * 1e3 * 60 * 60 +
-			this.date * 1e3 * 60 * 60 * 24
-		);
-	}
-});
-
-const now = new MockDate();
-MockDate.now = () => now.valueOf();
-
-global.Date = MockDate;
-
-function test(hours, minutes, seconds, expected) {
-	now.setHours(hours);
-	now.setMinutes(minutes);
-	now.setSeconds(seconds);
-
-	assert.equal(howLongTillLunch(...lunchtime), expected);
-	console.log(`\u001B[32m✓\u001B[39m ${expected}`);
+function makeConfig(method) {
+  return { C6: {}, restModel: { LIFECYCLE_HOOKS: {} }, requestMethod: method };
 }
 
-let lunchtime = [ 12, 30 ];
-test(11, 30, 0, '1 hour');
-test(10, 30, 0, '2 hours');
-test(12, 25, 0, '5 minutes');
-test(12, 29, 15, '45 seconds');
-test(13, 30, 0, '23 hours');
+test('SelectQueryBuilder default select all', () => {
+  const builder = new SelectQueryBuilder(makeConfig('GET'), {});
+  const result = builder.build('users');
+  assert.equal(result.sql, 'SELECT * FROM `users` LIMIT 100');
+  assert.deepEqual(result.params, []);
+});
 
-// some of us like an early lunch
-lunchtime = [ 11, 0 ];
-test(10, 30, 0, '30 minutes');
+test('SelectQueryBuilder named params where', () => {
+  const builder = new SelectQueryBuilder(makeConfig('GET'), { WHERE: { id: 5 } }, true);
+  const result = builder.build('users');
+  assert.equal(result.sql, 'SELECT * FROM `users` WHERE ( id = :param0 ) LIMIT 100');
+  assert.deepEqual(result.params, { param0: 5 });
+});
+
+test('DeleteQueryBuilder positional params', () => {
+  const builder = new DeleteQueryBuilder(makeConfig('DELETE'), { WHERE: { id: 1 } });
+  const result = builder.build('users');
+  assert.equal(result.sql, 'DELETE `users` FROM `users` WHERE ( id = ? )');
+  assert.deepEqual(result.params, [1]);
+});
+
+test('DeleteQueryBuilder named params', () => {
+  const builder = new DeleteQueryBuilder(makeConfig('DELETE'), { WHERE: { id: 1 } }, true);
+  const result = builder.build('users');
+  assert.equal(result.sql, 'DELETE `users` FROM `users` WHERE ( id = :param0 )');
+  assert.deepEqual(result.params, { param0: 1 });
+});
+
+test('UpdateQueryBuilder throws when missing update data', () => {
+  const builder = new UpdateQueryBuilder(makeConfig('PUT'), {});
+  assert.throws(() => builder.build('users'), /No update data provided/);
+});
+
+test('UpdateQueryBuilder named params with where', () => {
+  const request = { [C6C.UPDATE]: { name: 'Bob' }, WHERE: { id: 1 } };
+  const builder = new UpdateQueryBuilder(makeConfig('PUT'), request, true);
+  const result = builder.build('users');
+  assert.equal(result.sql, 'UPDATE `users` SET :param0 WHERE ( id = :param1 )');
+  assert.deepEqual(result.params, { param0: 'Bob', param1: 1 });
+});
+
+test('PostQueryBuilder insert with duplicate update', () => {
+  const request = { [C6C.INSERT]: { name: 'Alice' }, [C6C.UPDATE]: ['name'] };
+  const builder = new PostQueryBuilder(makeConfig('POST'), request);
+  const result = builder.build('users');
+  assert.ok(result.sql.includes('ON DUPLICATE KEY UPDATE `name` = VALUES(`name`)'));
+  assert.deepEqual(result.params, ['Alice']);
+});
+
+test('PostQueryBuilder named params placeholder', () => {
+  const request = { [C6C.INSERT]: { name: 'Alice' } };
+  const builder = new PostQueryBuilder(makeConfig('POST'), request, true);
+  const result = builder.build('users');
+  const expectedSql = 'INSERT INTO `users` (\n            `name`\n         ) VALUES (\n            :param0\n        )';
+  assert.equal(result.sql, expectedSql);
+  assert.equal(result.params.param0, 'Alice');
+  assert.ok(Array.isArray(result.params));
+});
