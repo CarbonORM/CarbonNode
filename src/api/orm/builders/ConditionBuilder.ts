@@ -58,7 +58,7 @@ export abstract class ConditionBuilder<
     private isTableReference(val: any): boolean {
         if (typeof val !== 'string' || !val.includes('.')) return false;
         const [prefix, column] = val.split('.');
-        const tableName = this.aliasMappings[prefix] ?? prefix;
+        const tableName = this.aliasMap[prefix] ?? prefix;
         return (
             typeof this.config.C6?.TABLES[tableName] === 'object' &&
             val in this.config.C6.TABLES[tableName].COLUMNS &&
@@ -112,6 +112,7 @@ export abstract class ConditionBuilder<
             }
 
             const leftIsCol = this.isColumnRef(column);
+            const leftIsRef = this.isTableReference(column);
             const rightIsCol = typeof value === 'string' && this.isColumnRef(value);
 
             if (!leftIsCol && !rightIsCol) {
@@ -143,7 +144,7 @@ export abstract class ConditionBuilder<
                         break;
                 }
 
-                if (!leftIsRef) {
+                if (!leftIsCol) {
                     throw new Error(`MATCH_AGAINST requires a table reference as the left operand. Column '${column}' is not a valid table reference.`);
                 }
                 const matchClause = `(MATCH(${column}) ${againstClause})`;

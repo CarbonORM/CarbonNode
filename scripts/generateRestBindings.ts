@@ -90,7 +90,7 @@ class MySQLDump {
 
         const createInfoOption = schemas ? '' : ' --no-create-info ';
 
-        const cmd = `${mysqldump} --defaults-extra-file="${defaultsExtraFile}" ${otherOption} --skip-add-locks --single-transaction --quick ${createInfoOption}${hexBlobOption}${this.DB_NAME} ${specificTable} > '${outputFile}'`;
+        const cmd = `${mysqldump} --defaults-extra-file="${defaultsExtraFile}" ${otherOption} --skip-add-locks --lock-tables=false --single-transaction --quick ${createInfoOption}${hexBlobOption}${this.DB_NAME} ${specificTable} > '${outputFile}'`;
 
         this.executeAndCheckStatus(cmd);
 
