@@ -1,0 +1,30 @@
+#!/usr/bin/env node
+
+const fs = require('fs');
+const { execSync } = require('child_process');
+
+function getVersion(ref) {
+  try {
+    const pkg = execSync(`git show ${ref}:package.json`, { encoding: 'utf8' });
+    return JSON.parse(pkg).version;
+  } catch (err) {
+    return null;
+  }
+}
+
+const currentVersion = JSON.parse(fs.readFileSync('package.json', 'utf8')).version;
+const previousVersion = getVersion('HEAD^');
+
+if (previousVersion === currentVersion) {
+  console.log('Version unchanged; skipping npm publish.');
+  process.exit(0);
+}
+
+console.log(`Version changed from ${previousVersion || 'none'} to ${currentVersion}. Publishing to npm...`);
+
+try {
+  execSync('npm publish', { stdio: 'inherit' });
+} catch (err) {
+  console.error('npm publish failed.');
+  process.exit(err.status || 1);
+}
