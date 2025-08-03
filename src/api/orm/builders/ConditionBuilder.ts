@@ -59,10 +59,14 @@ export abstract class ConditionBuilder<
         if (typeof val !== 'string' || !val.includes('.')) return false;
         const [prefix, column] = val.split('.');
         const tableName = this.aliasMap[prefix] ?? prefix;
+        const table = this.config.C6?.TABLES?.[tableName];
+        if (!table || !table.COLUMNS) return false;
+
+        const fullKey = `${tableName}.${column}`;
+
         return (
-            typeof this.config.C6?.TABLES[tableName] === 'object' &&
-            val in this.config.C6.TABLES[tableName].COLUMNS &&
-            this.config.C6.TABLES[tableName].COLUMNS[val] === column
+            fullKey in table.COLUMNS ||
+            Object.values(table.COLUMNS).includes(column)
         );
     }
 
