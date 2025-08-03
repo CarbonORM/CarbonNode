@@ -188,7 +188,7 @@ export abstract class ConditionBuilder<
                 return `(${this.addParam(params, column, column)}) ${op} ${value}`;
             }
 
-            throw new Error(`Neither operand appears to be a table reference`);
+            throw new Error(`Neither operand appears to be a table reference (${column}) or (${value})`);
 
         };
 

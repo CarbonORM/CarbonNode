@@ -20,8 +20,7 @@ export class SqlExecutor<
         const method = this.config.requestMethod;
 
         this.config.verbose && console.log(`[SQL EXECUTOR] ▶️ Executing ${method} on table "${TABLE_NAME}"`);
-        this.config.verbose && console.log(`[SQL EXECUTOR] 🧩 Request body:`, this.request.body);
-        this.config.verbose && console.log(`[SQL EXECUTOR] 🧩 Request query:`, this.request.query);
+        this.config.verbose && console.log(`[SQL EXECUTOR] 🧩 Request:`, this.request);
 
 
         switch (method) {
@@ -128,7 +127,6 @@ export class SqlExecutor<
             const [result] = await conn.query<any>(sql, values);
 
             if (method === 'GET') {
-                this.config.verbose && console.log(`[SQL EXECUTOR] 📦 Rows fetched:`, result);
                 return {
                     rest: result.map(this.serialize),
                     sql: {sql, values}
