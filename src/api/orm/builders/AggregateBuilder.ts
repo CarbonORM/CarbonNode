@@ -20,11 +20,17 @@ export abstract class AggregateBuilder<G extends OrmGenerics> extends Executor<G
         }
 
         const F = String(fn).toUpperCase();
-        const argList = args.map(arg =>
-            Array.isArray(arg) ? this.buildAggregateField(arg) : arg
-        ).join(', ');
+        const argList = args
+            .map(arg => Array.isArray(arg) ? this.buildAggregateField(arg) : arg)
+            .join(', ');
 
-        let expr = `${F}(${argList})`;
+        let expr: string;
+
+        if (F === 'DISTINCT') {
+            expr = `DISTINCT ${argList}`;
+        } else {
+            expr = `${F}(${argList})`;
+        }
 
         if (alias) {
             expr += ` AS ${alias}`;
