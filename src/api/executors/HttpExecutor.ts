@@ -402,7 +402,8 @@ export class HttpExecutor<
             // A part of me exists that wants to remove this, but it's a good feature
             // this allows developers the ability to cache requests based on primary key
             // for tables like `photos` this can be a huge performance boost
-            if (undefined !== query
+            if (POST !== requestMethod
+                && undefined !== query
                 && null !== query
                 && undefined !== primaryKey
                 && primaryKey in query) {
