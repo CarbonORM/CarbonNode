@@ -562,6 +562,21 @@ export default Users;
 
 
 
+# Git Hooks
+
+This project uses Git hooks to automate certain tasks:
+
+- **pre-push**: Builds the project before pushing to ensure only working code is pushed
+- **post-push**: Automatically publishes to npm when the version number changes
+
+To set up the Git hooks, run:
+
+```bash
+npm run hooks:setup
+```
+
+This will configure Git to use the hooks in the `.githooks` directory. The hooks are automatically set up when you run `npm install` as well.
+
 # Support and Issues
 
 Any issues found should be reported on [GitHub](https://github.com/CarbonORM/CarbonNode/issues).

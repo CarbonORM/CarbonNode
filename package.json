@@ -11,6 +11,9 @@
   "types": "dist/index.d.ts",
   "type": "module",
   "license": "MIT",
+  "gitHooks": {
+    "hooksPath": ".githooks"
+  },
   "dependencies": {
     "@carbonorm/carbonreact": "^4.0.25",
     "buffer": "^6.0.3",
@@ -78,7 +81,9 @@
     "build:index": "npx barrelsby -d ./src --delete --exclude '(jestHoc|\\.test|\\.d).(js|tsx?)$' --exportDefault --verbose",
     "build:generateRestBindings": "cd ./scripts/ && tsc --downlevelIteration --resolveJsonModule generateRestBindings.ts && mv generateRestBindings.js generateRestBindings.cjs",
     "generateRestBindings": "npm run build:generateRestBindings && node ./scripts/generateRestBindings.cjs",
-    "c6": "npm run generateRestBindings"
+    "c6": "npm run generateRestBindings",
+    "postinstall": "git config core.hooksPath .githooks",
+    "hooks:setup": "./scripts/test-hooks.sh"
   },
   "bin": {
     "generateRestBindings": "./scripts/generateRestBindings.cjs"
