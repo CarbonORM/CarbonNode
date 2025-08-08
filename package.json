@@ -1,6 +1,6 @@
 {
   "name": "@carbonorm/carbonnode",
-  "version": "3.6.6",
+  "version": "3.6.8",
   "browser": "dist/index.umd.js",
   "exports": {
     ".": {

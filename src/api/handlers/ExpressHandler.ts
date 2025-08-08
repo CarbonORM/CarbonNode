@@ -49,7 +49,7 @@ export function ExpressHandler({C6, mysqlPool}: { C6: iC6Object, mysqlPool: Pool
                     if (primary) {
                         payload[C6C.WHERE][primaryKeyName] = primary;
                     } else {
-                        res.status(400).json({error: `Invalid request: ${method} requires a primary key.`});
+                        res.status(400).json({error: `Invalid request: ${method} requires a primary key (${primaryKeyName}).`});
                     }
                     break;
                 case 'POST':
