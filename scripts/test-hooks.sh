@@ -20,7 +20,7 @@ if [ -x ".githooks/pre-push" ]; then
 else
   echo "❌ pre-push hook is not executable"
   echo "Running: chmod +x .githooks/pre-push"
-  chmod +x .githooks/pre-push
+  chmod +x .githooks/pre-commit
 fi
 
 if [ -x ".githooks/post-push" ]; then
