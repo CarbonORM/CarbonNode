@@ -1,3 +1,4 @@
+import './queryHelpers.test.js';
 import assert from 'assert';
 
 // basic sanity test to ensure test infrastructure runs
