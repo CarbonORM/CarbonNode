@@ -27,3 +27,8 @@ export const bbox = (minLng: number, minLat: number, maxLng: number, maxLat: num
     [C6C.ST_SRID, [C6C.ST_MAKEENVELOPE,
         [C6C.ST_POINT, minLng, minLat],
         [C6C.ST_POINT, maxLng, maxLat]], 4326];
+
+// ST_Contains for map envelope/shape queries
+export const stContains = (envelope: string, shape: string): any[] =>
+    [C6C.ST_CONTAINS, envelope, shape];
+
