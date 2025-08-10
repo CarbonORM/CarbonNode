@@ -52,7 +52,16 @@ export abstract class ConditionBuilder<
         C6C.IS, C6C.IS_NOT,
         C6C.BETWEEN, 'NOT BETWEEN',
         C6C.MATCH_AGAINST,
-        C6C.ST_DISTANCE_SPHERE
+        C6C.ST_DISTANCE_SPHERE,
+        // spatial predicates
+        C6C.ST_CONTAINS,
+        C6C.ST_INTERSECTS,
+        C6C.ST_WITHIN,
+        C6C.ST_CROSSES,
+        C6C.ST_DISJOINT,
+        C6C.ST_EQUALS,
+        C6C.ST_OVERLAPS,
+        C6C.ST_TOUCHES
     ]);
 
     private isTableReference(val: any): boolean {
@@ -112,6 +121,19 @@ export abstract class ConditionBuilder<
                     const [col1, col2] = op;
                     const threshold = Array.isArray(value) ? value[0] : value;
                     return `ST_Distance_Sphere(${col1}, ${col2}) < ${this.addParam(params, '', threshold)}`;
+                }
+                if ([
+                    C6C.ST_CONTAINS,
+                    C6C.ST_INTERSECTS,
+                    C6C.ST_WITHIN,
+                    C6C.ST_CROSSES,
+                    C6C.ST_DISJOINT,
+                    C6C.ST_EQUALS,
+                    C6C.ST_OVERLAPS,
+                    C6C.ST_TOUCHES
+                ].includes(column)) {
+                    const [geom1, geom2] = op;
+                    return `${column}(${geom1}, ${geom2})`;
                 }
             }
 
