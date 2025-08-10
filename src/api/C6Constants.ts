@@ -120,6 +120,7 @@ export const C6Constants = {
     ST_GEOMFROMWKB: 'ST_GeomFromWKB',
     ST_INTERSECTS: 'ST_Intersects',
     ST_LENGTH: 'ST_Length',
+    ST_MAKEENVELOPE: 'ST_MakeEnvelope',
     ST_OVERLAPS: 'ST_Overlaps',
     ST_POINT: 'ST_Point',
     ST_SETSRID: 'ST_SetSRID',
