@@ -71,12 +71,13 @@
     "rimraf": "^5.0.1",
     "rollup": "^4.22.4",
     "rollup-plugin-includepaths": "^0.2.4",
+    "ts-node": "^10.9.2",
     "typescript": "^5.1.6"
   },
   "scripts": {
     "build": "rm -rf src/api/rest && npm run build:index && npm run build:generateRestBindings && rollup -c",
     "dev": "rollup -c -w",
-    "test": "node test/test.js",
+    "test": "node --loader ts-node/esm --experimental-specifier-resolution=node test/test.js",
     "pretest": "npm run build",
     "build:index": "npx barrelsby -d ./src --delete --exclude '(jestHoc|\\.test|\\.d).(js|tsx?)$' --exportDefault --verbose",
     "build:generateRestBindings": "cd ./scripts/ && tsc --downlevelIteration --resolveJsonModule generateRestBindings.ts && mv generateRestBindings.js generateRestBindings.cjs",

@@ -1,3 +1,4 @@
+import './queryHelpers.test.ts';
 import assert from 'assert';
 
 // basic sanity test to ensure test infrastructure runs
