@@ -795,9 +795,7 @@ export class HttpExecutor<
 
                                     }
 
-                                    const fetchTable = await C6.IMPORT(tableToFetch)
-
-                                    const RestApi = fetchTable.default
+                                    const RestApi = C6.ORM[tableToFetch]
 
                                     console.log('%c Fetch Dependencies will select (' + tableToFetch + ') using GET request', 'color: #33ccff')
 
