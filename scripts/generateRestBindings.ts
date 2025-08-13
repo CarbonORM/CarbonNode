@@ -168,7 +168,7 @@ function determineTypeScriptType(mysqlType: string, enumValues?: string[]): stri
         case 'date':
         case 'datetime':
         case 'timestamp':
-            return 'Date | string';
+            return 'Date | number | string';
 
         // String & Temporal
         case 'char':

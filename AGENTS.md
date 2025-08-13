@@ -10,6 +10,6 @@ nvm install
 nvm use
 npm install
   ```
-- New commits must have proper test coverage.
+- New features must have proper test coverage.
 - Attempt to add coverage to code that is near areas touched too.
 - Run `npm test` before each commit. The command MUST pass.

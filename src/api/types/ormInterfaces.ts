@@ -7,6 +7,7 @@ import {Modify} from "./modifyTypes";
 import {JoinType, OrderDirection, SQLComparisonOperator, SQLFunction} from "./mysqlTypes";
 import {CarbonReact} from "@carbonorm/carbonreact";
 import {OrmGenerics} from "./ormGenerics";
+import {restOrm} from "../restOrm";
 
 export type iRestMethods = 'GET' | 'POST' | 'PUT' | 'DELETE';
 export const POST = 'POST';
@@ -255,8 +256,11 @@ export interface iC6Object<
         [K in Extract<keyof RestTableInterfaces, string>]: C6RestfulModel<K, RestTableInterfaces[K], keyof RestTableInterfaces[K] & string>;
     };
     PREFIX: string;
-    IMPORT: (tableName: string) => Promise<iDynamicApiImport>;
-
+    ORM: {
+        [K in Extract<keyof RestTableInterfaces, string>]:
+        C6RestfulModel<K, RestTableInterfaces[K], keyof RestTableInterfaces[K] & string>
+        & ReturnType<typeof restOrm<OrmGenerics<any>>>
+    }[]
     [key: string]: any;
 }
 
