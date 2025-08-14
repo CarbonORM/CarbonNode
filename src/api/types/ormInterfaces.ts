@@ -260,7 +260,8 @@ export interface iC6Object<
         [K in Extract<keyof RestTableInterfaces, string>]:
         C6RestfulModel<K, RestTableInterfaces[K], keyof RestTableInterfaces[K] & string>
         & ReturnType<typeof restOrm<OrmGenerics<any>>>
-    }[]
+    }
+
     [key: string]: any;
 }
 

@@ -718,7 +718,7 @@ export class HttpExecutor<
                                     }
                                 } = {}
 
-                                let apiRequestPromises: Array<iGetC6RestResponse<any>> = []
+                                let apiRequestPromises: Array<Promise<DetermineResponseDataType<"GET", any>>> = []
 
                                 console.log('%c Dependencies', 'color: #005555', dependencies)
 
@@ -834,6 +834,8 @@ export class HttpExecutor<
 
                                     // todo - filter out ids that exist in state?!? note - remember that this does not necessarily mean the pk, but only known is its an FK to somewhere
                                     // it not certain that they are using carbons' entities either
+
+                                    console.log('RestApi object', RestApi)
 
                                     // this is a dynamic call to the rest api, any generated table may resolve with (RestApi)
                                     // todo - using value to avoid joins.... but. maybe this should be a parameterizable option -- think race conditions; its safer to join
