@@ -24,8 +24,8 @@ class MySQLDump {
     static DB_PASS = argMap['--pass'] || 'password';
     static DB_HOST = argMap['--host'] || '127.0.0.1';
     static DB_PORT = argMap['--port'] || '3306';
-    static DB_NAME = argMap['--dbname'] || 'assessorly';
-    static DB_PREFIX = argMap['--prefix'] || 'carbon_';
+    static DB_NAME = argMap['--dbname'] || 'sakila';
+    static DB_PREFIX = argMap['--prefix'] || '';
     static RELATIVE_OUTPUT_DIR = argMap['--output'] || '/src/api/rest';
     static OUTPUT_DIR = path.join(process.cwd(), MySQLDump.RELATIVE_OUTPUT_DIR);
 

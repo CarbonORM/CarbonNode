@@ -800,21 +800,24 @@ export class HttpExecutor<
                                         .map(part => part.charAt(0).toUpperCase() + part.slice(1))
                                         .join('_');
 
-                                    const RestApi = C6.ORM[ormKey] ?? new Error(`Fetch Dependencies could not fund table (${ormKey}) in the set ∉ [ ${Object.keys(C6.ORM).join(', ')} ]`);
+                                    const RestApi = C6.ORM[ormKey] ?? new Error(`Fetch Dependencies could not find table (${ormKey}) in the set ∉ [ ${Object.keys(C6.ORM).join(', ')} ]`);
 
                                     console.log('%c Fetch Dependencies will select (' + tableToFetch + ') using GET request', 'color: #33ccff')
 
                                     let nextFetchDependencies = eFetchDependencies.NONE
 
                                     if (fetchDependencies & eFetchDependencies.RECURSIVE) {
+                                        const hasParents  = !!(fetchDependencies & eFetchDependencies.PARENTS);
+                                        const hasChildren = !!(fetchDependencies & eFetchDependencies.CHILDREN);
 
-                                        if (fetchDependencies & eFetchDependencies.ALL) {
-
-                                            throw Error('Recursive fetch dependencies with both PARENT and CHILD reference will result in an infin1ite loop. As there is not real ending condition, this is not supported.')
-
+                                        if (hasParents && hasChildren) {
+                                            throw Error(
+                                                'Recursive fetch with both PARENT and CHILD references would loop forever. ' +
+                                                'Use only one of PARENTS or CHILDREN when RECURSIVE is set.'
+                                            );
                                         }
 
-                                        nextFetchDependencies = fetchDependencies
+                                        nextFetchDependencies = fetchDependencies;
 
                                     } else if (fetchDependencies & eFetchDependencies.C6ENTITY) {
 
@@ -840,8 +843,7 @@ export class HttpExecutor<
                                     // this is a dynamic call to the rest api, any generated table may resolve with (RestApi)
                                     // todo - using value to avoid joins.... but. maybe this should be a parameterizable option -- think race conditions; its safer to join
                                     apiRequestPromises.push(RestApi.Get({
-                                            [C6.WHERE]: {
-                                                0: Object.keys(fetchReferences[tableToFetch]).reduce((sum, column) => {
+                                            [C6.WHERE]: Object.keys(fetchReferences[tableToFetch]).reduce((sum, column) => {
 
                                                     fetchReferences[tableToFetch][column] = fetchReferences[tableToFetch][column].flat(Infinity)
 
@@ -853,7 +855,7 @@ export class HttpExecutor<
 
                                                     }
 
-                                                    sum[column] = fetchReferences[tableToFetch][column].length === 1
+                                                    sum[`${tableToFetch}.${column}`] = fetchReferences[tableToFetch][column].length === 1
                                                         ? fetchReferences[tableToFetch][column][0]
                                                         : [
                                                             C6.IN, fetchReferences[tableToFetch][column]
@@ -861,8 +863,7 @@ export class HttpExecutor<
 
                                                     return sum
 
-                                                }, {})
-                                            },
+                                                }, {}),
                                             fetchDependencies: nextFetchDependencies
                                         }
                                     ));

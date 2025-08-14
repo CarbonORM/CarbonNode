@@ -144,3 +144,6 @@ dist
 .yarn/install-state.gz
 .pnp.*
 .idea/*
+
+# MySQL official test DB
+sakila-db/
