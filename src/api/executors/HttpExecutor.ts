@@ -795,7 +795,12 @@ export class HttpExecutor<
 
                                     }
 
-                                    const RestApi = C6.ORM[tableToFetch]
+                                    const ormKey = tableToFetch
+                                        .split('_')
+                                        .map(part => part.charAt(0).toUpperCase() + part.slice(1))
+                                        .join('_');
+
+                                    const RestApi = C6.ORM[ormKey] ?? new Error(`Fetch Dependencies could not fund table (${ormKey}) in the set ∉ [ ${Object.keys(C6.ORM).join(', ')} ]`);
 
                                     console.log('%c Fetch Dependencies will select (' + tableToFetch + ') using GET request', 'color: #33ccff')
 

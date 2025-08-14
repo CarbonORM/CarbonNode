@@ -1,14 +1,13 @@
 // noinspection JSUnusedGlobalSymbols,SpellCheckingInspection
 
-import {
-    C6Constants,
-    iC6Object,
+import type {
     C6RestfulModel,
+    iC6Object,
+    iRest,
     OrmGenerics,
-    restOrm,
-    iRest
 } from "@carbonorm/carbonnode";
-import * as GeoJSON from 'geojson';{{#if CUSTOM_IMPORTS}},
+import { C6Constants, restOrm } from "@carbonorm/carbonnode";
+import type * as GeoJSON from "geojson";
 {{{CUSTOM_IMPORTS}}}{{/if}}
 
 export const RestTablePrefix = '{{{PREFIX}}}';

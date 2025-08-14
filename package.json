@@ -1,6 +1,6 @@
 {
   "name": "@carbonorm/carbonnode",
-  "version": "3.7.1",
+  "version": "3.7.0",
   "browser": "dist/index.umd.js",
   "exports": {
     ".": {
@@ -61,6 +61,7 @@
     "@types/node": "^22.14.0",
     "@types/qs": "^6.9.8",
     "autoprefixer": "^10.4.14",
+    "chalk": "^5.3.0",
     "deepmerge": "^4.3.1",
     "express": "^5.1.0",
     "mysql2": "^3.14.1",
@@ -82,8 +83,7 @@
     "build:generateRestBindings": "cd ./scripts/ && tsc --downlevelIteration --resolveJsonModule generateRestBindings.ts && mv generateRestBindings.js generateRestBindings.cjs",
     "generateRestBindings": "npm run build:generateRestBindings && node ./scripts/generateRestBindings.cjs",
     "c6": "npm run generateRestBindings",
-    "postinstall": "git config core.hooksPath .githooks",
-    "hooks:setup": "./scripts/test-hooks.sh"
+    "postinstall": "node ./scripts/setup-git-hooks.mjs"
   },
   "bin": {
     "generateRestBindings": "./scripts/generateRestBindings.cjs"

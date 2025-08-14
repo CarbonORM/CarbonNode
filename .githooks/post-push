@@ -1,8 +1,10 @@
 #!/usr/bin/env node
 
+import chalk from "chalk";
 import fs from "fs";
 import {execSync} from "child_process";
 
+console.log(chalk.cyan("[githook] post-push invoked"));
 
 function getVersion(ref) {
   try {
@@ -17,15 +19,15 @@ const currentVersion = JSON.parse(fs.readFileSync('package.json', 'utf8')).versi
 const previousVersion = getVersion('HEAD^');
 
 if (previousVersion === currentVersion) {
-  console.log('Version unchanged; skipping npm publish.');
+  console.log(chalk.yellow('Version unchanged; skipping npm publish.'));
   process.exit(0);
 }
 
-console.log(`Version changed from ${previousVersion || 'none'} to ${currentVersion}. Publishing to npm...`);
+console.log(chalk.green(`Version changed from ${previousVersion || 'none'} to ${currentVersion}. Publishing to npm...`));
 
 try {
   execSync('npm publish', { stdio: 'inherit' });
 } catch (err) {
-  console.error('npm publish failed.');
+  console.error(chalk.red('npm publish failed.'));
   process.exit(err.status || 1);
 }
