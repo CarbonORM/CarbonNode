@@ -489,7 +489,16 @@ fs.writeFileSync(path.join(process.cwd(), 'C6MySqlDump.json'), JSON.stringify(ta
 const c6Template = fs.readFileSync(path.resolve(__dirname, 'assets/handlebars/C6.ts.handlebars'), 'utf-8');
 const c6TestTemplate = fs.readFileSync(path.resolve(__dirname, 'assets/handlebars/C6.test.ts.handlebars'), 'utf-8');
 
-fs.writeFileSync(path.join(MySQLDump.OUTPUT_DIR, 'C6.ts'), Handlebars.compile(c6Template)(tableData));
-fs.writeFileSync(path.join(MySQLDump.OUTPUT_DIR, 'C6.test.ts'), Handlebars.compile(c6TestTemplate)(tableData));
+const outputDir = MySQLDump.OUTPUT_DIR;
+
+fs.writeFileSync(path.join(outputDir, 'C6.ts'), Handlebars.compile(c6Template)(tableData));
+fs.writeFileSync(path.join(outputDir, 'C6.test.js'), Handlebars.compile(c6TestTemplate)(tableData));
+
+// compile generated TypeScript for runtime tests
+try {
+    execSync(`npx tsc ${path.join(outputDir, 'C6.ts')} --target ES2020 --module ES2020 --moduleResolution node --esModuleInterop --skipLibCheck --outDir ${outputDir}`);
+} catch (e) {
+    console.warn('TypeScript compilation for generated C6.ts reported errors:', e.message);
+}
 
 console.log('Successfully created CarbonORM bindings!')

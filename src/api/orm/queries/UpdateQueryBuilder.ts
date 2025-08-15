@@ -22,7 +22,8 @@ export class UpdateQueryBuilder<G extends OrmGenerics> extends PaginationBuilder
             throw new Error("No update data provided in the request.");
         }
 
-        const setClauses = Object.entries(this.request[C6C.UPDATE]).map(([col, val]) => this.addParam(params, col, val));
+        const setClauses = Object.entries(this.request[C6C.UPDATE])
+            .map(([col, val]) => `\`${col}\` = ${this.addParam(params, col, val)}`);
 
         sql += ` SET ${setClauses.join(', ')}`;
 
