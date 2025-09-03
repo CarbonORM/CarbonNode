@@ -261,7 +261,7 @@ export abstract class ConditionBuilder<
                 processEntry(k, v);
             }
             // Then process numeric keys (treated as grouped OR conditions)
-            for (const [k, v] of numeric) {
+            for (const [_k, v] of numeric) {
                 const sub = this.buildBooleanJoinedConditions(v, false, params);
                 if (sub) subParts.push(sub);
             }
