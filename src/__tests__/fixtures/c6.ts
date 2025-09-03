@@ -14,13 +14,18 @@ function tableModel<T extends Record<string, any>>(name: string, columns: Record
     };
   });
 
+  // Derive primary keys: any short column ending with '_id'
+  const pkShorts = Object.values(columns)
+    .map(v => String(v))
+    .filter(v => v.toLowerCase().endsWith('_id')) as any[];
+  const pkFull = Object.entries(columns)
+    .filter(([, short]) => String(short).toLowerCase().endsWith('_id'))
+    .map(([fq]) => fq as any);
+
   return {
     TABLE_NAME: name,
-    PRIMARY: Object.keys(columns)
-      .filter(k => /\.id$/.test(String(columns[k])))
-      .map(k => k as any),
-    PRIMARY_SHORT: Object.values(columns)
-      .filter(v => v === 'id') as any,
+    PRIMARY: pkFull,
+    PRIMARY_SHORT: pkShorts as any,
     COLUMNS,
     TYPE_VALIDATION,
     REGEX_VALIDATION: {},

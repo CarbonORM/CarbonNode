@@ -10,6 +10,7 @@ import namedPlaceholders from 'named-placeholders';
 import {PoolConnection} from 'mysql2/promise';
 import {Buffer} from 'buffer';
 import {Executor} from "./Executor";
+import { normalizeSingularRequest } from "../utils/normalizeSingularRequest";
 
 export class SqlExecutor<
     G extends OrmGenerics
@@ -19,9 +20,21 @@ export class SqlExecutor<
         const {TABLE_NAME} = this.config.restModel;
         const method = this.config.requestMethod;
 
+        // Normalize singular T-shaped requests into complex ORM shape (GET/PUT/DELETE)
+        try {
+            this.request = normalizeSingularRequest(
+                method as any,
+                this.request as any,
+                this.config.restModel as any,
+                undefined
+            ) as typeof this.request;
+        } catch (e) {
+            // Surface normalization errors early
+            throw e;
+        }
+
         this.config.verbose && console.log(`[SQL EXECUTOR] ▶️ Executing ${method} on table "${TABLE_NAME}"`);
         this.config.verbose && console.log(`[SQL EXECUTOR] 🧩 Request:`, this.request);
-
 
         switch (method) {
             case 'GET': {

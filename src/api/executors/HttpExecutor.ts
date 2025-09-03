@@ -500,12 +500,12 @@ export class HttpExecutor<
                                 return [convert(query), baseConfig];
 
                             case PUT:
-                                return [convert(query), baseConfig];
+                                return [convert(normalizedQuery), baseConfig];
 
                             case DELETE:
                                 return [{
                                     ...baseConfig,
-                                    data: convert(query)
+                                    data: convert(normalizedQuery)
                                 }];
 
                             default:
