@@ -9,6 +9,9 @@ export class SelectQueryBuilder<G extends OrmGenerics> extends PaginationBuilder
         isSubSelect: boolean = false
     ): SqlBuilderResult {
         this.aliasMap = {};
+        // reset any previously collected SELECT aliases (from AggregateBuilder)
+        // @ts-ignore
+        if (this.selectAliases && this.selectAliases.clear) this.selectAliases.clear();
         const args = this.request;
         this.initAlias(table, args.JOIN);
         const params = this.useNamedParams ? {} : [];

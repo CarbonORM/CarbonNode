@@ -66,7 +66,7 @@ export type Pagination<T = any> = {
     ORDER?: Partial<Record<keyof T, OrderDirection>>;
 };
 
-export type RequestGetPutDeleteBody<T extends { [key: string]: any } = any> = {
+export type RequestGetPutDeleteBody<T extends { [key: string]: any } = any> = T | {
     SELECT?: SelectField<T>[];
     UPDATE?: Partial<T>;
     DELETE?: boolean;
@@ -84,6 +84,7 @@ export type iAPI<T extends { [key: string]: any }> = T & {
     error?: string | ((r: AxiosResponse) => string | void);
 };
 
+// TODO - Eventually I believe we can support complex posts.
 export type RequestQueryBody<
     Method extends iRestMethods,
     T extends { [key: string]: any },
@@ -91,9 +92,7 @@ export type RequestQueryBody<
     Overrides extends { [key: string]: any } = {}
 > = Method extends 'GET' | 'PUT' | 'DELETE'
     ? iAPI<RequestGetPutDeleteBody<Modify<T, Overrides> & Custom>>
-    : Method extends 'POST'
-        ? iAPI<RequestGetPutDeleteBody<Modify<T, Overrides> & Custom> & Modify<T, Overrides> & Custom>
-        : iAPI<Modify<T, Overrides> & Custom>;
+    : iAPI<Modify<T, Overrides> & Custom>;
 
 export interface iCacheAPI<ResponseDataType = any> {
     requestArgumentsSerialized: string;

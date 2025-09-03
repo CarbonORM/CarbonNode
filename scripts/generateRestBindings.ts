@@ -26,7 +26,7 @@ class MySQLDump {
     static DB_PORT = argMap['--port'] || '3306';
     static DB_NAME = argMap['--dbname'] || 'sakila';
     static DB_PREFIX = argMap['--prefix'] || '';
-    static RELATIVE_OUTPUT_DIR = argMap['--output'] || '/src/api/rest';
+    static RELATIVE_OUTPUT_DIR = argMap['--'] || '/src';
     static OUTPUT_DIR = path.join(process.cwd(), MySQLDump.RELATIVE_OUTPUT_DIR);
 
     static buildCNF(cnfFile: string = '') {
@@ -498,7 +498,7 @@ fs.writeFileSync(path.join(outputDir, 'C6.test.js'), Handlebars.compile(c6TestTe
 try {
     execSync(`npx tsc ${path.join(outputDir, 'C6.ts')} --target ES2020 --module ES2020 --moduleResolution node --esModuleInterop --skipLibCheck --outDir ${outputDir}`);
 } catch (e) {
-    console.warn('TypeScript compilation for generated C6.ts reported errors:', e.message);
+    console.warn('TypeScript compilation for generated C6.ts reported errors:', e);
 }
 
 console.log('Successfully created CarbonORM bindings!')

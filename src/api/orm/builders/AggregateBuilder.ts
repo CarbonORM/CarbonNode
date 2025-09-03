@@ -2,6 +2,8 @@ import {Executor} from "../../executors/Executor";
 import {OrmGenerics} from "../../types/ormGenerics";
 
 export abstract class AggregateBuilder<G extends OrmGenerics> extends Executor<G>{
+    protected selectAliases: Set<string> = new Set<string>();
+
     buildAggregateField(field: string | any[]): string {
         if (typeof field === 'string') {
             return field;
@@ -33,6 +35,7 @@ export abstract class AggregateBuilder<G extends OrmGenerics> extends Executor<G
         }
 
         if (alias) {
+            this.selectAliases.add(alias);
             expr += ` AS ${alias}`;
         }
 

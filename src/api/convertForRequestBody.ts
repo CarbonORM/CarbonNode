@@ -1,4 +1,4 @@
-import { C6Constants } from "api/C6Constants";
+import { C6Constants } from "./C6Constants";
 import {iC6Object, C6RestfulModel, iRestMethods, RequestQueryBody} from "./types/ormInterfaces";
 
 export default function <

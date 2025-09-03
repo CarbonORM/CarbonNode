@@ -1,5 +1,5 @@
 import {AxiosPromise} from "axios";
-import { iCacheAPI } from "api/types/ormInterfaces";
+import { iCacheAPI } from "../types/ormInterfaces";
 
 // do not remove entries from this array. It is used to track the progress of API requests.
 // position in array is important. Do not sort. To not add to begging.

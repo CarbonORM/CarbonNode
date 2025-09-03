@@ -1,4 +1,4 @@
-import {C6C} from "api/C6Constants";
+import {C6C} from "../../C6Constants";
 import {OrmGenerics} from "../../types/ormGenerics";
 import {DetermineResponseDataType} from "../../types/ormInterfaces";
 import {convertHexIfBinary, SqlBuilderResult} from "../utils/sqlUtils";
@@ -65,7 +65,16 @@ export abstract class ConditionBuilder<
     ]);
 
     private isTableReference(val: any): boolean {
-        if (typeof val !== 'string' || !val.includes('.')) return false;
+        if (typeof val !== 'string') return false;
+        // Support aggregate aliases (e.g., SELECT COUNT(x) AS cnt ... HAVING cnt > 1)
+        if (!val.includes('.')) {
+            const isIdentifier = /^[A-Za-z_][A-Za-z0-9_]*$/.test(val);
+            // selectAliases is defined in AggregateBuilder
+            if (isIdentifier && (this as any).selectAliases?.has(val)) {
+                return true;
+            }
+            return false;
+        }
         const [prefix, column] = val.split('.');
         const tableName = this.aliasMap[prefix] ?? prefix;
         const table = this.config.C6?.TABLES?.[tableName];
@@ -90,7 +99,13 @@ export abstract class ConditionBuilder<
         column: string,
         value: any
     ): string {
-        const columnDef = this.config.C6[column.split('.')[0]]?.TYPE_VALIDATION?.[column];
+        // Determine column definition from C6.TABLES to support type-aware conversions (e.g., BINARY hex -> Buffer)
+        let columnDef: any | undefined;
+        if (typeof column === 'string' && column.includes('.')) {
+            const [tableName] = column.split('.', 2);
+            const table = this.config.C6?.TABLES?.[tableName];
+            columnDef = table?.TYPE_VALIDATION?.[column];
+        }
         const val = convertHexIfBinary(column, value, columnDef);
 
         if (this.useNamedParams) {
@@ -141,7 +156,7 @@ export abstract class ConditionBuilder<
             const leftIsRef = this.isTableReference(column);
             const rightIsCol = typeof value === 'string' && this.isColumnRef(value);
 
-            if (!leftIsCol && !rightIsCol) {
+            if (!leftIsCol && !leftIsRef && !rightIsCol) {
                 throw new Error(`Potential SQL injection detected: '${column} ${op} ${value}'`);
             }
 
@@ -222,14 +237,11 @@ export abstract class ConditionBuilder<
 
         const buildFromObject = (obj: Record<string, any>, mode: boolean) => {
             const subParts: string[] = [];
-            for (const [k, v] of Object.entries(obj)) {
-                // numeric keys represent nested OR groups
-                if (!isNaN(Number(k))) {
-                    const sub = this.buildBooleanJoinedConditions(v, false, params);
-                    if (sub) subParts.push(sub);
-                    continue;
-                }
+            const entries = Object.entries(obj);
+            const nonNumeric = entries.filter(([k]) => isNaN(Number(k)));
+            const numeric = entries.filter(([k]) => !isNaN(Number(k)));
 
+            const processEntry = (k: string, v: any) => {
                 if (typeof v === 'object' && v !== null && Object.keys(v).length === 1) {
                     const [op, val] = Object.entries(v)[0];
                     subParts.push(addCondition(k, op, val));
@@ -242,7 +254,18 @@ export abstract class ConditionBuilder<
                 } else {
                     subParts.push(addCondition(k, '=', v));
                 }
+            };
+
+            // Process non-numeric keys first to preserve intuitive insertion order for params
+            for (const [k, v] of nonNumeric) {
+                processEntry(k, v);
             }
+            // Then process numeric keys (treated as grouped OR conditions)
+            for (const [k, v] of numeric) {
+                const sub = this.buildBooleanJoinedConditions(v, false, params);
+                if (sub) subParts.push(sub);
+            }
+
             return subParts.join(` ${mode ? 'AND' : 'OR'} `);
         };
 
