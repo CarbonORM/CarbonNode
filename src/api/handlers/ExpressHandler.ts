@@ -36,7 +36,7 @@ export function ExpressHandler({C6, mysqlPool}: { C6: iC6Object, mysqlPool: Pool
 
             const primaryKeyName = primaryKeys[0];
 
-            if (!payload[C6C.WHERE][primaryKeyName]) {
+            if (!(payload[C6C.WHERE]?.[primaryKeyName] ?? undefined)) {
                 // 👇 Call restRequest for the resolved method
                 switch (method) {
                     case 'GET':
