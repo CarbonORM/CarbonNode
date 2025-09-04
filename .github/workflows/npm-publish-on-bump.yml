@@ -35,6 +35,8 @@ jobs:
             max_allowed_packet=16MB
             max_connections=50
             local_infile=1
+            user=root
+            password=password
 
       - name: Load schema
         if: hashFiles('src/__tests__/sakila-db/sakila-schema.sql') != ''
