@@ -37,12 +37,23 @@ jobs:
           mysql user: 'developer' # Required if "mysql root password" is empty, default is empty. The superuser for the specified database. Can use secrets, too
           mysql password: 'password' # Required if "mysql user" exists. The password for the "mysql user"
 
+      - name: Setup MySQL client config
+        run: |
+          cat > ~/.my.cnf <<'EOF'
+          [client]
+          user=root
+          password=password
+          host=127.0.0.1
+          port=3800
+          EOF
+          chmod 600 ~/.my.cnf
+
       - name: Load schema
         if: hashFiles('src/__tests__/sakila-db/sakila-schema.sql') != ''
         run: |
-          mysql -h 127.0.0.1 -uroot -ppassword -e "CREATE DATABASE IF NOT EXISTS sakila;"
-          mysql -h 127.0.0.1 -uroot -ppassword sakila < src/__tests__/sakila-db/sakila-schema.sql
-          mysql -h 127.0.0.1 -uroot -ppassword sakila < src/__tests__/sakila-db/sakila-data.sql
+          mysql --defaults-file=~/.my.cnf -e "CREATE DATABASE IF NOT EXISTS sakila;"
+          mysql --defaults-file=~/.my.cnf sakila < src/__tests__/sakila-db/sakila-schema.sql
+          mysql --defaults-file=~/.my.cnf sakila < src/__tests__/sakila-db/sakila-data.sql
 
       - name: Read package name & version
         id: pkg
