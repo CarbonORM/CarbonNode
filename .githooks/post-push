@@ -4,6 +4,7 @@ import chalk from "chalk";
 import fs from "fs";
 import {execSync} from "child_process";
 
+console.log("[githook] post-push invoked");
 console.log(chalk.cyan("[githook] post-push invoked"));
 
 function getVersion(ref) {
