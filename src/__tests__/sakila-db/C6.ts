@@ -1,12 +1,15 @@
 // noinspection JSUnusedGlobalSymbols,SpellCheckingInspection
 
-import type {
+import {
+    C6Constants,
     C6RestfulModel,
     iC6Object,
+    iDynamicApiImport,
     iRest,
     OrmGenerics,
+    removePrefixIfExists,
+    restOrm,
 } from "@carbonorm/carbonnode";
-import { C6Constants, restOrm } from "@carbonorm/carbonnode";
 import type * as GeoJSON from "geojson";
 
 export const RestTablePrefix = '';
@@ -1938,6 +1941,29 @@ export type RestTableInterfaces = iActor
 export const C6 : iC6Object<RestTableInterfaces> = {
     ...C6Constants,
     C6VERSION: '3.7.6',
+    IMPORT: async (tableName: string) : Promise<iDynamicApiImport> => {
+
+        tableName = tableName.toLowerCase();
+
+        // if tableName is not a key in the TABLES object then throw an error
+        if (!TABLES[tableName as RestShortTableNames]) {
+            const error = (table: string) => {
+                throw Error('Table (' + table + ') does not exist in the TABLES object. Possible values include (' + Object.keys(TABLES).join(', ') + ')');
+            }
+            if (!tableName.startsWith(RestTablePrefix.toLowerCase())) {
+                error(tableName);
+            }
+            tableName = removePrefixIfExists(tableName, RestTablePrefix);
+            if (!TABLES[tableName as RestShortTableNames]) {
+                error(tableName);
+            }
+        }
+        // This will rightfully throw a dynamic import warning in the console, but it is necessary to use dynamic imports
+        return import(/* @vite-ignore */ './' + (tableName.split('_')
+                .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+                .join('_')) + '.ts');
+
+    },
     PREFIX: RestTablePrefix,
     TABLES: TABLES,
     ORM: {},
