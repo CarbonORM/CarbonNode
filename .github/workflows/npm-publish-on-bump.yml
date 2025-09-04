@@ -36,30 +36,6 @@ jobs:
             max_connections=50
             local_infile=1
 
-      - name: Wait for MySQL
-        run: |
-          for i in {1..60}; do
-            if mysqladmin --defaults-file=$MYSQL_HOME/.my.cnf ping 2>&1; then
-              mysql --defaults-file=$MYSQL_HOME/.my.cnf -e "SELECT VERSION();"
-              exit 0
-            fi
-            sleep 1
-          done
-          echo "MySQL did not become ready in time" >&2
-          exit 1
-
-      - name: Setup MySQL client config
-        run: |
-          cat > $MYSQL_HOME/.my.cnf <<'EOF'
-          [client]
-          user=root
-          password=password
-          host=127.0.0.1
-          port=3306
-          protocol=tcp
-          EOF
-          chmod 600 $MYSQL_HOME/.my.cnf
-
       - name: Load schema
         if: hashFiles('src/__tests__/sakila-db/sakila-schema.sql') != ''
         run: |
