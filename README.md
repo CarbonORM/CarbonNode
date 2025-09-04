@@ -566,7 +566,7 @@ export default Users;
 
 This project uses Git hooks to automate certain tasks:
 
-- **pre-commit**: Builds the project before pushing to ensure only working code is pushed
+- **post-commit**: Builds the project before pushing to ensure only working code is pushed
 - **post-push**: Automatically publishes to npm when the version number changes
 
 To set up the Git hooks, run:
