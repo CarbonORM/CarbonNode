@@ -1940,7 +1940,7 @@ export type RestTableInterfaces = iActor
 
 export const C6 : iC6Object<RestTableInterfaces> = {
     ...C6Constants,
-    C6VERSION: '3.8.0',
+    C6VERSION: '3.7.8',
     IMPORT: async (tableName: string) : Promise<iDynamicApiImport> => {
 
         tableName = tableName.toLowerCase();

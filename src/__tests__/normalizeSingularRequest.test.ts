@@ -64,10 +64,12 @@ describe('normalizeSingularRequest', () => {
     expect(() => normalizeSingularRequest('PUT', req, model)).toThrow(/must include at least one non-primary field to update/);
   });
 
-  it('throws when a required PK is missing for singular syntax', () => {
+  it('GET without PKs leaves request untouched (collection query)', () => {
     const model = makeModel('actor', ['actor_id'], ['first_name']);
     const req = { first_name: 'A' } as any;
-    expect(() => normalizeSingularRequest('GET', req, model)).toThrow(/Singular request requires all primary key\(s\)/);
+    const out = normalizeSingularRequest('GET', req, model) as any;
+    expect(out).toBe(req);
+    expect(out.first_name).toBe('A');
   });
 
   it('supports composite primary keys and requires all PKs', () => {
@@ -80,10 +82,11 @@ describe('normalizeSingularRequest', () => {
     expect(() => normalizeSingularRequest('DELETE', missing, model)).toThrow(/Missing: \[to_id\]/);
   });
 
-  it('throws if table has no primary key for singular syntax', () => {
+  it('GET with table that has no primary key leaves request untouched', () => {
     const model = makeModel('nopk', [], ['name']);
     const req = { name: 'X' } as any;
-    expect(() => normalizeSingularRequest('GET', req, model)).toThrow(/has no primary key/);
+    const out = normalizeSingularRequest('GET', req, model);
+    expect(out).toBe(req);
   });
 
   it('leaves already complex requests untouched', () => {
@@ -91,5 +94,12 @@ describe('normalizeSingularRequest', () => {
     const complex = { [C6C.WHERE]: { actor_id: 1 }, [C6C.PAGINATION]: { LIMIT: 1 } } as any;
     const out = normalizeSingularRequest('GET', complex, model);
     expect(out).toBe(complex);
+  });
+
+  it('GET with only PAGINATION passes through unchanged', () => {
+    const model = makeModel('actor', ['actor_id']);
+    const req = { [C6C.PAGINATION]: { [C6C.PAGE]: 1, [C6C.LIMIT]: 100 } } as any;
+    const out = normalizeSingularRequest('GET', req, model);
+    expect(out).toBe(req);
   });
 });

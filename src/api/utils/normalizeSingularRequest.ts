@@ -41,6 +41,8 @@ export function normalizeSingularRequest<
 
   const pkShorts: string[] = Array.isArray(restModel.PRIMARY_SHORT) ? [...restModel.PRIMARY_SHORT] : [];
   if (!pkShorts.length) {
+    // For GET requests, do not enforce primary key presence; treat as a collection query.
+    if (requestMethod === C6C.GET) return request;
     throw new Error(`Table (${restModel.TABLE_NAME}) has no primary key; singular request syntax is not allowed.`);
   }
 
@@ -60,6 +62,10 @@ export function normalizeSingularRequest<
 
   const missing = pkShorts.filter(pk => !(pk in pkValues));
   if (missing.length) {
+    // For GET requests, if not all PKs are provided, treat as a collection query and leave as-is.
+    if (requestMethod === C6C.GET) {
+      return request;
+    }
     throw new Error(`Singular request requires all primary key(s) [${pkShorts.join(', ')}] for table (${restModel.TABLE_NAME}). Missing: [${missing.join(', ')}]`);
   }
 
