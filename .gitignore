@@ -146,5 +146,3 @@ dist
 .pnp.*
 .idea/*
 
-# Reserved generated file name (do not track lowercase)
-**/c6.ts

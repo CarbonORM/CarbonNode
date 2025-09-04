@@ -492,7 +492,7 @@ const c6TestTemplate = fs.readFileSync(path.resolve(__dirname, 'assets/handlebar
 const outputDir = MySQLDump.OUTPUT_DIR;
 
 fs.writeFileSync(path.join(outputDir, 'C6.ts'), Handlebars.compile(c6Template)(tableData));
-fs.writeFileSync(path.join(outputDir, 'C6.test.js'), Handlebars.compile(c6TestTemplate)(tableData));
+fs.writeFileSync(path.join(outputDir, 'C6.test.ts'), Handlebars.compile(c6TestTemplate)(tableData));
 
 // compile generated TypeScript for runtime tests
 try {
