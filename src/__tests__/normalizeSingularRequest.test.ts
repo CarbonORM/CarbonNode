@@ -92,4 +92,18 @@ describe('normalizeSingularRequest', () => {
     const out = normalizeSingularRequest('GET', complex, model);
     expect(out).toBe(complex);
   });
+
+  it('allows GET requests with only pagination', () => {
+    const model = makeModel('actor', ['actor_id']);
+    const req = { [C6C.PAGINATION]: { LIMIT: 100, PAGE: 1 } } as any;
+    const out = normalizeSingularRequest('GET', req, model);
+    expect(out).toBe(req);
+  });
+
+  it('allows empty GET requests', () => {
+    const model = makeModel('actor', ['actor_id']);
+    const req = {} as any;
+    const out = normalizeSingularRequest('GET', req, model);
+    expect(out).toBe(req);
+  });
 });

@@ -33,6 +33,13 @@ export function normalizeSingularRequest<
   const hasComplexKeys = keys.some(k => k !== C6C.PAGINATION && specialKeys.has(k));
   if (hasComplexKeys) return request; // already complex
 
+  // For GET requests, if there are no non-special keys (e.g., only PAGINATION),
+  // treat it as a multi-row request and leave it unchanged.
+  if (requestMethod === C6C.GET) {
+    const hasNonSpecialKeys = keys.some(k => !specialKeys.has(k));
+    if (!hasNonSpecialKeys) return request;
+  }
+
   // We treat it as singular when it's not complex.
   // For GET, PUT, DELETE only
   if (!(requestMethod === C6C.GET || requestMethod === C6C.PUT || requestMethod === C6C.DELETE)) {
