@@ -36,27 +36,28 @@ export function ExpressHandler({C6, mysqlPool}: { C6: iC6Object, mysqlPool: Pool
 
             const primaryKeyName = primaryKeys[0];
 
-            // 👇 Call restRequest for the resolved method
-            // TODO - add primary conditionally based on method signature
-            switch (method) {
-                case 'GET':
-                    if (primary) {
-                        payload[C6C.WHERE][primaryKeyName] = primary;
-                    }
-                    break;
-                case 'PUT':
-                case 'DELETE':
-                    if (primary) {
-                        payload[C6C.WHERE][primaryKeyName] = primary;
-                    } else {
-                        res.status(400).json({error: `Invalid request: ${method} requires a primary key (${primaryKeyName}).`});
-                    }
-                    break;
-                case 'POST':
-                    break;
-                default:
-                    res.status(405).json({error: `Method ${method} not allowed`});
-                    return;
+            if (!payload[C6C.WHERE][primaryKeyName]) {
+                // 👇 Call restRequest for the resolved method
+                switch (method) {
+                    case 'GET':
+                        if (primary) {
+                            payload[C6C.WHERE][primaryKeyName] = primary;
+                        }
+                        break;
+                    case 'PUT':
+                    case 'DELETE':
+                        if (primary) {
+                            payload[C6C.WHERE][primaryKeyName] = primary;
+                        } else {
+                            res.status(400).json({error: `Invalid request: ${method} requires a primary key (${primaryKeyName}).`});
+                        }
+                        break;
+                    case 'POST':
+                        break;
+                    default:
+                        res.status(405).json({error: `Method ${method} not allowed`});
+                        return;
+                }
             }
 
             const response = await restRequest({
