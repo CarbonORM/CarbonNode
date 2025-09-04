@@ -36,13 +36,24 @@ jobs:
             max_connections=50
             local_infile=1
 
+      - name: Setup MySQL client config
+        run: |
+          cat > ~/my.cnf <<'EOF'
+          [client]
+          user=root
+          password=password
+          host=127.0.0.1
+          port=3306
+          protocol=tcp
+          EOF
+          chmod 600 ~/.my.cnf
+
       - name: Load schema
         if: hashFiles('src/__tests__/sakila-db/sakila-schema.sql') != ''
         run: |
-          cat $MYSQL_HOME/my.cnf
-          mysql --defaults-file=$MYSQL_HOME/my.cnf -e "CREATE DATABASE IF NOT EXISTS sakila;"
-          mysql --defaults-file=$MYSQL_HOME/my.cnf sakila < src/__tests__/sakila-db/sakila-schema.sql
-          mysql --defaults-file=$MYSQL_HOME/my.cnf sakila < src/__tests__/sakila-db/sakila-data.sql
+          mysql --defaults-file=~/my.cnf -e "CREATE DATABASE IF NOT EXISTS sakila;"
+          mysql --defaults-file=~/my.cnf sakila < src/__tests__/sakila-db/sakila-schema.sql
+          mysql --defaults-file=~/my.cnf sakila < src/__tests__/sakila-db/sakila-data.sql
 
       - name: Read package name & version
         id: pkg
