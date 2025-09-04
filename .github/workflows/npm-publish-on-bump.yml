@@ -95,7 +95,12 @@ jobs:
         if: steps.exists.outputs.published == 'false'
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: npm publish --access public --provenance
+        run: |
+          npm config set always-auth true
+          # write auth for both domains to be safe
+          echo "//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}" >> ~/.npmrc
+          echo "//registry.npmjs.com/:_authToken=${NODE_AUTH_TOKEN}" >> ~/.npmrc
+          npm whoami || (echo "npm auth failed" && exit 1)
 
       - name: Skip (already published)
         if: steps.exists.outputs.published == 'true'
