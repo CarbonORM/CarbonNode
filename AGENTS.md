@@ -5,11 +5,11 @@
 - New features must have proper test coverage.
 - Attempt to add coverage to code that is near areas touched too.
 - Run `npm test` before each commit. The command MUST pass.
-
+- Check the `.junie/guidelines.md` for more instructions.
 
 
 ### Boot
-In AI environments that allow it, like Codex, this is already configured to run on boot. 
+In AI environments that allow it, like Codex or localhost, this is already configured to run on boot. 
 No need to re-run it or other setup instructions included below.
 
 ```bash
