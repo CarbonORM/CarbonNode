@@ -25,23 +25,22 @@ jobs:
           registry-url: 'https://registry.npmjs.org'
           cache: 'npm'
 
-      - uses: mirromutth/mysql-action@v1.1
+      - uses: shogo82148/actions-setup-mysql@v1
         with:
-          character set server: 'utf8' # Optional, default value is 'utf8mb4'. The '--character-set-server' option for mysqld
-          collation server: 'utf8_general_ci' # Optional, default value is 'utf8mb4_general_ci'. The '--collation-server' option for mysqld
-          mysql version: '8.0' # Optional, default value is "latest". The version of the MySQL
-          host port: 3306
-          container port: 3306
-          mysql database: 'sakila' # Optional, default value is "test". The specified database which will be create
-          mysql root password: 'password' # Required if "mysql user" is empty, default is empty. The root superuser password
-          mysql user: 'developer' # Required if "mysql root password" is empty, default is empty. The superuser for the specified database. Can use secrets, too
-          mysql password: 'password' # Required if "mysql user" exists. The password for the "mysql user"
+          mysql-version: "8.0"
+          my-cnf: |
+            innodb_log_file_size=256MB
+            innodb_buffer_pool_size=512MB
+            max_allowed_packet=16MB
+            max_connections=50
+            local_infile=1
+            root-password=password
 
       - name: Wait for MySQL
         run: |
           for i in {1..60}; do
-            if mysqladmin --defaults-file=~/.my.cnf ping >/dev/null 2>&1; then
-              mysql --defaults-file=~/.my.cnf -e "SELECT VERSION();"
+            if mysqladmin --defaults-file=$MYSQL_HOME/.my.cnf ping >/dev/null 2>&1; then
+              mysql --defaults-file=$MYSQL_HOME/.my.cnf -e "SELECT VERSION();"
               exit 0
             fi
             sleep 1
@@ -51,7 +50,7 @@ jobs:
 
       - name: Setup MySQL client config
         run: |
-          cat > ~/.my.cnf <<'EOF'
+          cat > $MYSQL_HOME/.my.cnf <<'EOF'
           [client]
           user=root
           password=password
@@ -59,14 +58,14 @@ jobs:
           port=3306
           protocol=tcp
           EOF
-          chmod 600 ~/.my.cnf
+          chmod 600 $MYSQL_HOME/.my.cnf
 
       - name: Load schema
         if: hashFiles('src/__tests__/sakila-db/sakila-schema.sql') != ''
         run: |
-          mysql --defaults-file=~/.my.cnf -e "CREATE DATABASE IF NOT EXISTS sakila;"
-          mysql --defaults-file=~/.my.cnf sakila < src/__tests__/sakila-db/sakila-schema.sql
-          mysql --defaults-file=~/.my.cnf sakila < src/__tests__/sakila-db/sakila-data.sql
+          mysql --defaults-file=$MYSQL_HOME/.my.cnf -e "CREATE DATABASE IF NOT EXISTS sakila;"
+          mysql --defaults-file=$MYSQL_HOME/.my.cnf sakila < src/__tests__/sakila-db/sakila-schema.sql
+          mysql --defaults-file=$MYSQL_HOME/.my.cnf sakila < src/__tests__/sakila-db/sakila-data.sql
 
       - name: Read package name & version
         id: pkg
