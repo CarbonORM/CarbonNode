@@ -1,0 +1,72 @@
+name: Publish to npm on version bump (registry check)
+
+on:
+  push:
+    branches: [ main ]
+    paths: [ package.json ]
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+          cache: 'npm'
+
+      - name: Read package name & version
+        id: pkg
+        run: |
+          set -euo pipefail
+          NAME=$(jq -r .name package.json)
+          VER=$(jq -r .version package.json)
+          echo "name=$NAME" >> "$GITHUB_OUTPUT"
+          echo "version=$VER" >> "$GITHUB_OUTPUT"
+
+      # Public packages: npm view does not need auth.
+      # Private/scoped packages: npm view will use NODE_AUTH_TOKEN if provided.
+      - name: Check if version already published
+        id: exists
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }} # optional for private
+        run: |
+          set -euo pipefail
+          NAME="${{ steps.pkg.outputs.name }}"
+          VER="${{ steps.pkg.outputs.version }}"
+
+          if npm view "$NAME@$VER" version >/dev/null 2>&1; then
+            echo "published=true"  >> "$GITHUB_OUTPUT"
+            echo "Package $NAME@$VER already on npm. Skipping publish."
+          else
+            echo "published=false" >> "$GITHUB_OUTPUT"
+            echo "Package $NAME@$VER not found on npm. Will publish."
+          fi
+
+      - name: Install
+        if: steps.exists.outputs.published == 'false'
+        run: npm ci
+
+      - name: Test
+        if: steps.exists.outputs.published == 'false'
+        run: npm test --if-present
+
+      - name: Publish
+        if: steps.exists.outputs.published == 'false'
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish --access public --provenance
+
+      - name: Skip (already published)
+        if: steps.exists.outputs.published == 'true'
+        run: echo "Version already on npm; skipping publish."
