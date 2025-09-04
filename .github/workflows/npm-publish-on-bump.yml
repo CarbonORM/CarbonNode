@@ -35,12 +35,11 @@ jobs:
             max_allowed_packet=16MB
             max_connections=50
             local_infile=1
-            user=root
-            password=password
 
       - name: Load schema
         if: hashFiles('src/__tests__/sakila-db/sakila-schema.sql') != ''
         run: |
+          cat $MYSQL_HOME/my.cnf
           mysql --defaults-file=$MYSQL_HOME/my.cnf -e "CREATE DATABASE IF NOT EXISTS sakila;"
           mysql --defaults-file=$MYSQL_HOME/my.cnf sakila < src/__tests__/sakila-db/sakila-schema.sql
           mysql --defaults-file=$MYSQL_HOME/my.cnf sakila < src/__tests__/sakila-db/sakila-data.sql
