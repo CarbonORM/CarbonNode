@@ -5,6 +5,7 @@
 ![Monthly Downloads](https://img.shields.io/npm/dm/%40carbonorm%2Fcarbonnode)
 ![All Downloads](https://img.shields.io/npm/dt/%40carbonorm%2Fcarbonnode)
 ![Star](https://img.shields.io/github/stars/carbonorm/carbonnode?style=social)
+[![Github Actions Test and Publish to NPM](https://github.com/CarbonORM/CarbonNode/actions/workflows/npm-publish-on-bump.yml/badge.svg)](https://github.com/CarbonORM/CarbonNode/actions/workflows/npm-publish-on-bump.yml)
 
 # CarbonNode (Alpha Release)
 
