@@ -46,7 +46,7 @@ jobs:
           port=3306
           protocol=tcp
           EOF
-          chmod 600 ~/.my.cnf
+          chmod 600 ~/my.cnf
 
       - name: Load schema
         if: hashFiles('src/__tests__/sakila-db/sakila-schema.sql') != ''
