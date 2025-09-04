@@ -39,9 +39,9 @@ jobs:
       - name: Load schema
         if: hashFiles('src/__tests__/sakila-db/sakila-schema.sql') != ''
         run: |
-          mysql --defaults-file=$MYSQL_HOME/.my.cnf -e "CREATE DATABASE IF NOT EXISTS sakila;"
-          mysql --defaults-file=$MYSQL_HOME/.my.cnf sakila < src/__tests__/sakila-db/sakila-schema.sql
-          mysql --defaults-file=$MYSQL_HOME/.my.cnf sakila < src/__tests__/sakila-db/sakila-data.sql
+          mysql --defaults-file=$MYSQL_HOME/my.cnf -e "CREATE DATABASE IF NOT EXISTS sakila;"
+          mysql --defaults-file=$MYSQL_HOME/my.cnf sakila < src/__tests__/sakila-db/sakila-schema.sql
+          mysql --defaults-file=$MYSQL_HOME/my.cnf sakila < src/__tests__/sakila-db/sakila-data.sql
 
       - name: Read package name & version
         id: pkg
