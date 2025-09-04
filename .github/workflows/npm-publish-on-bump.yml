@@ -28,7 +28,6 @@ jobs:
 
       # Write auth into THE npmrc that setup-node told npm to use
       - name: Configure npm auth
-        if: steps.exists.outputs.published == 'false'
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}     # npm Automation Token w/ publish rights
         run: |
