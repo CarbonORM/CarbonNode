@@ -76,7 +76,7 @@ export default [
 		input: 'src/index.ts',
 		external: [
 			...externals,
-			/^src\/api\/rest\/.+$/
+			/^src\/__tests__\/.+$/
 		],
 		plugins: plugins,
 		output: [

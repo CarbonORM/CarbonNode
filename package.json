@@ -80,7 +80,7 @@
     "dev": "rollup -c -w",
     "test": "vitest run --reporter=dot",
     "pretest": "npm run build && npm run c6",
-    "build:index": "npx barrelsby -d ./src --delete --exclude '(jestHoc|\\.test|\\.d).(js|tsx?)$' --exportDefault --verbose",
+    "build:index": "npx barrelsby -d ./src --delete --exclude '(__tests__.*|jestHoc|\\.test|\\.d).(js|tsx?)$' --exportDefault --verbose",
     "build:generateRestBindings": "cd ./scripts/ && tsc --downlevelIteration --resolveJsonModule generateRestBindings.ts && mv generateRestBindings.js generateRestBindings.cjs",
     "generateRestBindings": "npm run build:generateRestBindings && node ./scripts/generateRestBindings.cjs --output src/__tests__/sakila-db",
     "c6": "npm run generateRestBindings",
