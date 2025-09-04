@@ -3,7 +3,7 @@ name: Publish to npm on version bump (registry check)
 on:
   push:
     branches: [ main ]
-    paths: [ package.json ]
+    # paths: [ package.json ]
 
 jobs:
   publish:
