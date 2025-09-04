@@ -92,13 +92,7 @@ class MySQLDump {
 
         const cmd = `${mysqldump} --defaults-extra-file="${defaultsExtraFile}" ${otherOption} --set-gtid-purged="OFF" --skip-add-locks --lock-tables=false --single-transaction --quick ${createInfoOption}${hexBlobOption}${this.DB_NAME} ${specificTable} > '${outputFile}'`;
 
-        const bypass = process.env.C6_NO_DB === '1' || process.env.CI === 'true' || argMap['--no-db'] === '1';
-        if (bypass) {
-            console.warn('[generateRestBindings] Skipping mysqldump due to environment flag (C6_NO_DB/CI/--no-db).');
-        } else {
-            // Do not hard-exit on failure; allow fallback to pre-existing dump file
-            this.executeAndCheckStatus(cmd, false);
-        }
+        this.executeAndCheckStatus(cmd, false);
 
         if (!fs.existsSync(outputFile)) {
             console.warn(`[generateRestBindings] mysqldump output not found at ${outputFile}. If running in CI/no-DB environment, ensure a prebuilt dump file exists at this path.`);
@@ -300,7 +294,8 @@ const parseSQLToTypeScript = (sql: string) => {
                             .split(/,(?=(?:[^']*'[^']*')*[^']*$)/) // split only top-level commas
                             .map(s => s.trim().replace(/^'(.*)'$/, '$1'))
                         : null;
-                    const type = fullType.replace(/\(.+?\)/, '').split(' ')[0].toLowerCase();                    const lengthMatch = fullType.match(/\(([^)]+)\)/);
+                    const type = fullType.replace(/\(.+?\)/, '').split(' ')[0].toLowerCase();
+                    const lengthMatch = fullType.match(/\(([^)]+)\)/);
                     const length = lengthMatch ? lengthMatch[1] : '';
 
                     const sridMatch = line.match(/SRID\s+(\d+)/i);
@@ -353,7 +348,7 @@ const parseSQLToTypeScript = (sql: string) => {
 
         }
 
-        let REACT_IMPORT: false|string = false, CARBON_REACT_INSTANCE : false|string = false;
+        let REACT_IMPORT: false | string = false, CARBON_REACT_INSTANCE: false | string = false;
 
         if (argMap['--react']) {
 
