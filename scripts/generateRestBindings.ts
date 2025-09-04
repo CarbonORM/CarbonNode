@@ -92,7 +92,17 @@ class MySQLDump {
 
         const cmd = `${mysqldump} --defaults-extra-file="${defaultsExtraFile}" ${otherOption} --set-gtid-purged="OFF" --skip-add-locks --lock-tables=false --single-transaction --quick ${createInfoOption}${hexBlobOption}${this.DB_NAME} ${specificTable} > '${outputFile}'`;
 
-        this.executeAndCheckStatus(cmd);
+        const bypass = process.env.C6_NO_DB === '1' || process.env.CI === 'true' || argMap['--no-db'] === '1';
+        if (bypass) {
+            console.warn('[generateRestBindings] Skipping mysqldump due to environment flag (C6_NO_DB/CI/--no-db).');
+        } else {
+            // Do not hard-exit on failure; allow fallback to pre-existing dump file
+            this.executeAndCheckStatus(cmd, false);
+        }
+
+        if (!fs.existsSync(outputFile)) {
+            console.warn(`[generateRestBindings] mysqldump output not found at ${outputFile}. If running in CI/no-DB environment, ensure a prebuilt dump file exists at this path.`);
+        }
 
         return (this.mysqldump = outputFile);
 
