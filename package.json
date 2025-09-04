@@ -2,6 +2,10 @@
   "name": "@carbonorm/carbonnode",
   "version": "3.7.7",
   "browser": "dist/index.umd.js",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/CarbonORM/CarbonNode"
+  },
   "exports": {
     ".": {
       "import": "./dist/index.esm.js",
