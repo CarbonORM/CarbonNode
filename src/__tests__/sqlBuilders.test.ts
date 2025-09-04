@@ -4,7 +4,7 @@ import { SelectQueryBuilder } from '../api/orm/queries/SelectQueryBuilder';
 import { PostQueryBuilder } from '../api/orm/queries/PostQueryBuilder';
 import { UpdateQueryBuilder } from '../api/orm/queries/UpdateQueryBuilder';
 import { DeleteQueryBuilder } from '../api/orm/queries/DeleteQueryBuilder';
-import { buildTestConfig } from './fixtures/c6';
+import { buildTestConfig } from './fixtures/c6.fixture';
 
 describe('SQL Builders', () => {
   it('builds SELECT with JOIN, WHERE, GROUP BY, HAVING and default LIMIT', () => {

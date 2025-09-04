@@ -72,4 +72,3 @@ export function buildTestConfig() {
 
   return baseConfig;
 }
-

@@ -43,6 +43,7 @@
   "exclude": [
     "node_modules",
     "src/api/rest/**",
-    "src/api/rest/**/*.test.ts"
+    "src/api/rest/**/*.test.ts",
+    "src/__tests__/**"
   ]
 }

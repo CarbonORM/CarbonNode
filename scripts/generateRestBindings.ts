@@ -26,7 +26,7 @@ class MySQLDump {
     static DB_PORT = argMap['--port'] || '3306';
     static DB_NAME = argMap['--dbname'] || 'sakila';
     static DB_PREFIX = argMap['--prefix'] || '';
-    static RELATIVE_OUTPUT_DIR = argMap['--'] || '/src';
+    static RELATIVE_OUTPUT_DIR = argMap['--output'] || '/src';
     static OUTPUT_DIR = path.join(process.cwd(), MySQLDump.RELATIVE_OUTPUT_DIR);
 
     static buildCNF(cnfFile: string = '') {
