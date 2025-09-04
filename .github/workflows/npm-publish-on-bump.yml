@@ -91,22 +91,11 @@ jobs:
         if: steps.exists.outputs.published == 'false'
         run: npm test --if-present
 
-      - name: Configure npm auth
-        if: steps.exists.outputs.published == 'false'
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: |
-          # Write auth for both registries
-          echo "always-auth=true" >> ~/.npmrc
-          echo "//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}" >> ~/.npmrc
-          echo "//registry.npmjs.com/:_authToken=${NODE_AUTH_TOKEN}" >> ~/.npmrc
-          npm whoami || (echo "npm auth failed" && exit 1)
-
       - name: Publish
         if: steps.exists.outputs.published == 'false'
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: npm publish --access public --provenance
+        run: npm publish --provenance --access public
 
       - name: Skip (already published)
         if: steps.exists.outputs.published == 'true'
