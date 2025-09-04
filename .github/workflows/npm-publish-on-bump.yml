@@ -97,7 +97,8 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           npm config set always-auth true
-          # write auth for both domains to be safe
+          # Write auth for both registries
+          echo "always-auth=true" >> ~/.npmrc
           echo "//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}" >> ~/.npmrc
           echo "//registry.npmjs.com/:_authToken=${NODE_AUTH_TOKEN}" >> ~/.npmrc
           npm whoami || (echo "npm auth failed" && exit 1)
