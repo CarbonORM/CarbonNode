@@ -40,23 +40,36 @@ export function normalizeSingularRequest<
   }
 
   const pkShorts: string[] = Array.isArray(restModel.PRIMARY_SHORT) ? [...restModel.PRIMARY_SHORT] : [];
+  const pkFulls: string[] = Array.isArray((restModel as any).PRIMARY) ? [...(restModel as any).PRIMARY] : [];
+  const resolveShortKey = (key: string): string => {
+    const cols = (restModel as any).COLUMNS || {};
+    return (cols as any)[key] ?? key;
+  };
   if (!pkShorts.length) {
     // For GET requests, do not enforce primary key presence; treat as a collection query.
     if (requestMethod === C6C.GET) return request;
     throw new Error(`Table (${restModel.TABLE_NAME}) has no primary key; singular request syntax is not allowed.`);
   }
 
-  // Build pk map from request + possibly removed primary key
+  // Build pk map from request + possibly removed primary key (accept short or fully-qualified keys)
   const pkValues: Record<string, any> = {};
-  for (const pk of pkShorts) {
-    const fromRequest = (request as any)[pk];
-    if (fromRequest !== undefined && fromRequest !== null) {
-      pkValues[pk] = fromRequest;
-      continue;
+  const requestObj = request as any;
+  for (const pkShort of pkShorts) {
+    // 1) direct short key
+    let value = requestObj[pkShort];
+    if (value === undefined) {
+      // 2) fully-qualified key matching this short key (from PRIMARY list or by concatenation)
+      const fqCandidate = `${restModel.TABLE_NAME}.${pkShort}`;
+      const fqKey = pkFulls.find(fq => fq === fqCandidate || fq.endsWith(`.${pkShort}`)) ?? fqCandidate;
+      value = requestObj[fqKey];
     }
-    if (removedPrimary && removedPrimary.key === pk) {
-      pkValues[pk] = removedPrimary.value;
-      continue;
+    if (value === undefined && removedPrimary) {
+      // 3) removedPrimary may provide either short or fully-qualified key
+      const removedKeyShort = resolveShortKey(removedPrimary.key);
+      if (removedKeyShort === pkShort) value = removedPrimary.value;
+    }
+    if (value !== undefined && value !== null) {
+      pkValues[pkShort] = value;
     }
   }
 
@@ -118,10 +131,11 @@ export function normalizeSingularRequest<
   // PUT
   const updateBody: Record<string, any> = {};
   for (const k of Object.keys(rest)) {
-    if (pkShorts.includes(k)) continue; // don't update PK columns
     // Skip special request keys if any slipped through
     if (specialKeys.has(k)) continue;
-    updateBody[k] = (rest as any)[k];
+    const shortKey = resolveShortKey(k);
+    if (pkShorts.includes(shortKey)) continue; // don't update PK columns (short or fully qualified)
+    updateBody[shortKey] = (rest as any)[k];
   }
   if (Object.keys(updateBody).length === 0) {
     throw new Error(`Singular PUT request for table (${restModel.TABLE_NAME}) must include at least one non-primary field to update.`);

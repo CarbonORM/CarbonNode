@@ -102,4 +102,34 @@ describe('normalizeSingularRequest', () => {
     const out = normalizeSingularRequest('GET', req, model);
     expect(out).toBe(req);
   });
+  it('accepts fully-qualified PK and maps WHERE/UPDATE to short keys', () => {
+    const model = makeModel('actor', ['actor_id'], ['first_name']);
+    const req = { 'actor.actor_id': 12, 'actor.first_name': 'FN' } as any;
+    const out = normalizeSingularRequest('PUT', req, model) as any;
+    expect(out[C6C.WHERE]).toEqual({ actor_id: 12 });
+    expect(out[C6C.UPDATE]).toEqual({ first_name: 'FN' });
+  });
+
+  it('handles mix of short and fully-qualified keys', () => {
+    const model = makeModel('actor', ['actor_id'], ['first_name']);
+    const req = { 'actor.actor_id': 44, first_name: 'Mix' } as any;
+    const out = normalizeSingularRequest('PUT', req, model) as any;
+    expect(out[C6C.WHERE]).toEqual({ actor_id: 44 });
+    expect(out[C6C.UPDATE]).toEqual({ first_name: 'Mix' });
+  });
+
+  it('DELETE with fully-qualified PK constructs proper WHERE', () => {
+    const model = makeModel('actor', ['actor_id']);
+    const req = { 'actor.actor_id': 77 } as any;
+    const out = normalizeSingularRequest('DELETE', req, model) as any;
+    expect(out[C6C.DELETE]).toBe(true);
+    expect(out[C6C.WHERE]).toEqual({ actor_id: 77 });
+  });
+
+  it('supports composite PKs with fully-qualified keys', () => {
+    const model = makeModel('link', ['from_id', 'to_id']);
+    const req = { 'link.from_id': 1, 'link.to_id': 2, 'link.label': 'L' } as any;
+    const out = normalizeSingularRequest('PUT', req, model) as any;
+    expect(out[C6C.WHERE]).toEqual({ from_id: 1, to_id: 2 });
+  });
 });
