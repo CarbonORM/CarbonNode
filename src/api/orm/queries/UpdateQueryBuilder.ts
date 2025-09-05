@@ -4,6 +4,14 @@ import { PaginationBuilder } from '../builders/PaginationBuilder';
 import {SqlBuilderResult} from "../utils/sqlUtils";
 
 export class UpdateQueryBuilder<G extends OrmGenerics> extends PaginationBuilder<G>{
+    private trimTablePrefix(table: string, column: string): string {
+        if (!column.includes('.')) return column;
+        const [prefix, col] = column.split('.', 2);
+        if (prefix !== table) {
+            throw new Error(`Invalid prefixed column: '${column}'. Expected prefix '${table}.'`);
+        }
+        return col;
+    }
 
     build(
         table: string,
@@ -23,7 +31,7 @@ export class UpdateQueryBuilder<G extends OrmGenerics> extends PaginationBuilder
         }
 
         const setClauses = Object.entries(this.request[C6C.UPDATE])
-            .map(([col, val]) => `\`${col}\` = ${this.addParam(params, col, val)}`);
+            .map(([col, val]) => `\`${this.trimTablePrefix(table, col)}\` = ${this.addParam(params, col, val)}`);
 
         sql += ` SET ${setClauses.join(', ')}`;
 

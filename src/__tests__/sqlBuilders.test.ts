@@ -82,6 +82,24 @@ describe('SQL Builders', () => {
     expect(params).toEqual(['ALICE', 5]);
   });
 
+  it('builds UPDATE when columns are fully qualified', () => {
+    const config = buildTestConfig();
+    const qb = new UpdateQueryBuilder(config as any, {
+      [C6C.UPDATE]: {
+        'actor.first_name': 'ALICIA',
+      },
+      WHERE: {
+        'actor.actor_id': [C6C.EQUAL, 7],
+      },
+    } as any, false);
+
+    const { sql, params } = qb.build('actor');
+
+    expect(sql).toContain('`first_name` = ?');
+    expect(sql).toContain('WHERE (actor.actor_id) = ?');
+    expect(params).toEqual(['ALICIA', 7]);
+  });
+
   it('builds DELETE with JOIN and WHERE', () => {
     const config = buildTestConfig();
     const qb = new DeleteQueryBuilder(config as any, {
