@@ -35,7 +35,6 @@ export function ExpressHandler({C6, mysqlPool}: { C6: iC6Object, mysqlPool: Pool
             }
 
             const primaryKeyName = primaryKeys[0];
-            const primaryKeyShort = primaryKeyName.split('.')[1];
 
             // If a primary key was provided in the URL, merge it into the payload.
             // Support both complex requests using WHERE and singular requests
