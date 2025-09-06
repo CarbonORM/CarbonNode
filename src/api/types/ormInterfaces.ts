@@ -127,7 +127,8 @@ export interface iGetC6RestResponse<
     ResponseDataType extends { [key: string]: any },
     ResponseDataOverrides = {}
 > extends iC6RestResponse<
-    Modify<ResponseDataType, ResponseDataOverrides> | Modify<ResponseDataType, ResponseDataOverrides>[]
+    // TODO - We removed Modify<ResponseDataType, ResponseDataOverrides> |
+    Modify<ResponseDataType, ResponseDataOverrides>[]
 > {
     next?: () => Promise<DetermineResponseDataType<"GET", ResponseDataType, ResponseDataOverrides>>;
 }
