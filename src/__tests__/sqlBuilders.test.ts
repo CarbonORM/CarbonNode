@@ -4,7 +4,7 @@ import { SelectQueryBuilder } from '../api/orm/queries/SelectQueryBuilder';
 import { PostQueryBuilder } from '../api/orm/queries/PostQueryBuilder';
 import { UpdateQueryBuilder } from '../api/orm/queries/UpdateQueryBuilder';
 import { DeleteQueryBuilder } from '../api/orm/queries/DeleteQueryBuilder';
-import { buildTestConfig } from './fixtures/c6.fixture';
+import { buildTestConfig, buildBinaryTestConfig } from './fixtures/c6.fixture';
 
 describe('SQL Builders', () => {
   it('builds SELECT with JOIN, WHERE, GROUP BY, HAVING and default LIMIT', () => {
@@ -131,6 +131,35 @@ describe('SQL Builders', () => {
 
     const { params } = qb.build('actor');
     expect(Array.isArray(params)).toBe(true);
+    const buf = (params as any[])[0];
+    expect(Buffer.isBuffer(buf)).toBe(true);
+    expect((buf as Buffer).length).toBe(16);
+  });
+
+  it('converts hex to Buffer for BINARY columns in INSERT params', () => {
+    const config = buildBinaryTestConfig();
+    const qb = new PostQueryBuilder(config as any, {
+      [C6C.INSERT]: {
+        'binary_test.bin_col': '0123456789abcdef0123456789abcdef'
+      }
+    } as any, false);
+
+    const { params } = qb.build('binary_test');
+    const buf = (params as any[])[0];
+    expect(Buffer.isBuffer(buf)).toBe(true);
+    expect((buf as Buffer).length).toBe(16);
+  });
+
+  it('converts hex to Buffer for BINARY columns in UPDATE params', () => {
+    const config = buildBinaryTestConfig();
+    const qb = new UpdateQueryBuilder(config as any, {
+      [C6C.UPDATE]: {
+        'binary_test.bin_col': '0123456789abcdef0123456789abcdef'
+      },
+      WHERE: { 'binary_test.id': [C6C.EQUAL, 1] }
+    } as any, false);
+
+    const { params } = qb.build('binary_test');
     const buf = (params as any[])[0];
     expect(Buffer.isBuffer(buf)).toBe(true);
     expect((buf as Buffer).length).toBe(16);

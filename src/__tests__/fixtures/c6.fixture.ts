@@ -6,7 +6,7 @@ function tableModel<T extends Record<string, any>>(name: string, columns: Record
   const COLUMNS: any = {};
   Object.entries(columns).forEach(([fq, short]) => {
     COLUMNS[fq] = short;
-    TYPE_VALIDATION[fq] = {
+    TYPE_VALIDATION[short as string] = {
       MYSQL_TYPE: 'VARCHAR(255)',
       MAX_LENGTH: '255',
       AUTO_INCREMENT: false,
@@ -61,12 +61,39 @@ export function buildTestConfig() {
   } as any;
 
   // Special-case: mark binary column as BINARY to test conversion
-  C6.TABLES.actor.TYPE_VALIDATION['actor.binarycol'].MYSQL_TYPE = 'BINARY(16)';
+  C6.TABLES.actor.TYPE_VALIDATION['binarycol'].MYSQL_TYPE = 'BINARY(16)';
 
   const baseConfig: iRest<any, any, any> = {
     C6,
     restModel: C6.TABLES.actor,
     requestMethod: 'GET',
+    verbose: false,
+  } as any;
+
+  return baseConfig;
+}
+
+export function buildBinaryTestConfig() {
+  const binaryCols = {
+    'binary_test.id': 'id',
+    'binary_test.bin_col': 'bin_col',
+  } as const;
+
+  const C6 = {
+    C6VERSION: 'test',
+    TABLES: {
+      binary_test: tableModel<'binary_test' & any>('binary_test', binaryCols as any),
+    },
+    PREFIX: '',
+    ORM: {} as any,
+  } as any;
+
+  C6.TABLES.binary_test.TYPE_VALIDATION['bin_col'].MYSQL_TYPE = 'BINARY(16)';
+
+  const baseConfig: iRest<any, any, any> = {
+    C6,
+    restModel: C6.TABLES.binary_test,
+    requestMethod: 'POST',
     verbose: false,
   } as any;
 

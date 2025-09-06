@@ -102,9 +102,9 @@ export abstract class ConditionBuilder<
         // Determine column definition from C6.TABLES to support type-aware conversions (e.g., BINARY hex -> Buffer)
         let columnDef: any | undefined;
         if (typeof column === 'string' && column.includes('.')) {
-            const [tableName] = column.split('.', 2);
+            const [tableName, colName] = column.split('.', 2);
             const table = this.config.C6?.TABLES?.[tableName];
-            columnDef = table?.TYPE_VALIDATION?.[column];
+            columnDef = table?.TYPE_VALIDATION?.[colName];
         }
         const val = convertHexIfBinary(column, value, columnDef);
 
