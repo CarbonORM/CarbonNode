@@ -2,7 +2,7 @@ import mysql from "mysql2/promise";
 import axios from "axios";
 import { AddressInfo } from "net";
 import {describe, it, expect, beforeAll, afterAll} from "vitest";
-import {Actor, GLOBAL_REST_PARAMETERS} from "./sakila-db/C6.js";
+import {Actor, C6, GLOBAL_REST_PARAMETERS} from "./sakila-db/C6.js";
 import {C6C} from "../api/C6Constants";
 import createTestServer from "../api/handlers/createTestServer";
 
@@ -63,29 +63,29 @@ describe("ExpressHandler e2e", () => {
         } as any);
 
         let data = await Actor.Get({
-            [C6C.WHERE]: { ["actor.first_name"]: first_name, ["actor.last_name"]: last_name },
+            [C6C.WHERE]: { [Actor.FIRST_NAME]: first_name, [Actor.LAST_NAME]: last_name },
             [C6C.PAGINATION]: { [C6C.LIMIT]: 1 },
         } as any);
-        expect(data.rest).toHaveLength(1);
-        const testId = data.rest[0].actor_id;
+        expect(data?.rest).toHaveLength(1);
+        const testId = data?.rest[0].actor_id;
 
 
         await Actor.Put({
-            [C6C.WHERE]: { ["actor.actor_id"]: testId },
+            [C6C.WHERE]: { [Actor.ACTOR_ID]: testId },
             [C6C.UPDATE]: { first_name: "Updated" },
         } as any);
         data = await Actor.Get({
-            [C6C.WHERE]: { ["actor.actor_id"]: testId },
+            [C6C.WHERE]: { [Actor.ACTOR_ID]: testId },
         } as any);
         expect(data?.rest).toHaveLength(1);
         expect(data?.rest[0].first_name).toBe("Updated");
 
         await Actor.Delete({
-            [C6C.WHERE]: { ["actor.actor_id"]: testId },
+            [C6C.WHERE]: { [Actor.ACTOR_ID]: testId },
             [C6C.DELETE]: true,
         } as any);
         data = await Actor.Get({
-            [C6C.WHERE]: { ["actor.actor_id"]: testId },
+            [C6C.WHERE]: { [Actor.ACTOR_ID]: testId },
             cacheResults: false,
         } as any);
         expect(Array.isArray(data?.rest)).toBe(true);

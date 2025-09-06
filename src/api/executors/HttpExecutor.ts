@@ -130,8 +130,6 @@ export class HttpExecutor<
             clearCache,
         } = this.config
 
-        console.log('this.config', this.config)
-
         await this.runLifecycleHooks<"beforeProcessing">(
             "beforeProcessing", {
                 config: this.config,
@@ -790,7 +788,7 @@ export class HttpExecutor<
                                                 accumulator.push(row['entity_tag']);
                                             }
                                             return accumulator;
-                                        }, []).map((entityTag) => entityTag.split('\\').pop().toLowerCase());
+                                        }, []).map((entityTag) => entityTag.split('\\')?.pop()?.toLowerCase()!);
 
                                         const shouldContinue = referencesTables.find((referencesTable) => tableToFetch.endsWith(referencesTable))
 
