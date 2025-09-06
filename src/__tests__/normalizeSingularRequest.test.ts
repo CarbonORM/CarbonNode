@@ -39,7 +39,7 @@ describe('normalizeSingularRequest', () => {
     const req = { actor_id: 5 } as any;
     const out = normalizeSingularRequest('GET', req, model);
     expect(out).toHaveProperty(C6C.WHERE);
-    expect((out as any)[C6C.WHERE]).toEqual({ actor_id: 5 });
+    expect((out as any)[C6C.WHERE]).toEqual({ 'actor.actor_id': 5 });
   });
 
   it('converts DELETE singular T into DELETE:true and WHERE by PK', () => {
@@ -47,14 +47,14 @@ describe('normalizeSingularRequest', () => {
     const req = { actor_id: 7 } as any;
     const out = normalizeSingularRequest('DELETE', req, model);
     expect((out as any)[C6C.DELETE]).toBe(true);
-    expect((out as any)[C6C.WHERE]).toEqual({ actor_id: 7 });
+    expect((out as any)[C6C.WHERE]).toEqual({ 'actor.actor_id': 7 });
   });
 
   it('converts PUT singular T into UPDATE (non-PK fields) and WHERE by PK', () => {
     const model = makeModel('actor', ['actor_id'], ['first_name']);
     const req = { actor_id: 9, first_name: 'NEW' } as any;
     const out = normalizeSingularRequest('PUT', req, model);
-    expect((out as any)[C6C.WHERE]).toEqual({ actor_id: 9 });
+    expect((out as any)[C6C.WHERE]).toEqual({ 'actor.actor_id': 9 });
     expect((out as any)[C6C.UPDATE]).toEqual({ first_name: 'NEW' });
   });
 
@@ -76,7 +76,7 @@ describe('normalizeSingularRequest', () => {
     const model = makeModel('link', ['from_id', 'to_id']);
     const ok = { from_id: 1, to_id: 2 } as any;
     const out = normalizeSingularRequest('GET', ok, model);
-    expect((out as any)[C6C.WHERE]).toEqual({ from_id: 1, to_id: 2 });
+    expect((out as any)[C6C.WHERE]).toEqual({ 'link.from_id': 1, 'link.to_id': 2 });
 
     const missing = { from_id: 1 } as any;
     expect(() => normalizeSingularRequest('DELETE', missing, model)).toThrow(/Missing: \[to_id\]/);
@@ -106,7 +106,7 @@ describe('normalizeSingularRequest', () => {
     const model = makeModel('actor', ['actor_id'], ['first_name']);
     const req = { 'actor.actor_id': 12, 'actor.first_name': 'FN' } as any;
     const out = normalizeSingularRequest('PUT', req, model) as any;
-    expect(out[C6C.WHERE]).toEqual({ actor_id: 12 });
+    expect(out[C6C.WHERE]).toEqual({ 'actor.actor_id': 12 });
     expect(out[C6C.UPDATE]).toEqual({ first_name: 'FN' });
   });
 
@@ -114,7 +114,7 @@ describe('normalizeSingularRequest', () => {
     const model = makeModel('actor', ['actor_id'], ['first_name']);
     const req = { 'actor.actor_id': 44, first_name: 'Mix' } as any;
     const out = normalizeSingularRequest('PUT', req, model) as any;
-    expect(out[C6C.WHERE]).toEqual({ actor_id: 44 });
+    expect(out[C6C.WHERE]).toEqual({ 'actor.actor_id': 44 });
     expect(out[C6C.UPDATE]).toEqual({ first_name: 'Mix' });
   });
 
@@ -123,13 +123,13 @@ describe('normalizeSingularRequest', () => {
     const req = { 'actor.actor_id': 77 } as any;
     const out = normalizeSingularRequest('DELETE', req, model) as any;
     expect(out[C6C.DELETE]).toBe(true);
-    expect(out[C6C.WHERE]).toEqual({ actor_id: 77 });
+    expect(out[C6C.WHERE]).toEqual({ 'actor.actor_id': 77 });
   });
 
   it('supports composite PKs with fully-qualified keys', () => {
     const model = makeModel('link', ['from_id', 'to_id']);
     const req = { 'link.from_id': 1, 'link.to_id': 2, 'link.label': 'L' } as any;
     const out = normalizeSingularRequest('PUT', req, model) as any;
-    expect(out[C6C.WHERE]).toEqual({ from_id: 1, to_id: 2 });
+    expect(out[C6C.WHERE]).toEqual({ 'link.from_id': 1, 'link.to_id': 2 });
   });
 });

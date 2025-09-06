@@ -60,7 +60,9 @@ export function normalizeSingularRequest<
     if (value === undefined) {
       // 2) fully-qualified key matching this short key (from PRIMARY list or by concatenation)
       const fqCandidate = `${restModel.TABLE_NAME}.${pkShort}`;
-      const fqKey = pkFulls.find(fq => fq === fqCandidate || fq.endsWith(`.${pkShort}`)) ?? fqCandidate;
+      const fqKey = pkFulls.find(
+        fq => fq === fqCandidate || fq.endsWith(`.${pkShort}`)
+      ) ?? fqCandidate;
       value = requestObj[fqKey];
     }
     if (value === undefined && removedPrimary) {
@@ -93,9 +95,18 @@ export function normalizeSingularRequest<
     ...rest
   } = request as any;
 
+  // Map short primary keys to fully-qualified column names
+  const shortToFull: Record<string, string> = {};
+  for (const [full, short] of Object.entries(restModel.COLUMNS || {})) {
+    shortToFull[short as string] = full;
+  }
+  const pkFullValues = Object.fromEntries(
+    Object.entries(pkValues).map(([k, v]) => [shortToFull[k] ?? k, v])
+  );
+
   if (requestMethod === C6C.GET) {
     const normalized: any = {
-      WHERE: { ...pkValues },
+      WHERE: { ...pkFullValues },
     };
     // Preserve pagination if any was added previously
     if ((request as any)[C6C.PAGINATION]) {
@@ -115,7 +126,7 @@ export function normalizeSingularRequest<
   if (requestMethod === C6C.DELETE) {
     const normalized: any = {
       [C6C.DELETE]: true,
-      WHERE: { ...pkValues },
+      WHERE: { ...pkFullValues },
     };
     return {
       ...normalized,
@@ -143,7 +154,7 @@ export function normalizeSingularRequest<
 
   const normalized: any = {
     [C6C.UPDATE]: updateBody,
-    WHERE: { ...pkValues },
+    WHERE: { ...pkFullValues },
   };
 
   return {
