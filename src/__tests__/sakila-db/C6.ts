@@ -16,6 +16,7 @@ export const RestTablePrefix = '';
 
 export type RestTableNames = 'actor'
  | 'address'
+ | 'binary_test'
  | 'category'
  | 'city'
  | 'country'
@@ -33,6 +34,7 @@ export type RestTableNames = 'actor'
 
 export type RestShortTableNames = 'actor'
  | 'address'
+ | 'binary_test'
  | 'category'
  | 'city'
  | 'country'
@@ -57,7 +59,7 @@ CREATE TABLE `actor` (
   `last_update` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`actor_id`),
   KEY `idx_actor_last_name` (`last_name`)
-) ENGINE=InnoDB AUTO_INCREMENT=201 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=203 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 **/
 
 export interface iActor {
@@ -292,6 +294,72 @@ const address:
             COLUMN: 'address_id',
             CONSTRAINT: 'fk_store_address',
         },],
+    }
+}
+
+/**
+CREATE TABLE `binary_test` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `bin_col` binary(16) DEFAULT NULL,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+**/
+
+export interface iBinary_Test {
+    'id'?: number;
+    'bin_col'?: Buffer | string | null;
+}
+
+export type Binary_TestPrimaryKeys = 
+        'id'
+    ;
+
+const binary_test:
+    C6RestfulModel<
+        'binary_test',
+        iBinary_Test,
+        Binary_TestPrimaryKeys
+    > = {
+    TABLE_NAME: 'binary_test',
+    ID: 'binary_test.id',
+    BIN_COL: 'binary_test.bin_col',
+    PRIMARY: [
+        'binary_test.id',
+    ],
+    PRIMARY_SHORT: [
+        'id',
+    ],
+    COLUMNS: {
+        'binary_test.id': 'id',
+        'binary_test.bin_col': 'bin_col',
+    },
+    TYPE_VALIDATION: {
+        'binary_test.id': {
+            MYSQL_TYPE: 'int',
+            MAX_LENGTH: '',
+            AUTO_INCREMENT: true,
+            SKIP_COLUMN_IN_POST: false
+        },
+        'binary_test.bin_col': {
+            MYSQL_TYPE: 'binary',
+            MAX_LENGTH: '16',
+            AUTO_INCREMENT: false,
+            SKIP_COLUMN_IN_POST: false
+        },
+    },
+    REGEX_VALIDATION: {
+    },
+    LIFECYCLE_HOOKS: {
+        GET: {beforeProcessing:{}, beforeExecution:{}, afterExecution:{}, afterCommit:{}},
+        PUT: {beforeProcessing:{}, beforeExecution:{}, afterExecution:{}, afterCommit:{}},
+        POST: {beforeProcessing:{}, beforeExecution:{}, afterExecution:{}, afterCommit:{}},
+        DELETE: {beforeProcessing:{}, beforeExecution:{}, afterExecution:{}, afterCommit:{}},
+    },
+    TABLE_REFERENCES: {
+        
+    },
+    TABLE_REFERENCED_BY: {
+        
     }
 }
 
@@ -1916,13 +1984,14 @@ const store:
 }
 
 export const TABLES = {
-actor,address,category,city,country,customer,film,film_actor,film_category,film_text,inventory,language,payment,rental,staff,store,
+actor,address,binary_test,category,city,country,customer,film,film_actor,film_category,film_text,inventory,language,payment,rental,staff,store,
 } satisfies {
     [K in keyof RestTableInterfaces]: C6RestfulModel<K, RestTableInterfaces[K], keyof RestTableInterfaces[K] & string>;
 };
 
 export type RestTableInterfaces = iActor
  | iAddress
+ | iBinary_Test
  | iCategory
  | iCity
  | iCountry
@@ -1940,7 +2009,7 @@ export type RestTableInterfaces = iActor
 
 export const C6 : iC6Object<RestTableInterfaces> = {
     ...C6Constants,
-    C6VERSION: '3.7.13',
+    C6VERSION: '3.7.18',
     IMPORT: async (tableName: string) : Promise<iDynamicApiImport> => {
 
         tableName = tableName.toLowerCase();
@@ -1976,6 +2045,7 @@ export type tStatefulApiData<T> = T[] | undefined | null;
 export interface iRestfulObjectArrayTypes {
     actor: tStatefulApiData<iActor>,
     address: tStatefulApiData<iAddress>,
+    binary_test: tStatefulApiData<iBinary_Test>,
     category: tStatefulApiData<iCategory>,
     city: tStatefulApiData<iCity>,
     country: tStatefulApiData<iCountry>,
@@ -1997,6 +2067,7 @@ export type tRestfulObjectArrayValues = iRestfulObjectArrayTypes[keyof iRestfulO
 export const initialRestfulObjectsState: iRestfulObjectArrayTypes = {
     actor: undefined,
     address: undefined,
+    binary_test: undefined,
     category: undefined,
     city: undefined,
     country: undefined,
@@ -2016,6 +2087,7 @@ export const initialRestfulObjectsState: iRestfulObjectArrayTypes = {
 export const COLUMNS = {
     'actor.actor_id': 'actor_id','actor.first_name': 'first_name','actor.last_name': 'last_name','actor.last_update': 'last_update',
 'address.address_id': 'address_id','address.address': 'address','address.address2': 'address2','address.district': 'district','address.city_id': 'city_id','address.postal_code': 'postal_code','address.phone': 'phone','address.location': 'location','address.last_update': 'last_update',
+'binary_test.id': 'id','binary_test.bin_col': 'bin_col',
 'category.category_id': 'category_id','category.name': 'name','category.last_update': 'last_update',
 'city.city_id': 'city_id','city.city': 'city','city.country_id': 'country_id','city.last_update': 'last_update',
 'country.country_id': 'country_id','country.country': 'country','country.last_update': 'last_update',
@@ -2056,6 +2128,16 @@ export const Address = {
     >(() => ({
         ...GLOBAL_REST_PARAMETERS,
         restModel: address
+    }))
+}
+
+export const Binary_Test = {
+    ...binary_test,
+    ...restOrm<
+        OrmGenerics<any, 'binary_test', iBinary_Test, Binary_TestPrimaryKeys>
+    >(() => ({
+        ...GLOBAL_REST_PARAMETERS,
+        restModel: binary_test
     }))
 }
 
@@ -2200,7 +2282,7 @@ export const Store = {
 }
 
 C6.ORM = {
-    Actor,    Address,    Category,    City,    Country,    Customer,    Film,    Film_Actor,    Film_Category,    Film_Text,    Inventory,    Language,    Payment,    Rental,    Staff,    Store,
+    Actor,    Address,    Binary_Test,    Category,    City,    Country,    Customer,    Film,    Film_Actor,    Film_Category,    Film_Text,    Inventory,    Language,    Payment,    Rental,    Staff,    Store,
 };
 
 
