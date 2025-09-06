@@ -15,7 +15,6 @@ import {
     PUT, RequestQueryBody
 } from "../types/ormInterfaces";
 import {removeInvalidKeys, removePrefixIfExists, TestRestfulResponse} from "../utils/apiHelpers";
-import { normalizeSingularRequest } from "../utils/normalizeSingularRequest";
 import {apiRequestCache, checkCache, userCustomClearCache} from "../utils/cacheManager";
 import {sortAndSerializeQueryObject} from "../utils/sortAndSerializeQueryObject";
 import {Executor} from "./Executor";
@@ -337,7 +336,6 @@ export class HttpExecutor<
             }
 
             let addBackPK: (() => void) | undefined;
-            let removedPrimaryKV: { key: string; value: any } | undefined;
 
             let apiResponse: G['RestTableInterface'][G['PrimaryKey']] | string | boolean | number | undefined;
 
@@ -413,7 +411,6 @@ export class HttpExecutor<
                 restRequestUri += query[primaryKey] + '/'
 
                 const removedPkValue = query[primaryKey];
-                removedPrimaryKV = { key: primaryKey, value: removedPkValue };
 
                 addBackPK = () => {
                     query ??= {} as RequestQueryBody<
@@ -475,13 +472,8 @@ export class HttpExecutor<
                             withCredentials: withCredentials,
                         };
 
-                        // Normalize singular request (GET/PUT/DELETE) into complex ORM shape
-                        const normalizedQuery = normalizeSingularRequest(
-                            requestMethod as any,
-                            query as any,
-                            restModel as any,
-                            removedPrimaryKV
-                        ) as typeof query;
+                        // Pass-through request; singular normalization occurs on the backend (SqlExecutor)
+                        const normalizedQuery = query;
 
                         switch (requestMethod) {
                             case GET:
