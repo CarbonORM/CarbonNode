@@ -4,7 +4,7 @@ import { AddressInfo } from "net";
 import {describe, it, expect, beforeAll, afterAll} from "vitest";
 import {Actor, C6, GLOBAL_REST_PARAMETERS} from "./sakila-db/C6.js";
 import {C6C} from "../api/C6Constants";
-import createTestServer from "../api/handlers/createTestServer";
+import createTestServer from "./fixtures/createTestServer";
 
 let pool: mysql.Pool;
 let server: any;
@@ -66,14 +66,15 @@ describe("ExpressHandler e2e", () => {
             [C6C.WHERE]: { [Actor.FIRST_NAME]: first_name, [Actor.LAST_NAME]: last_name },
             [C6C.PAGINATION]: { [C6C.LIMIT]: 1 },
         } as any);
+
         expect(data?.rest).toHaveLength(1);
         const testId = data?.rest[0].actor_id;
-
 
         await Actor.Put({
             [C6C.WHERE]: { [Actor.ACTOR_ID]: testId },
             [C6C.UPDATE]: { first_name: "Updated" },
         } as any);
+
         data = await Actor.Get({
             [C6C.WHERE]: { [Actor.ACTOR_ID]: testId },
         } as any);

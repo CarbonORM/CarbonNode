@@ -1,7 +1,7 @@
 import express, {Express} from "express";
 import {Pool} from "mysql2/promise";
-import {iC6Object} from "api/types/ormInterfaces";
-import {ExpressHandler} from "./ExpressHandler";
+import {iC6Object} from "src/api/types/ormInterfaces";
+import {ExpressHandler} from "../../api/handlers/ExpressHandler";
 
 export function createTestServer({C6, mysqlPool}: {C6: iC6Object; mysqlPool: Pool;}): Express {
     const app = express();
