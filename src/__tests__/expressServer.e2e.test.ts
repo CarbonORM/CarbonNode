@@ -1,11 +1,8 @@
 import mysql from "mysql2/promise";
 import {describe, it, expect, beforeAll, afterAll} from "vitest";
 import {C6, Actor, GLOBAL_REST_PARAMETERS} from "./sakila-db/C6.js";
-import {createTestServer} from "../api/handlers/createTestServer";
 import {C6C} from "../api/C6Constants";
-import axiosInstance from "../api/axiosInstance";
 
-let server: any;
 let pool: mysql.Pool;
 
 beforeAll(async () => {
@@ -16,26 +13,56 @@ beforeAll(async () => {
         database: "sakila",
     });
 
-    const app = createTestServer({C6, mysqlPool: pool});
-    server = app.listen(0);
-    await new Promise<void>((resolve) => server.once("listening", resolve));
-    const {port} = server.address();
-    GLOBAL_REST_PARAMETERS.restURL = `http://127.0.0.1:${port}/rest/`;
-    GLOBAL_REST_PARAMETERS.axios = axiosInstance;
+    GLOBAL_REST_PARAMETERS.mysqlPool = pool;
+    GLOBAL_REST_PARAMETERS.verbose = false;
 });
 
 afterAll(async () => {
     await pool.end();
-    await new Promise<void>((resolve) => server.close(resolve));
 });
 
 describe("ExpressHandler e2e", () => {
     it("handles GET requests", async () => {
-        const result = await Actor.Get({
+        const data = await Actor.Get({
             [C6C.PAGINATION]: { [C6C.LIMIT]: 1 },
         } as any);
-        const data = (result as any)?.data ?? result;
         expect(Array.isArray(data.rest)).toBe(true);
         expect(data.rest.length).toBeGreaterThan(0);
+    });
+
+    it("handles POST, GET by id, PUT, and DELETE", async () => {
+        await Actor.Post({
+            first_name: "Test",
+            last_name: "User",
+        } as any);
+
+        const [[{id}]] = await pool.query("SELECT LAST_INSERT_ID() as id");
+        const testId = Number(id);
+
+        let data = await Actor.Get({
+            [C6C.WHERE]: { ["actor.actor_id"]: testId },
+        } as any);
+        expect(data.rest).toHaveLength(1);
+        expect(data.rest[0].actor_id).toBe(testId);
+
+        await Actor.Put({
+            [C6C.WHERE]: { ["actor.actor_id"]: testId },
+            [C6C.UPDATE]: { first_name: "Updated" },
+        } as any);
+        data = await Actor.Get({
+            [C6C.WHERE]: { ["actor.actor_id"]: testId },
+        } as any);
+        expect(data.rest).toHaveLength(1);
+        expect(data.rest[0].first_name).toBe("Updated");
+
+        await Actor.Delete({
+            [C6C.WHERE]: { ["actor.actor_id"]: testId },
+            [C6C.DELETE]: true,
+        } as any);
+        data = await Actor.Get({
+            [C6C.WHERE]: { ["actor.actor_id"]: testId },
+        } as any);
+        expect(Array.isArray(data.rest)).toBe(true);
+        expect(data.rest.length).toBe(0);
     });
 });
