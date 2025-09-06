@@ -63,6 +63,15 @@ describe("HttpExecutor singular e2e", () => {
     expect(data.rest).toHaveLength(1);
     expect(data.rest[0].first_name).toBe("Updated");
 
+    // PUT using fully qualified keys
+    await Actor.Put({
+      [Actor.ACTOR_ID]: testId,
+      [Actor.FIRST_NAME]: "UpdatedFQ",
+    } as any);
+    data = await Actor.Get({ actor_id: testId, cacheResults: false } as any);
+    expect(data.rest).toHaveLength(1);
+    expect(data.rest[0].first_name).toBe("UpdatedFQ");
+
     // DELETE singular
     await Actor.Delete({ actor_id: testId } as any);
     data = await Actor.Get({ actor_id: testId, cacheResults: false } as any);
