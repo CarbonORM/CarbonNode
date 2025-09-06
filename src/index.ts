@@ -16,8 +16,6 @@ export * from "./api/executors/Executor";
 export * from "./api/executors/HttpExecutor";
 export * from "./api/executors/SqlExecutor";
 export * from "./api/handlers/ExpressHandler";
-export { default as createTestServer } from "./__tests__/fixtures/createTestServer";
-export * from "./__tests__/fixtures/createTestServer";
 export * from "./api/orm/queryHelpers";
 export * from "./api/orm/builders/AggregateBuilder";
 export * from "./api/orm/builders/ConditionBuilder";
