@@ -684,3 +684,14 @@ SET FOREIGN_KEY_CHECKS=@OLD_FOREIGN_KEY_CHECKS;
 SET UNIQUE_CHECKS=@OLD_UNIQUE_CHECKS;
 
 
+--
+-- Table structure for table `binary_test`
+--
+
+DROP TABLE IF EXISTS `binary_test`;
+
+CREATE TABLE `binary_test` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `bin_col` binary(16) DEFAULT NULL,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
