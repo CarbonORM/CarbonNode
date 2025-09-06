@@ -36,27 +36,16 @@ export function ExpressHandler({C6, mysqlPool}: { C6: iC6Object, mysqlPool: Pool
 
             const primaryKeyName = primaryKeys[0];
 
-            if (!(payload[C6C.WHERE]?.[primaryKeyName] ?? undefined)) {
-                // 👇 Call restRequest for the resolved method
-                switch (method) {
-                    case 'GET':
-                        if (primary) {
-                            payload[C6C.WHERE][primaryKeyName] = primary;
-                        }
-                        break;
-                    case 'PUT':
-                    case 'DELETE':
-                        if (primary) {
-                            payload[C6C.WHERE][primaryKeyName] = primary;
-                        } else {
-                            res.status(400).json({error: `Invalid request: ${method} requires a primary key (${primaryKeyName}).`});
-                        }
-                        break;
-                    case 'POST':
-                        break;
-                    default:
-                        res.status(405).json({error: `Method ${method} not allowed`});
-                        return;
+            // If a primary key was provided in the URL, merge it into the payload.
+            // Support both complex requests using WHERE and singular requests
+            // where the primary key lives at the root of the payload.
+            if (primary) {
+                if (payload[C6C.WHERE]) {
+                    payload[C6C.WHERE][primaryKeyName] =
+                        payload[C6C.WHERE][primaryKeyName] ?? primary;
+                } else {
+                    (payload as any)[primaryKeyName] =
+                        (payload as any)[primaryKeyName] ?? primary;
                 }
             }
 

@@ -19,7 +19,6 @@ import {apiRequestCache, checkCache, userCustomClearCache} from "../utils/cacheM
 import {sortAndSerializeQueryObject} from "../utils/sortAndSerializeQueryObject";
 import {Executor} from "./Executor";
 import {toastOptions, toastOptionsDevs} from "variables/toastOptions";
-import {normalizeSingularRequest} from "../utils/normalizeSingularRequest";
 
 export class HttpExecutor<
     G extends OrmGenerics
@@ -334,9 +333,6 @@ export class HttpExecutor<
 
             }
 
-            let addBackPK: (() => void) | undefined;
-            let removedPrimaryKV: { key: string; value: any } | undefined;
-
             let apiResponse: G['RestTableInterface'][G['PrimaryKey']] | string | boolean | number | undefined;
 
             let returnGetNextPageFunction = false;
@@ -410,22 +406,7 @@ export class HttpExecutor<
 
                 restRequestUri += query[primaryKey] + '/'
 
-                const removedPkValue = query[primaryKey];
-                removedPrimaryKV = { key: primaryKey, value: removedPkValue };
-
-                addBackPK = () => {
-                    query ??= {} as RequestQueryBody<
-                        G['RequestMethod'],
-                        G['RestTableInterface'],
-                        G['CustomAndRequiredFields'],
-                        G['RequestTableOverrides']
-                    >;
-                    query[primaryKey] = removedPkValue;
-                }
-
-                delete query[primaryKey]
-
-                console.log('query', query, 'primaryKey', primaryKey, 'removedPkValue', removedPkValue)
+                console.log('query', query, 'primaryKey', primaryKey)
 
             } else {
 
@@ -473,19 +454,11 @@ export class HttpExecutor<
                             withCredentials: withCredentials,
                         };
 
-                        // Normalize singular request (GET/PUT/DELETE) into complex ORM shape
-                        const normalizedQuery = normalizeSingularRequest(
-                            requestMethod as any,
-                            query as any,
-                            restModel as any,
-                            removedPrimaryKV
-                        ) as typeof query;
-
                         switch (requestMethod) {
                             case GET:
                                 return [{
                                     ...baseConfig,
-                                    params: normalizedQuery
+                                    params: query
                                 }];
 
                             case POST:
@@ -498,12 +471,12 @@ export class HttpExecutor<
                                 return [convert(query), baseConfig];
 
                             case PUT:
-                                return [convert(normalizedQuery), baseConfig];
+                                return [convert(query), baseConfig];
 
                             case DELETE:
                                 return [{
                                     ...baseConfig,
-                                    data: convert(normalizedQuery)
+                                    data: convert(query)
                                 }];
 
                             default:
@@ -522,10 +495,6 @@ export class HttpExecutor<
                     });
 
                 }
-
-                // todo - wip verify this works
-                // we had removed the value from the request to add to the URI.
-                addBackPK?.();  // adding back so post-processing methods work
 
                 // returning the promise with this then is important for tests. todo - we could make that optional.
                 // https://rapidapi.com/guides/axios-async-await
