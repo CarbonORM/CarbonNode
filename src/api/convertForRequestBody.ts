@@ -71,8 +71,8 @@ export default function <
                         }
                     }
                 }
-            } else if (Object.values(tableDefinition.COLUMNS).includes(value)) {
-                // Already a fully qualified column name
+            } else if (Object.keys(tableDefinition.COLUMNS).includes(value)) {
+                // Already using a fully qualified column name
                 const columnValue = restfulObject[value];
                 payload[value] = columnValue;
 

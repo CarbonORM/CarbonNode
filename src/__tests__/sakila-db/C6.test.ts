@@ -59,5 +59,32 @@ describe('sakila-db generated C6 bindings', () => {
             await waitForRequests();
         });
     }
+
+    it('[actor] PUT fully qualified keys', async () => {
+        const Actor = C6.ORM.Actor;
+        const testId = 1;
+
+        let result = await Actor.Get({ [Actor.ACTOR_ID]: testId } as any);
+        let data = result?.data ?? result;
+        const originalLastName = data?.rest?.[0]?.last_name;
+
+        await Actor.Put({
+            [Actor.ACTOR_ID]: testId,
+            [Actor.LAST_NAME]: 'Updated',
+        } as any);
+
+        result = await Actor.Get({
+            [Actor.ACTOR_ID]: testId,
+            cacheResults: false,
+        } as any);
+        data = result?.data ?? result;
+        expect(data?.rest?.[0]?.last_name).toBe('Updated');
+
+        await Actor.Put({
+            [Actor.ACTOR_ID]: testId,
+            [Actor.LAST_NAME]: originalLastName,
+        } as any);
+        await waitForRequests();
+    });
 });
 

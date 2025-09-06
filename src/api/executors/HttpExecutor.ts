@@ -346,7 +346,9 @@ export class HttpExecutor<
 
             // todo - aggregate primary key check with condition check
             // check if PK exists in query, clone so pop does not affect the real data
-            const primaryKey = structuredClone(TABLES[operatingTable]?.PRIMARY)?.pop()?.split('.')?.pop();
+            const primaryKeyList = structuredClone(TABLES[operatingTable]?.PRIMARY);
+            const primaryKeyFullyQualified = primaryKeyList?.pop();
+            const primaryKey = primaryKeyFullyQualified?.split('.')?.pop();
 
             if (needsConditionOrPrimaryCheck) {
 
@@ -370,7 +372,7 @@ export class HttpExecutor<
 
                     if (undefined === query
                         || null === query
-                        || false === primaryKey in query) {
+                        || (!(primaryKey! in query) && !(primaryKeyFullyQualified && primaryKeyFullyQualified in query))) {
 
                         if (true === debug && isLocal()) {
 
@@ -382,8 +384,8 @@ export class HttpExecutor<
 
                     }
 
-                    if (undefined === query?.[primaryKey]
-                        || null === query?.[primaryKey]) {
+                    const providedPrimary = query?.[primaryKey!] ?? (primaryKeyFullyQualified ? query?.[primaryKeyFullyQualified] : undefined);
+                    if (undefined === providedPrimary || null === providedPrimary) {
 
                         toast.error('The primary key (' + primaryKey + ') provided is undefined or null explicitly!!')
 
@@ -401,12 +403,21 @@ export class HttpExecutor<
             if (POST !== requestMethod
                 && undefined !== query
                 && null !== query
-                && undefined !== primaryKey
-                && primaryKey in query) {
+                && undefined !== primaryKey) {
 
-                restRequestUri += query[primaryKey] + '/'
+                const primaryVal = query[primaryKey!] ?? (primaryKeyFullyQualified ? query[primaryKeyFullyQualified] : undefined);
 
-                console.log('query', query, 'primaryKey', primaryKey)
+                if (undefined !== primaryVal) {
+
+                    restRequestUri += primaryVal + '/'
+
+                    console.log('query', query, 'primaryKey', primaryKey)
+
+                } else {
+
+                    console.log('query', query)
+
+                }
 
             } else {
 
