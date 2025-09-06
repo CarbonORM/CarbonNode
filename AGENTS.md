@@ -6,7 +6,7 @@
 - Attempt to add coverage to code that is near areas touched too.
 - Run `npm test` before each commit. The command MUST pass.
 - Check the `.junie/guidelines.md` for more instructions.
-
+- Use https://semver.org/ to determine how a version bump should be applied in `package.json`
 
 ### Boot
 In AI environments that allow it, like Codex or localhost, this is already configured to run on boot. 
