@@ -25,6 +25,15 @@ export class HttpExecutor<
 >
     extends Executor<G> {
 
+    private stripTableNameFromKeys(obj: Record<string, any>) {
+        const columns = (this.config.restModel as any).COLUMNS || {};
+        return Object.keys(obj || {}).reduce((acc: Record<string, any>, key) => {
+            const shortKey = columns[key] || key.split('.').pop();
+            acc[shortKey] = obj[key];
+            return acc;
+        }, {} as Record<string, any>);
+    }
+
     public putState(
         response: AxiosResponse<DetermineResponseDataType<G['RequestMethod'], G['RestTableInterface']>>,
         request: RequestQueryBody<
@@ -35,11 +44,12 @@ export class HttpExecutor<
         >,
         callback: () => void
     ) {
+        const normalized = this.stripTableNameFromKeys(request as Record<string, any>);
         this.config.reactBootstrap?.updateRestfulObjectArrays<G['RestTableInterface']>({
             callback,
             dataOrCallback: [
                 removeInvalidKeys<G['RestTableInterface']>({
-                    ...request,
+                    ...normalized,
                     ...response?.data?.rest,
                 }, this.config.C6.TABLES)
             ],
@@ -76,15 +86,16 @@ export class HttpExecutor<
         this.config.reactBootstrap?.updateRestfulObjectArrays<G['RestTableInterface']>({
             callback,
             dataOrCallback: undefined !== request.dataInsertMultipleRows
-                ? request.dataInsertMultipleRows.map((request, index) => {
+                ? request.dataInsertMultipleRows.map((row, index) => {
+                    const normalizedRow = this.stripTableNameFromKeys(row);
                     return removeInvalidKeys<G['RestTableInterface']>({
-                        ...request,
+                        ...normalizedRow,
                         ...(index === 0 ? response?.data?.rest : {}),
                     }, this.config.C6.TABLES)
                 })
                 : [
                     removeInvalidKeys<G['RestTableInterface']>({
-                        ...request,
+                        ...this.stripTableNameFromKeys(request as Record<string, any>),
                         ...response?.data?.rest,
                     }, this.config.C6.TABLES)
                 ],
@@ -103,10 +114,11 @@ export class HttpExecutor<
         >,
         callback: () => void
     ) {
+        const normalized = this.stripTableNameFromKeys(request as Record<string, any>);
         this.config.reactBootstrap?.deleteRestfulObjectArrays<G['RestTableInterface']>({
             callback,
             dataOrCallback: [
-                request as unknown as G['RestTableInterface'],
+                removeInvalidKeys<G['RestTableInterface']>(normalized, this.config.C6.TABLES),
             ],
             stateKey: this.config.restModel.TABLE_NAME,
             uniqueObjectId: this.config.restModel.PRIMARY_SHORT as (keyof G['RestTableInterface'])[]
@@ -571,7 +583,8 @@ export class HttpExecutor<
                             switch (requestMethod) {
                                 case GET:
                                     response.data && reactBootstrap.updateRestfulObjectArrays<G['RestTableInterface']>({
-                                        dataOrCallback: Array.isArray(response.data.rest) ? response.data.rest : [response.data.rest],
+                                        dataOrCallback: (Array.isArray(response.data.rest) ? response.data.rest : [response.data.rest])
+                                            .map(r => this.stripTableNameFromKeys(r)),
                                         stateKey: this.config.restModel.TABLE_NAME,
                                         uniqueObjectId: this.config.restModel.PRIMARY_SHORT as (keyof G['RestTableInterface'])[],
                                         callback
