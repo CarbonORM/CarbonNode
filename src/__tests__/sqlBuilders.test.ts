@@ -4,7 +4,7 @@ import { SelectQueryBuilder } from '../api/orm/queries/SelectQueryBuilder';
 import { PostQueryBuilder } from '../api/orm/queries/PostQueryBuilder';
 import { UpdateQueryBuilder } from '../api/orm/queries/UpdateQueryBuilder';
 import { DeleteQueryBuilder } from '../api/orm/queries/DeleteQueryBuilder';
-import { buildTestConfig, buildBinaryTestConfig } from './fixtures/c6.fixture';
+import { buildTestConfig, buildBinaryTestConfig, buildBinaryTestConfigFqn } from './fixtures/c6.fixture';
 
 describe('SQL Builders', () => {
   it('builds SELECT with JOIN, WHERE, GROUP BY, HAVING and default LIMIT', () => {
@@ -178,5 +178,33 @@ describe('SQL Builders', () => {
     expect(Buffer.isBuffer(buf)).toBe(true);
     expect((buf as Buffer).length).toBe(16);
   });
-});
 
+  it('converts hex to Buffer for BINARY when TYPE_VALIDATION uses fully-qualified key (INSERT)', () => {
+    const config = buildBinaryTestConfigFqn();
+    const qb = new PostQueryBuilder(config as any, {
+      [C6C.INSERT]: {
+        'binary_test.bin_col': '0123456789abcdef0123456789abcdef'
+      }
+    } as any, false);
+
+    const { params } = qb.build('binary_test');
+    const buf = (params as any[])[0];
+    expect(Buffer.isBuffer(buf)).toBe(true);
+    expect((buf as Buffer).length).toBe(16);
+  });
+
+  it('converts hex to Buffer for BINARY when TYPE_VALIDATION uses fully-qualified key (UPDATE)', () => {
+    const config = buildBinaryTestConfigFqn();
+    const qb = new UpdateQueryBuilder(config as any, {
+      [C6C.UPDATE]: {
+        'binary_test.bin_col': 'ffffffffffffffffffffffffffffffff'
+      },
+      WHERE: { 'binary_test.id': [C6C.EQUAL, 1] }
+    } as any, false);
+
+    const { params } = qb.build('binary_test');
+    const buf = (params as any[])[0];
+    expect(Buffer.isBuffer(buf)).toBe(true);
+    expect((buf as Buffer).length).toBe(16);
+  });
+});

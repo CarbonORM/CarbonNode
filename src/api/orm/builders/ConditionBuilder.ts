@@ -104,7 +104,8 @@ export abstract class ConditionBuilder<
         if (typeof column === 'string' && column.includes('.')) {
             const [tableName, colName] = column.split('.', 2);
             const table = this.config.C6?.TABLES?.[tableName];
-            columnDef = table?.TYPE_VALIDATION?.[colName];
+            // Support both short-keyed and fully-qualified TYPE_VALIDATION entries
+            columnDef = table?.TYPE_VALIDATION?.[colName] ?? table?.TYPE_VALIDATION?.[`${tableName}.${colName}`];
         }
         const val = convertHexIfBinary(column, value, columnDef);
 

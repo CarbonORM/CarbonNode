@@ -99,3 +99,33 @@ export function buildBinaryTestConfig() {
 
   return baseConfig;
 }
+
+export function buildBinaryTestConfigFqn() {
+  const binaryCols = {
+    'binary_test.id': 'id',
+    'binary_test.bin_col': 'bin_col',
+  } as const;
+
+  const C6 = {
+    C6VERSION: 'test',
+    TABLES: {
+      binary_test: tableModel<'binary_test' & any>('binary_test', binaryCols as any),
+    },
+    PREFIX: '',
+    ORM: {} as any,
+  } as any;
+
+  // Re-key TYPE_VALIDATION to fully-qualified key and set BINARY(16)
+  const tv = C6.TABLES.binary_test.TYPE_VALIDATION as any;
+  tv['binary_test.bin_col'] = { ...(tv['bin_col'] || {}), MYSQL_TYPE: 'BINARY(16)' };
+  delete tv['bin_col'];
+
+  const baseConfig: iRest<any, any, any> = {
+    C6,
+    restModel: C6.TABLES.binary_test,
+    requestMethod: 'POST',
+    verbose: false,
+  } as any;
+
+  return baseConfig;
+}
