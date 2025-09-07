@@ -1,7 +1,7 @@
 import mysql from "mysql2/promise";
 import axios from "axios";
 import { AddressInfo } from "net";
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import { Actor, C6, GLOBAL_REST_PARAMETERS } from "./sakila-db/C6.js";
 import { C6C } from "../api/C6Constants";
 import createTestServer from "./fixtures/createTestServer";
@@ -64,10 +64,21 @@ describe("HttpExecutor singular e2e", () => {
     expect(data.rest[0].first_name).toBe("Updated");
 
     // PUT using fully qualified keys
+    const updateStub = vi.fn();
+    GLOBAL_REST_PARAMETERS.reactBootstrap = {
+      updateRestfulObjectArrays: updateStub,
+      deleteRestfulObjectArrays: vi.fn(),
+    } as any;
     await Actor.Put({
       [Actor.ACTOR_ID]: testId,
       [Actor.FIRST_NAME]: "UpdatedFQ",
     } as any);
+    expect(updateStub).toHaveBeenCalled();
+    const args = updateStub.mock.calls[0][0];
+    expect(args.dataOrCallback[0]).toHaveProperty("first_name", "UpdatedFQ");
+    expect(args.dataOrCallback[0]).toHaveProperty("actor_id", testId);
+    expect(args.dataOrCallback[0]).not.toHaveProperty(Actor.FIRST_NAME);
+    GLOBAL_REST_PARAMETERS.reactBootstrap = undefined as any;
     data = await Actor.Get({ actor_id: testId, cacheResults: false } as any);
     expect(data.rest).toHaveLength(1);
     expect(data.rest[0].first_name).toBe("UpdatedFQ");
