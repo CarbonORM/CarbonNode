@@ -31,7 +31,11 @@ export class UpdateQueryBuilder<G extends OrmGenerics> extends PaginationBuilder
         }
 
         const setClauses = Object.entries(this.request[C6C.UPDATE])
-            .map(([col, val]) => `\`${this.trimTablePrefix(table, col)}\` = ${this.addParam(params, col, val)}`);
+            .map(([col, val]) => {
+                const trimmed = this.trimTablePrefix(table, col);
+                const qualified = `${table}.${trimmed}`;
+                return `\`${trimmed}\` = ${this.addParam(params, qualified, val)}`;
+            });
 
         sql += ` SET ${setClauses.join(', ')}`;
 

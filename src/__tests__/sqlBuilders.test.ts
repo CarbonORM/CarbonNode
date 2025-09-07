@@ -164,5 +164,19 @@ describe('SQL Builders', () => {
     expect(Buffer.isBuffer(buf)).toBe(true);
     expect((buf as Buffer).length).toBe(16);
   });
+  it('converts hex to Buffer for BINARY columns in UPDATE params with unqualified column', () => {
+    const config = buildBinaryTestConfig();
+    const qb = new UpdateQueryBuilder(config as any, {
+      [C6C.UPDATE]: {
+        'bin_col': '0123456789abcdef0123456789abcdef'
+      },
+      WHERE: { 'binary_test.id': [C6C.EQUAL, 1] }
+    } as any, false);
+
+    const { params } = qb.build('binary_test');
+    const buf = (params as any[])[0];
+    expect(Buffer.isBuffer(buf)).toBe(true);
+    expect((buf as Buffer).length).toBe(16);
+  });
 });
 

@@ -9,6 +9,7 @@ lerna-debug.log*
 src/api/rest/
 # custom generatred
 C6MySqlDump.json
+MySqlDump.sql
 mysql.cnf
 C6.tsx
 src/*.js
