@@ -1,8 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import mysql from 'mysql2/promise';
-import { PostQueryBuilder } from '../api/orm/queries/PostQueryBuilder';
-import { UpdateQueryBuilder } from '../api/orm/queries/UpdateQueryBuilder';
 import { C6C } from '../api/C6Constants';
+import { restOrm } from '../api/restOrm';
 import { buildBinaryTestConfig } from './fixtures/c6.fixture';
 
 let pool: mysql.Pool;
@@ -32,50 +31,32 @@ describe('BINARY column hex string persistence', () => {
 
   it('inserts and updates hex strings as Buffer in BINARY(16) columns', async () => {
     const config = buildBinaryTestConfig();
+    const binaryRest = restOrm(() => ({ ...config, mysqlPool: pool } as any));
 
-    // ---------- INSERT ----------
-    const insertBuilder = new PostQueryBuilder(
-        config as any,
-        {
-          [C6C.INSERT]: {
-            'binary_test.bin_col': '0123456789abcdef0123456789abcdef',
-          },
-        } as any,
-        false
-    );
-
-    // NOTE: allow union type so reassignment from different builders is safe
-    let sql: string;
-    let params: any[] | Record<string, any>;
-
-    ({ sql, params } = insertBuilder.build('binary_test'));
-    const [insertResult]: any = await pool.query(sql, params);
-    const id = insertResult.insertId as number;
+    // ---------- INSERT via C6 ----------
+    await binaryRest.Post({
+      [C6C.INSERT]: {
+        'binary_test.bin_col': '0123456789abcdef0123456789abcdef',
+      },
+    } as any);
 
     let [rows]: any = await pool.query(
-        'SELECT HEX(bin_col) AS bin FROM binary_test WHERE id = ?',
-        [id]
+      'SELECT HEX(bin_col) AS bin, id FROM binary_test',
     );
+    const id = rows[0].id as number;
     expect(rows[0].bin).toBe('0123456789ABCDEF0123456789ABCDEF');
 
-    // ---------- UPDATE ----------
-    const updateBuilder = new UpdateQueryBuilder(
-        config as any,
-        {
-          [C6C.UPDATE]: {
-            'binary_test.bin_col': 'ffffffffffffffffffffffffffffffff',
-          },
-          WHERE: { 'binary_test.id': [C6C.EQUAL, id] },
-        } as any,
-        false
-    );
-
-    ({ sql, params } = updateBuilder.build('binary_test'));
-    await pool.query(sql, params);
+    // ---------- UPDATE via C6 ----------
+    await binaryRest.Put({
+      [C6C.UPDATE]: {
+        'binary_test.bin_col': 'ffffffffffffffffffffffffffffffff',
+      },
+      WHERE: { 'binary_test.id': [C6C.EQUAL, id] },
+    } as any);
 
     [rows] = await pool.query(
-        'SELECT HEX(bin_col) AS bin FROM binary_test WHERE id = ?',
-        [id]
+      'SELECT HEX(bin_col) AS bin FROM binary_test WHERE id = ?',
+      [id],
     );
     expect(rows[0].bin).toBe('FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF');
   });
