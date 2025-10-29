@@ -25,13 +25,21 @@ export class HttpExecutor<
 >
     extends Executor<G> {
 
-    private stripTableNameFromKeys(obj: Record<string, any>) {
-        const columns = (this.config.restModel as any).COLUMNS || {};
-        return Object.keys(obj || {}).reduce((acc: Record<string, any>, key) => {
-            const shortKey = columns[key] || key.split('.').pop();
-            acc[shortKey] = obj[key];
-            return acc;
-        }, {} as Record<string, any>);
+    private isRestResponse<T extends Record<string, any>>(
+        r: AxiosResponse<any>
+    ): r is AxiosResponse<iGetC6RestResponse<T>> {
+        return !!r && r.data != null && typeof r.data === 'object' && 'rest' in r.data;
+    }
+
+    private stripTableNameFromKeys<T extends Record<string, any>>(obj: Partial<T> | undefined | null): Partial<T> {
+        const columns = this.config.restModel.COLUMNS as Record<string, string>;
+        const source: Record<string, any> = (obj ?? {}) as Record<string, any>;
+        const out: Partial<T> = {} as Partial<T>;
+        for (const [key, value] of Object.entries(source)) {
+            const short = columns[key] ?? (key.includes('.') ? key.split('.').pop()! : key);
+            (out as any)[short] = value;
+        }
+        return out;
     }
 
     public putState(
@@ -68,39 +76,36 @@ export class HttpExecutor<
         >,
         callback: () => void
     ) {
+        type RT = G['RestTableInterface'];
+        type PK = G['PrimaryKey'];
 
-        if (1 !== this.config.restModel.PRIMARY_SHORT.length) {
-
-            console.error("C6 received unexpected result's given the primary key length");
-
-        } else {
-
-            const pk = this.config.restModel.PRIMARY_SHORT[0];
-
-            // TODO - should overrides be handled differently? Why override: (react/php), driver missmatches, aux data..
-            // @ts-ignore - this is technically a correct error, but we allow it anyway...
-            request[pk] = response.data?.created as RestTableInterface[PrimaryKey]
-
+        if (this.config.restModel.PRIMARY_SHORT.length === 1) {
+            const pk = this.config.restModel.PRIMARY_SHORT[0] as PK;
+            try {
+                (request as unknown as Record<PK, RT[PK]>)[pk] = (response.data as any)?.created as RT[PK];
+            } catch {/* best-effort */}
+        } else if (isLocal()) {
+            console.error("C6 received unexpected results given the primary key length");
         }
 
-        this.config.reactBootstrap?.updateRestfulObjectArrays<G['RestTableInterface']>({
+        this.config.reactBootstrap?.updateRestfulObjectArrays<RT>({
             callback,
             dataOrCallback: undefined !== request.dataInsertMultipleRows
                 ? request.dataInsertMultipleRows.map((row, index) => {
-                    const normalizedRow = this.stripTableNameFromKeys(row);
-                    return removeInvalidKeys<G['RestTableInterface']>({
+                    const normalizedRow = this.stripTableNameFromKeys<RT>(row as Partial<RT>);
+                    return removeInvalidKeys<RT>({
                         ...normalizedRow,
-                        ...(index === 0 ? response?.data?.rest : {}),
+                        ...(index === 0 ? (response?.data as any)?.rest : {}),
                     }, this.config.C6.TABLES)
                 })
                 : [
-                    removeInvalidKeys<G['RestTableInterface']>({
-                        ...this.stripTableNameFromKeys(request as Record<string, any>),
-                        ...response?.data?.rest,
+                    removeInvalidKeys<RT>({
+                        ...this.stripTableNameFromKeys<RT>(request as unknown as Partial<RT>),
+                        ...(response?.data as any)?.rest,
                     }, this.config.C6.TABLES)
                 ],
             stateKey: this.config.restModel.TABLE_NAME,
-            uniqueObjectId: this.config.restModel.PRIMARY_SHORT as (keyof G['RestTableInterface'])[]
+            uniqueObjectId: this.config.restModel.PRIMARY_SHORT as (keyof RT)[]
         })
     }
 
@@ -167,51 +172,31 @@ export class HttpExecutor<
                 throw Error('Bad request method passed to getApi')
         }
 
-        if (null !== clearCache || undefined !== clearCache) {
-
-            userCustomClearCache[tables + requestMethod] = clearCache;
-
+        if (clearCache != null) {
+            userCustomClearCache.push(clearCache);
         }
 
-        console.groupCollapsed('%c API: (' + requestMethod + ') Request for (' + tableName + ')', 'color: #0c0')
-
-        console.log('request', this.request)
-
-        console.groupEnd()
+        if (isLocal() && (this.config.verbose || (this.request as any)?.debug)) {
+            console.groupCollapsed('%c API:', 'color: #0c0', `(${requestMethod}) Request for (${tableName})`)
+            console.log('request', this.request)
+            console.groupEnd()
+        }
 
         // an undefined query would indicate queryCallback returned undefined,
         // thus the request shouldn't fire as is in custom cache
         if (undefined === this.request || null === this.request) {
 
-            console.groupCollapsed('%c API: (' + requestMethod + ') Request Query for (' + tableName + ') undefined, returning null (will not fire)!', 'color: #c00')
-
-            console.log('request', this.request)
-
-            console.log('%c Returning (undefined|null) for a query would indicate a custom cache hit (outside API.tsx), thus the request should not fire.', 'color: #c00')
-
-            console.trace();
-
-            console.groupEnd()
+            if (isLocal()) {
+                console.groupCollapsed(`API: (${requestMethod}) (${tableName}) query undefined/null → returning null`)
+                console.log('request', this.request)
+                console.groupEnd()
+            }
 
             return null;
 
         }
 
         let query = this.request;
-
-        if (C6.GET === requestMethod) {
-
-            if (undefined === query[C6.PAGINATION]) {
-
-                query[C6.PAGINATION] = {}
-
-            }
-
-            query[C6.PAGINATION][C6.PAGE] = query[C6.PAGINATION][C6.PAGE] || 1;
-
-            query[C6.PAGINATION][C6.LIMIT] = query[C6.PAGINATION][C6.LIMIT] || 100;
-
-        }
 
         // this is parameterless and could return itself with a new page number, or undefined if the end is reached
         const apiRequest = async (): Promise<DetermineResponseDataType<G['RequestMethod'], G['RestTableInterface']>> => {
@@ -227,16 +212,11 @@ export class HttpExecutor<
 
             if (C6.GET === requestMethod
                 && undefined !== query?.[C6.PAGINATION]?.[C6.PAGE]
-                && 1 !== query[C6.PAGINATION][C6.PAGE]) {
-
-                console.groupCollapsed('Request on table (' + tableName + ') is firing for page (' + query[C6.PAGINATION][C6.PAGE] + '), please wait!')
-
-                console.log('Request Data (note you may see the success and/or error prompt):', this.request)
-
-                console.trace();
-
+                && 1 !== query[C6.PAGINATION][C6.PAGE]
+                && isLocal()) {
+                console.groupCollapsed(`Request (${tableName}) page (${query[C6.PAGINATION][C6.PAGE]})`)
+                console.log('request', this.request)
                 console.groupEnd()
-
             }
 
             // The problem with creating cache keys with a stringified object is the order of keys matters and it's possible for the same query to be stringified differently.
@@ -275,57 +255,27 @@ export class HttpExecutor<
 
                 // this will evaluate true most the time
                 if (true === cacheResults) {
-
-                    // just find the next, non-fetched, page and return a function to request it
-                    if (undefined !== cacheResult) { // we will return in this loop
-
+                    if (undefined !== cacheResult) {
                         do {
-
                             const cacheCheck = checkCache<ResponseDataType>(cacheResult, requestMethod, tableName, this.request);
-
                             if (false !== cacheCheck) {
-
                                 return (await cacheCheck).data;
-
                             }
-
-                            // this line incrementing page is why we return recursively
                             ++query[C6.PAGINATION][C6.PAGE];
-
-                            // this json stringify is to capture the new page number
                             querySerialized = sortAndSerializeQueryObject(tables, query ?? {});
-
                             cacheResult = apiRequestCache.find(cache => cache.requestArgumentsSerialized === querySerialized)
-
                         } while (undefined !== cacheResult)
-
                         if (debug && isLocal()) {
-
-                            toast.warning("DEVS: Request in cache. (" + apiRequestCache.findIndex(cache => cache.requestArgumentsSerialized === querySerialized) + "). Returning function to request page (" + query[C6.PAGINATION][C6.PAGE] + ")", toastOptionsDevs);
-
+                            toast.warning("DEVS: Request pages exhausted in cache; firing network.", toastOptionsDevs);
                         }
-
-                        // @ts-ignore - this is an incorrect warning on TS, it's well typed
-                        return apiRequest;
-
                     }
-
                     cachingConfirmed = true;
-
                 } else {
-
-                    if (debug && isLocal()) {
-
-                        toast.info("DEVS: Ignore cache was set to true.", toastOptionsDevs);
-
-                    }
-
+                    if (debug && isLocal()) toast.info("DEVS: Ignore cache was set to true.", toastOptionsDevs);
                 }
 
                 if (debug && isLocal()) {
-
-                    toast.success("DEVS: Request not in cache." + (requestMethod === C6.GET ? "Page (" + query[C6.PAGINATION][C6.PAGE] + ")." : '') + " Logging cache 2 console.", toastOptionsDevs);
-
+                    toast.success("DEVS: Request not in cache." + (requestMethod === C6.GET ? " Page (" + query[C6.PAGINATION][C6.PAGE] + ")" : ''), toastOptionsDevs);
                 }
 
             } else if (cacheResults) { // if we are not getting, we are updating, deleting, or inserting
@@ -366,13 +316,13 @@ export class HttpExecutor<
 
                 if (undefined === primaryKey) {
 
-                    if (null === query
-                        || undefined === query
-                        || undefined === query?.[C6.WHERE]
-                        || (true === Array.isArray(query[C6.WHERE])
-                            || query[C6.WHERE].length === 0)
-                        || (Object.keys(query?.[C6.WHERE]).length === 0)
-                    ) {
+                    const whereVal = query?.[C6.WHERE];
+                    const whereIsEmpty =
+                        whereVal == null ||
+                        (Array.isArray(whereVal) && whereVal.length === 0) ||
+                        (typeof whereVal === 'object' && !Array.isArray(whereVal) && Object.keys(whereVal).length === 0);
+
+                    if (whereIsEmpty) {
 
                         console.error(query)
 
@@ -423,33 +373,33 @@ export class HttpExecutor<
 
                     restRequestUri += primaryVal + '/'
 
-                    console.log('query', query, 'primaryKey', primaryKey)
+                    if (isLocal() && (this.config.verbose || (this.request as any)?.debug)) {
+                        console.log('query', query, 'primaryKey', primaryKey)
+                    }
 
                 } else {
 
-                    console.log('query', query)
+                    if (isLocal() && (this.config.verbose || (this.request as any)?.debug)) {
+                        console.log('query', query)
+                    }
 
                 }
 
             } else {
 
-                console.log('query', query)
+                if (isLocal() && (this.config.verbose || (this.request as any)?.debug)) {
+                    console.log('query', query)
+                }
 
             }
 
             try {
 
-                console.groupCollapsed('%c API: (' + requestMethod + ') Request Query for (' + operatingTable + ') is about to fire, will return with promise!', 'color: #A020F0')
-
-                console.log(this.request)
-
-                console.log('%c If this is the first request for this datatype; thus the value being set is currently undefined, please remember to update the state to null.', 'color: #A020F0')
-
-                console.log('%c Remember undefined indicated the request has not fired, null indicates the request is firing, an empty array would signal no data was returned for the sql stmt.', 'color: #A020F0')
-
-                console.trace()
-
-                console.groupEnd()
+                if (isLocal() && (this.config.verbose || (this.request as any)?.debug)) {
+                    console.groupCollapsed('%c API:', 'color: #A020F0', `(${requestMethod}) (${operatingTable}) firing`)
+                    console.log(this.request)
+                    console.groupEnd()
+                }
 
                 this.runLifecycleHooks<"beforeExecution">(
                     "beforeExecution", {
@@ -557,19 +507,14 @@ export class HttpExecutor<
                                 response
                             })
 
-                        // todo - this feels dumb now, but i digress
                         apiResponse = TestRestfulResponse(response, success, error)
 
                         if (false === apiResponse) {
-
                             if (debug && isLocal()) {
-
-                                toast.warning("DEVS: TestRestfulResponse returned false for (" + operatingTable + ").", toastOptionsDevs);
-
+                                toast.warning("DEVS: TestRestfulResponse returned false.", toastOptionsDevs);
                             }
-
-                            return response;
-
+                            // Force a null payload so the final .then(response => response.data) yields null
+                            return Promise.resolve({ ...response, data: null as unknown as ResponseDataType });
                         }
 
                         const callback = () => this.runLifecycleHooks<"afterCommit">(
@@ -604,44 +549,37 @@ export class HttpExecutor<
                             callback();
                         }
 
-                        if (C6.GET === requestMethod) {
+                        if (C6.GET === requestMethod && this.isRestResponse<any>(response)) {
 
-                            const responseData = response.data as iGetC6RestResponse<any>;
+                            const responseData = response.data;
 
-                            returnGetNextPageFunction = 1 !== query?.[C6.PAGINATION]?.[C6.LIMIT] &&
-                                query?.[C6.PAGINATION]?.[C6.LIMIT] === responseData.rest.length
+                            const pageLimit = query?.[C6.PAGINATION]?.[C6.LIMIT];
+                            const got = responseData.rest.length;
+                            const hasNext = pageLimit !== 1 && got === pageLimit;
 
-                            if (false === isTest() || this.config.verbose) {
-
-                                console.groupCollapsed('%c API: Response (' + requestMethod + ' ' + tableName + ') returned length (' + responseData.rest?.length + ') of possible (' + query?.[C6.PAGINATION]?.[C6.LIMIT] + ') limit!', 'color: #0c0')
-
-                                console.log('%c ' + requestMethod + ' ' + tableName, 'color: #0c0')
-
-                                console.log('%c Request Data (note you may see the success and/or error prompt):', 'color: #0c0', this.request)
-
-                                console.log('%c Response Data:', 'color: #0c0', responseData.rest)
-
-                                console.log('%c Will return get next page function:' + (returnGetNextPageFunction ? '' : ' (Will not return with explicit limit 1 set)'), 'color: #0c0', true === returnGetNextPageFunction)
-
-                                console.trace();
-
-                                console.groupEnd()
-
-                            }
-
-                            if (false === returnGetNextPageFunction) {
-
-                                responseData.next = apiRequest
-
+                            if (hasNext) {
+                                responseData.next = apiRequest;   // there might be more
                             } else {
-
-                                responseData.next = undefined;
-
-                                if (true === debug
-                                    && isLocal()) {
-                                    toast.success("DEVS: Response returned length (" + responseData.rest?.length + ") less than limit (" + query?.[C6.PAGINATION]?.[C6.LIMIT] + ").", toastOptionsDevs);
-                                }
+                                responseData.next = undefined;    // short page => done
                             }
+
+                            // If you keep this flag, make it reflect reality:
+                            returnGetNextPageFunction = hasNext;
+
+                            // and fix cache ‘final’ flag to match:
+                            if (cachingConfirmed) {
+                                const cacheIndex = apiRequestCache.findIndex(c => c.requestArgumentsSerialized === querySerialized);
+                                apiRequestCache[cacheIndex].final = !hasNext;
+                            }
+
+                            if ((this.config.verbose || debug) && isLocal()) {
+                                console.groupCollapsed(`API: Response (${requestMethod} ${tableName}) len (${responseData.rest?.length}) of (${query?.[C6.PAGINATION]?.[C6.LIMIT]})`)
+                                console.log('request', this.request)
+                                console.log('response.rest', responseData.rest)
+                                console.groupEnd()
+                            }
+
+                            // next already set above based on hasNext; avoid duplicate, inverted logic
 
 
                             if (fetchDependencies
