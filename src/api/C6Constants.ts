@@ -167,6 +167,7 @@ export const C6Constants = {
 
     // carbon identifiers
     DEPENDANT_ON_ENTITY: 'DEPENDANT_ON_ENTITY',
+    HEADERS: 'HEADERS',
 
     // PHP validation
     OPTIONS: 'OPTIONS',
