@@ -131,4 +131,30 @@ describe('SQL Builders - Complex SELECTs', () => {
     expect(sql).toMatch(/MATCH\(actor\.first_name\) AGAINST\(\? IN BOOLEAN MODE\)/);
     expect(params).toEqual(['alpha beta']);
   });
+
+  it('supports IS NOT NULL via object mapping syntax', () => {
+    const config = buildTestConfig();
+
+    const qb = new SelectQueryBuilder(config as any, {
+      SELECT: ['actor.actor_id'],
+      WHERE: { 'actor.last_name': [C6C.IS_NOT, C6C.NULL] }
+    } as any, false);
+
+    const { sql, params } = qb.build('actor');
+    expect(sql).toMatch(/\(actor\.last_name\) IS NOT \?/);
+    expect(params).toEqual([null]);
+  });
+
+  it('supports IS NOT NULL via numeric-key triple array syntax', () => {
+    const config = buildTestConfig();
+
+    const qb = new SelectQueryBuilder(config as any, {
+      SELECT: ['actor.actor_id'],
+      WHERE: { 0: ['actor.last_name', C6C.IS_NOT, C6C.NULL] }
+    } as any, false);
+
+    const { sql, params } = qb.build('actor');
+    expect(sql).toMatch(/\(actor\.last_name\) IS NOT \?/);
+    expect(params).toEqual([null]);
+  });
 });

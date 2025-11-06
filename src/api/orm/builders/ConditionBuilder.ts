@@ -127,6 +127,9 @@ export abstract class ConditionBuilder<
         const booleanOperator = andMode ? 'AND' : 'OR';
 
         const addCondition = (column: any, op: any, value: any): string => {
+            // Normalize common variants
+            const valueNorm = (value === C6C.NULL) ? null : value;
+            const displayOp = typeof op === 'string' ? op.replace('_', ' ') : op;
             // Support function-based expressions like [C6C.ST_DISTANCE_SPHERE, col1, col2]
             if (
                 typeof column === 'string' &&
@@ -219,15 +222,15 @@ export abstract class ConditionBuilder<
             const rightIsRef: boolean = this.isTableReference(value);
 
             if (leftIsRef && rightIsRef) {
-                return `(${column}) ${op} ${value}`;
+                return `(${column}) ${displayOp} ${value}`;
             }
 
             if (leftIsRef && !rightIsRef) {
-                return `(${column}) ${op} ${this.addParam(params, column, value)}`;
+                return `(${column}) ${displayOp} ${this.addParam(params, column, valueNorm)}`;
             }
 
             if (rightIsRef) {
-                return `(${this.addParam(params, column, column)}) ${op} ${value}`;
+                return `(${this.addParam(params, column, column)}) ${displayOp} ${value}`;
             }
 
             throw new Error(`Neither operand appears to be a table reference (${column}) or (${value})`);
@@ -271,9 +274,18 @@ export abstract class ConditionBuilder<
         };
 
         if (Array.isArray(set)) {
-            for (const item of set) {
-                const sub = this.buildBooleanJoinedConditions(item, false, params);
+            // Detect a single condition triple: [column, op, value]
+            if (set.length === 3 && typeof set[0] === 'string' && typeof set[1] === 'string') {
+                const [column, rawOp, rawVal] = set as [string, string, any];
+                const op = rawOp;
+                const value = rawVal === C6C.NULL ? null : rawVal;
+                const sub = addCondition(column, op, value);
                 if (sub) parts.push(sub);
+            } else {
+                for (const item of set) {
+                    const sub = this.buildBooleanJoinedConditions(item, false, params);
+                    if (sub) parts.push(sub);
+                }
             }
         } else if (typeof set === 'object' && set !== null) {
             const sub = buildFromObject(set, andMode);
