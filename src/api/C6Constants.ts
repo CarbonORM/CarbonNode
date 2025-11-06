@@ -62,6 +62,7 @@ export const C6Constants = {
     INTERVAL: 'INTERVAL',
 
     JOIN: 'JOIN',
+    FROM: 'FROM',
 
     LEFT: 'LEFT',
     LEFT_OUTER: 'LEFT_OUTER',
@@ -99,6 +100,7 @@ export const C6Constants = {
     SECOND: 'SECOND',
     SECOND_MICROSECOND: 'SECOND_MICROSECOND',
     SELECT: 'SELECT',
+    SUBSELECT: 'SUBSELECT',
 
     // MySQL Spatial Functions
     ST_AREA: 'ST_Area',

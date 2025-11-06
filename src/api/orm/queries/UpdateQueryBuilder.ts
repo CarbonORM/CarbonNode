@@ -2,8 +2,13 @@ import {C6C} from "../../C6Constants";
 import {OrmGenerics} from "../../types/ormGenerics";
 import { PaginationBuilder } from '../builders/PaginationBuilder';
 import {SqlBuilderResult} from "../utils/sqlUtils";
+import {SelectQueryBuilder} from "./SelectQueryBuilder";
 
 export class UpdateQueryBuilder<G extends OrmGenerics> extends PaginationBuilder<G>{
+    protected createSelectBuilder(request: any) {
+        return new SelectQueryBuilder(this.config as any, request, this.useNamedParams);
+    }
+
     private trimTablePrefix(table: string, column: string): string {
         if (!column.includes('.')) return column;
         const [prefix, col] = column.split('.', 2);
@@ -44,7 +49,7 @@ export class UpdateQueryBuilder<G extends OrmGenerics> extends PaginationBuilder
         }
 
         if (args.PAGINATION) {
-            sql += this.buildPaginationClause(args.PAGINATION);
+            sql += this.buildPaginationClause(args.PAGINATION, params);
         }
 
         return { sql, params };

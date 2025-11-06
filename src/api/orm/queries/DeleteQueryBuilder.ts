@@ -1,8 +1,13 @@
 import { OrmGenerics } from "../../types/ormGenerics";
 import { SqlBuilderResult } from "../utils/sqlUtils";
 import { JoinBuilder } from "../builders/JoinBuilder";
+import { SelectQueryBuilder } from "./SelectQueryBuilder";
 
 export class DeleteQueryBuilder<G extends OrmGenerics> extends JoinBuilder<G> {
+    protected createSelectBuilder(request: any) {
+        return new SelectQueryBuilder(this.config as any, request, this.useNamedParams);
+    }
+
     build(
         table: string
     ): SqlBuilderResult {
