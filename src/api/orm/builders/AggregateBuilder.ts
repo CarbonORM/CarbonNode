@@ -22,10 +22,10 @@ export abstract class AggregateBuilder<G extends OrmGenerics> extends Executor<G
         }
 
         // If the array represents a tuple/literal list (e.g., [lng, lat]) rather than a
-        // function call like [FN, ...args], the first element won't be a string. In that
-        // case, serialize the list as a comma-separated literal sequence so parent calls
-        // (like ORDER BY FN(<here>)) can embed it correctly.
-        if (typeof field[0] !== 'string') {
+        // function call like [FN, ...args], serialize the list as a comma-separated
+        // literal sequence so parent calls (like ORDER BY FN(<here>)) can embed it.
+        const isNumericString = (s: string) => /^-?\d+(?:\.\d+)?$/.test(String(s).trim());
+        if (typeof field[0] !== 'string' || isNumericString(field[0])) {
             return field
                 .map((arg) => {
                     if (Array.isArray(arg)) return this.buildAggregateField(arg, params);
@@ -77,7 +77,6 @@ export abstract class AggregateBuilder<G extends OrmGenerics> extends Executor<G
         }
 
         const identifierPathRegex = /^[A-Za-z_][A-Za-z0-9_]*\.[A-Za-z_][A-Za-z0-9_]*$/;
-        const isNumericString = (s: string) => /^-?\d+(?:\.\d+)?$/.test(s.trim());
 
         const argList = args
             .map(arg => {
