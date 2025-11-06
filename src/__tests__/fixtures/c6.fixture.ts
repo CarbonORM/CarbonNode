@@ -129,3 +129,42 @@ export function buildBinaryTestConfigFqn() {
 
   return baseConfig;
 }
+
+export function buildParcelConfig() {
+  const propertyUnitsCols = {
+    'property_units.unit_id': 'unit_id',
+    'property_units.location': 'location',
+    'property_units.parcel_id': 'parcel_id',
+  } as const;
+
+  const parcelSalesCols = {
+    'parcel_sales.parcel_id': 'parcel_id',
+    'parcel_sales.sale_price': 'sale_price',
+    'parcel_sales.sale_type': 'sale_type',
+    'parcel_sales.sale_date': 'sale_date',
+  } as const;
+
+  const parcelBuildingCols = {
+    'parcel_building_details.parcel_id': 'parcel_id',
+  } as const;
+
+  const C6 = {
+    C6VERSION: 'test',
+    TABLES: {
+      property_units: tableModel<'property_units' & any>('property_units', propertyUnitsCols as any),
+      parcel_sales: tableModel<'parcel_sales' & any>('parcel_sales', parcelSalesCols as any),
+      parcel_building_details: tableModel<'parcel_building_details' & any>('parcel_building_details', parcelBuildingCols as any),
+    },
+    PREFIX: '',
+    ORM: {} as any,
+  } as any;
+
+  const baseConfig: iRest<any, any, any> = {
+    C6,
+    restModel: C6.TABLES.property_units,
+    requestMethod: 'GET',
+    verbose: false,
+  } as any;
+
+  return baseConfig;
+}

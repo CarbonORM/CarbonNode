@@ -3,23 +3,44 @@ import {OrmGenerics} from "../../types/ormGenerics";
 import {DetermineResponseDataType} from "../../types/ormInterfaces";
 import {convertHexIfBinary, SqlBuilderResult} from "../utils/sqlUtils";
 import {AggregateBuilder} from "./AggregateBuilder";
+import {isDerivedTableKey} from "../queryHelpers";
 
 export abstract class ConditionBuilder<
     G extends OrmGenerics
 > extends AggregateBuilder<G> {
 
     protected aliasMap: Record<string, string> = {};
+    protected derivedAliases: Set<string> = new Set<string>();
 
     protected initAlias(baseTable: string, joins?: any): void {
         this.aliasMap = { [baseTable]: baseTable };
+        this.derivedAliases = new Set<string>();
 
         if (!joins) return;
 
         for (const joinType in joins) {
             for (const raw in joins[joinType]) {
-                const [table, alias] = raw.split(' ');
-                this.aliasMap[alias || table] = table;
+                const [table, alias] = raw.trim().split(/\s+/, 2);
+                if (!table) continue;
+                this.registerAlias(alias || table, table);
             }
+        }
+    }
+
+    protected registerAlias(alias: string, table: string): void {
+        this.aliasMap[alias] = table;
+        if (isDerivedTableKey(table)) {
+            this.derivedAliases.add(alias);
+        }
+    }
+
+    protected assertValidIdentifier(identifier: string, context: string): void {
+        if (typeof identifier !== 'string') return;
+        if (!identifier.includes('.')) return;
+
+        const [alias] = identifier.split('.', 2);
+        if (!(alias in this.aliasMap)) {
+            throw new Error(`Unknown table or alias '${alias}' referenced in ${context}: '${identifier}'.`);
         }
     }
 
@@ -28,6 +49,11 @@ export abstract class ConditionBuilder<
 
         const [prefix, column] = ref.split('.', 2);
         const tableName = this.aliasMap[prefix] || prefix;
+
+        if (isDerivedTableKey(tableName) || this.derivedAliases.has(prefix)) {
+            return true;
+        }
+
         const table = this.config.C6?.TABLES?.[tableName];
         if (!table) return false;
 
@@ -77,6 +103,9 @@ export abstract class ConditionBuilder<
         }
         const [prefix, column] = val.split('.');
         const tableName = this.aliasMap[prefix] ?? prefix;
+        if (isDerivedTableKey(tableName) || this.derivedAliases.has(prefix)) {
+            return true;
+        }
         const table = this.config.C6?.TABLES?.[tableName];
         if (!table || !table.COLUMNS) return false;
 
@@ -130,6 +159,28 @@ export abstract class ConditionBuilder<
             // Normalize common variants
             const valueNorm = (value === C6C.NULL) ? null : value;
             const displayOp = typeof op === 'string' ? op.replace('_', ' ') : op;
+
+            const extractSubSelect = (input: any): any | undefined => {
+                if (Array.isArray(input) && input.length >= 2 && input[0] === C6C.SUBSELECT) {
+                    return input[1];
+                }
+                if (input && typeof input === 'object' && C6C.SUBSELECT in input) {
+                    return input[C6C.SUBSELECT];
+                }
+                return undefined;
+            };
+
+            const rightSubSelectPayload = extractSubSelect(valueNorm);
+            const buildSubSelect = (payload: any): string | undefined => {
+                if (!payload) return undefined;
+                const builder = (this as any).buildScalarSubSelect;
+                if (typeof builder !== 'function') {
+                    throw new Error('Scalar subselect handling requires JoinBuilder context.');
+                }
+                return builder.call(this, payload, params);
+            };
+            const rightSubSelectSql = buildSubSelect(rightSubSelectPayload);
+
             // Support function-based expressions like [C6C.ST_DISTANCE_SPHERE, col1, col2]
             if (
                 typeof column === 'string' &&
@@ -160,7 +211,7 @@ export abstract class ConditionBuilder<
             const leftIsRef = this.isTableReference(column);
             const rightIsCol = typeof value === 'string' && this.isColumnRef(value);
 
-            if (!leftIsCol && !leftIsRef && !rightIsCol) {
+            if (!leftIsCol && !leftIsRef && !rightIsCol && !rightSubSelectSql) {
                 throw new Error(`Potential SQL injection detected: '${column} ${op} ${value}'`);
             }
 
@@ -198,6 +249,13 @@ export abstract class ConditionBuilder<
             }
 
             if ((op === C6C.IN || op === C6C.NOT_IN) && Array.isArray(value)) {
+                if (rightSubSelectSql) {
+                    if (!leftIsRef) {
+                        throw new Error(`IN operator requires a table reference as the left operand. Column '${column}' is not a valid table reference.`);
+                    }
+                    const normalized = op.replace('_', ' ');
+                    return `( ${column} ${normalized} ${rightSubSelectSql} )`;
+                }
                 const placeholders = value.map(v =>
                     this.isColumnRef(v) ? v : this.addParam(params, column, v)
                 ).join(', ');
@@ -219,10 +277,14 @@ export abstract class ConditionBuilder<
                 return `(${column}) ${op.replace('_', ' ')} ${this.addParam(params, column, start)} AND ${this.addParam(params, column, end)}`;
             }
 
-            const rightIsRef: boolean = this.isTableReference(value);
+            const rightIsRef: boolean = rightSubSelectSql ? false : this.isTableReference(value);
 
             if (leftIsRef && rightIsRef) {
                 return `(${column}) ${displayOp} ${value}`;
+            }
+
+            if (leftIsRef && rightSubSelectSql) {
+                return `(${column}) ${displayOp} ${rightSubSelectSql}`;
             }
 
             if (leftIsRef && !rightIsRef) {

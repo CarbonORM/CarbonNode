@@ -1,7 +1,28 @@
 import { describe, it, expect } from 'vitest';
 import { C6C } from '../api/C6Constants';
 import { SelectQueryBuilder } from '../api/orm/queries/SelectQueryBuilder';
-import { buildTestConfig } from './fixtures/c6.fixture';
+import { derivedTable, F } from '../api/orm/queryHelpers';
+import { buildParcelConfig, buildTestConfig } from './fixtures/c6.fixture';
+
+const Property_Units = {
+  TABLE_NAME: 'property_units',
+  UNIT_ID: 'property_units.unit_id',
+  LOCATION: 'property_units.location',
+  PARCEL_ID: 'property_units.parcel_id',
+} as const;
+
+const Parcel_Sales = {
+  TABLE_NAME: 'parcel_sales',
+  PARCEL_ID: 'parcel_sales.parcel_id',
+  SALE_PRICE: 'parcel_sales.sale_price',
+  SALE_TYPE: 'parcel_sales.sale_type',
+  SALE_DATE: 'parcel_sales.sale_date',
+} as const;
+
+const Parcel_Building_Details = {
+  TABLE_NAME: 'parcel_building_details',
+  PARCEL_ID: 'parcel_building_details.parcel_id',
+} as const;
 
 /**
  * Complex SELECT coverage focused on WHERE operators, JOIN chains, ORDER, and pagination.
@@ -156,5 +177,182 @@ describe('SQL Builders - Complex SELECTs', () => {
     const { sql, params } = qb.build('actor');
     expect(sql).toMatch(/\(actor\.last_name\) IS NOT \?/);
     expect(params).toEqual([null]);
+  });
+
+  it('serializes derived table joins with parameter hoisting and alias scoping', () => {
+    const config = buildParcelConfig();
+    const unitIdParam = 42;
+    const ALLOWED_SALE_TYPES = ['A', 'B', 'C', 'D', 'E', 'F'];
+    const parsedDateRanges = [
+      { start: '2023-01-01', end: '2023-01-31' },
+      { start: '2023-02-01', end: '2023-02-28' },
+    ];
+
+    const puTarget = derivedTable({
+      [C6C.SUBSELECT]: {
+        [C6C.SELECT]: [Property_Units.LOCATION],
+        [C6C.FROM]: Property_Units.TABLE_NAME,
+        [C6C.WHERE]: { [Property_Units.UNIT_ID]: [C6C.EQUAL, unitIdParam] },
+        [C6C.LIMIT]: 1,
+      },
+      [C6C.AS]: 'pu_target',
+    });
+
+    const innerJoin: any = {
+      'parcel_sales ps': {
+        'ps.parcel_id': [C6C.EQUAL, Property_Units.PARCEL_ID],
+      },
+      'parcel_building_details pbd': {
+        'pbd.parcel_id': [C6C.EQUAL, Property_Units.PARCEL_ID],
+      },
+      [puTarget as any]: {},
+    };
+
+    const qb = new SelectQueryBuilder(config as any, {
+      [C6C.SELECT]: [
+        Property_Units.UNIT_ID,
+        Property_Units.LOCATION,
+        F(Property_Units.LOCATION, 'pu_target'),
+      ],
+      [C6C.JOIN]: {
+        [C6C.INNER]: innerJoin,
+      },
+      [C6C.WHERE]: {
+        [Property_Units.UNIT_ID]: [C6C.NOT_EQUAL, unitIdParam],
+        [Parcel_Sales.SALE_PRICE]: [C6C.NOT_EQUAL, 0],
+        [Parcel_Sales.SALE_TYPE]: { [C6C.IN]: ALLOWED_SALE_TYPES },
+        0: parsedDateRanges.map(({ start, end }) => ({
+          [Parcel_Sales.SALE_DATE]: [C6C.BETWEEN, [start, end]],
+        })),
+      },
+      [C6C.PAGINATION]: {
+        [C6C.LIMIT]: 200,
+        [C6C.ORDER]: {
+          [C6C.ST_DISTANCE_SPHERE]: [
+            Property_Units.LOCATION,
+            F(Property_Units.LOCATION, 'pu_target'),
+          ],
+        },
+      },
+    } as any, false);
+
+    const { sql, params } = qb.build(Property_Units.TABLE_NAME);
+
+    expect(sql).toContain('SELECT property_units.unit_id, property_units.location, pu_target.location FROM `property_units`');
+    expect(sql).toContain('INNER JOIN `parcel_sales` AS `ps`');
+    expect(sql).toContain('INNER JOIN `parcel_building_details` AS `pbd`');
+    expect(sql).toMatch(/INNER JOIN \(\s+SELECT property_units\.location/);
+    expect(sql).toContain('WHERE (property_units.unit_id) <> ?');
+    expect(sql).toContain('AND (parcel_sales.sale_price) <> ?');
+    expect(sql).toContain('ORDER BY ST_Distance_Sphere(property_units.location, pu_target.location)');
+    expect(sql.trim().endsWith('LIMIT 200')).toBe(true);
+
+    expect(params).toEqual([
+      unitIdParam,
+      unitIdParam,
+      0,
+      ...ALLOWED_SALE_TYPES,
+      parsedDateRanges[0].start,
+      parsedDateRanges[0].end,
+      parsedDateRanges[1].start,
+      parsedDateRanges[1].end,
+    ]);
+  });
+
+  it('supports derived joins with ON clauses referencing the alias', () => {
+    const config = buildParcelConfig();
+
+    const recentSales = derivedTable({
+      [C6C.SUBSELECT]: {
+        [C6C.SELECT]: [Parcel_Sales.PARCEL_ID],
+        [C6C.FROM]: Parcel_Sales.TABLE_NAME,
+        [C6C.WHERE]: { [Parcel_Sales.SALE_PRICE]: [C6C.GREATER_THAN, 50000] },
+        [C6C.LIMIT]: 1,
+      },
+      [C6C.AS]: 'recent_sales',
+    });
+
+    const innerJoin: any = {
+      [recentSales as any]: {
+        'recent_sales.parcel_id': [C6C.EQUAL, Property_Units.PARCEL_ID],
+      },
+    };
+
+    const qb = new SelectQueryBuilder(config as any, {
+      [C6C.SELECT]: [Property_Units.UNIT_ID],
+      [C6C.JOIN]: { [C6C.INNER]: innerJoin },
+      [C6C.WHERE]: { [Property_Units.UNIT_ID]: [C6C.GREATER_THAN, 1] },
+    } as any, false);
+
+    const { sql, params } = qb.build(Property_Units.TABLE_NAME);
+
+    expect(sql).toMatch(/INNER JOIN \(\s+SELECT parcel_sales\.parcel_id/);
+    expect(sql).toContain('ON ((recent_sales.parcel_id) = property_units.parcel_id)');
+    expect(params[0]).toBe(50000);
+  });
+
+  it('throws when referencing an unknown alias in SELECT expressions', () => {
+    const config = buildParcelConfig();
+
+    const qb = new SelectQueryBuilder(config as any, {
+      [C6C.SELECT]: [F(Property_Units.LOCATION, 'missing_alias')],
+    } as any, false);
+
+    expect(() => qb.build(Property_Units.TABLE_NAME)).toThrowError(/Unknown table or alias 'missing_alias'/);
+  });
+
+  it('leaves normal table joins unaffected', () => {
+    const config = buildTestConfig();
+
+    const qb = new SelectQueryBuilder(config as any, {
+      [C6C.SELECT]: ['actor.actor_id'],
+      [C6C.JOIN]: {
+        [C6C.INNER]: {
+          'film_actor fa': { 'fa.actor_id': [C6C.EQUAL, 'actor.actor_id'] },
+        },
+      },
+    } as any, false);
+
+    const { sql } = qb.build('actor');
+    expect(sql).toContain('INNER JOIN `film_actor` AS `fa` ON ((fa.actor_id) = actor.actor_id)');
+  });
+
+  it('supports scalar subselects in SELECT and WHERE clauses', () => {
+    const config = buildParcelConfig();
+
+    const qb = new SelectQueryBuilder(config as any, {
+      [C6C.SELECT]: [
+        Property_Units.UNIT_ID,
+        [
+          C6C.SUBSELECT,
+          {
+            [C6C.SELECT]: [[C6C.COUNT, Parcel_Sales.PARCEL_ID]],
+            [C6C.FROM]: Parcel_Sales.TABLE_NAME,
+            [C6C.WHERE]: { [Parcel_Sales.SALE_PRICE]: [C6C.GREATER_THAN, 0] },
+          },
+          C6C.AS,
+          'sale_count',
+        ],
+      ],
+      [C6C.WHERE]: {
+        [Property_Units.UNIT_ID]: [
+          C6C.IN,
+          [
+            C6C.SUBSELECT,
+            {
+              [C6C.SELECT]: [Parcel_Sales.PARCEL_ID],
+              [C6C.FROM]: Parcel_Sales.TABLE_NAME,
+              [C6C.WHERE]: { [Parcel_Sales.SALE_PRICE]: [C6C.GREATER_THAN, 5000] },
+            },
+          ],
+        ],
+      },
+    } as any, false);
+
+    const { sql, params } = qb.build(Property_Units.TABLE_NAME);
+
+    expect(sql).toContain('SELECT property_units.unit_id, (SELECT COUNT(parcel_sales.parcel_id)');
+    expect(sql).toContain('WHERE ( property_units.unit_id IN (SELECT parcel_sales.parcel_id');
+    expect(params).toContain(5000);
   });
 });

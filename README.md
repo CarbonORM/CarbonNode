@@ -116,7 +116,7 @@ CREATE TABLE `carbon_users` (
 ```
 3) **Profit**
   - C6 will produce 1-1 constants.
-```typescript  
+```typescript
 export interface iUsers {
     'user_username'?: string;
     'user_password'?: string;
@@ -146,6 +146,53 @@ export interface iUsers {
     'user_location'?: string | null;
     'user_creation_date'?: string | null;
 }
+
+### Derived table joins
+
+The C6 query builder now supports joining derived tables (subselects) so you can project
+single-row lookups and reuse their fields elsewhere in the query. Wrap the derived table
+definition with `derivedTable(...)` to register it, then reference it inside the JOIN tree:
+
+```ts
+import { C6C } from "@carbonorm/carbonnode";
+import { derivedTable, F } from "@carbonorm/carbonnode/api/orm/queryHelpers";
+
+const puTarget = derivedTable({
+  [C6C.SUBSELECT]: {
+    [C6C.SELECT]: [Property_Units.LOCATION],
+    [C6C.FROM]: Property_Units.TABLE_NAME,
+    [C6C.WHERE]: { [Property_Units.UNIT_ID]: [C6C.EQUAL, unitIdParam] },
+    [C6C.LIMIT]: 1,
+  },
+  [C6C.AS]: 'pu_target',
+});
+
+const query = {
+  [C6C.SELECT]: [
+    Property_Units.UNIT_ID,
+    Property_Units.LOCATION,
+    F(Property_Units.LOCATION, 'pu_target'),
+  ],
+  [C6C.JOIN]: {
+    [C6C.INNER]: {
+      'parcel_sales ps': { 'ps.parcel_id': [C6C.EQUAL, Property_Units.PARCEL_ID] },
+      [puTarget as any]: {},
+    },
+  },
+  [C6C.PAGINATION]: {
+    [C6C.ORDER]: {
+      [C6C.ST_DISTANCE_SPHERE]: [
+        Property_Units.LOCATION,
+        F(Property_Units.LOCATION, 'pu_target'),
+      ],
+    },
+  },
+};
+```
+
+Parameters from the subselect are hoisted ahead of the outer query’s bindings and the alias
+(`pu_target` in the example above) is available to `F(...)`, WHERE, ORDER BY, and other
+expressions.
 
 interface iDefineUsers {
     'USER_USERNAME': string;

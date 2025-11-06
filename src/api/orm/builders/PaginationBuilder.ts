@@ -17,7 +17,7 @@ export abstract class PaginationBuilder<G extends OrmGenerics> extends JoinBuild
      * }
      * ```
      */
-    buildPaginationClause(pagination: any): string {
+    buildPaginationClause(pagination: any, params?: any[] | Record<string, any>): string {
         let sql = "";
 
         /* -------- ORDER BY -------- */
@@ -25,10 +25,20 @@ export abstract class PaginationBuilder<G extends OrmGenerics> extends JoinBuild
             const orderParts: string[] = [];
 
             for (const [key, val] of Object.entries(pagination[C6Constants.ORDER])) {
+                if (typeof key === 'string' && key.includes('.')) {
+                    this.assertValidIdentifier(key, 'ORDER BY');
+                }
                 // FUNCTION CALL: val is an array of args
                 if (Array.isArray(val)) {
                     const args = val
-                        .map((arg) => Array.isArray(arg) ? this.buildAggregateField(arg) : String(arg))
+                        .map((arg) => {
+                            if (Array.isArray(arg)) return this.buildAggregateField(arg, params);
+                            if (typeof arg === 'string' && arg.includes('.')) {
+                                this.assertValidIdentifier(arg, 'ORDER BY argument');
+                                return arg;
+                            }
+                            return String(arg);
+                        })
                         .join(", ");
                     orderParts.push(`${key}(${args})`);
                 }
