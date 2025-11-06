@@ -101,6 +101,7 @@ export const C6Constants = {
     SECOND_MICROSECOND: 'SECOND_MICROSECOND',
     SELECT: 'SELECT',
     SUBSELECT: 'SUBSELECT',
+    PARAM: 'PARAM',
 
     // MySQL Spatial Functions
     ST_AREA: 'ST_Area',

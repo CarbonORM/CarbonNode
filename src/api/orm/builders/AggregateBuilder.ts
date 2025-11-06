@@ -21,6 +21,19 @@ export abstract class AggregateBuilder<G extends OrmGenerics> extends Executor<G
             throw new Error('Invalid SELECT field entry');
         }
 
+        // If the array represents a tuple/literal list (e.g., [lng, lat]) rather than a
+        // function call like [FN, ...args], the first element won't be a string. In that
+        // case, serialize the list as a comma-separated literal sequence so parent calls
+        // (like ORDER BY FN(<here>)) can embed it correctly.
+        if (typeof field[0] !== 'string') {
+            return field
+                .map((arg) => {
+                    if (Array.isArray(arg)) return this.buildAggregateField(arg, params);
+                    return String(arg);
+                })
+                .join(', ');
+        }
+
         let [fn, ...args] = field;
         let alias: string | undefined;
 
@@ -30,6 +43,17 @@ export abstract class AggregateBuilder<G extends OrmGenerics> extends Executor<G
         }
 
         const F = String(fn).toUpperCase();
+
+        // Parameter placeholder helper: [C6C.PARAM, value]
+        if (F === C6C.PARAM) {
+            if (!params) {
+                throw new Error('PARAM requires parameter tracking.');
+            }
+            const value = args[0];
+            // Use empty column context; ORDER/SELECT literals have no column typing.
+            // @ts-ignore addParam is provided by ConditionBuilder in our hierarchy.
+            return this.addParam(params, '', value);
+        }
 
         if (F === C6C.SUBSELECT) {
             if (!params) {
@@ -52,11 +76,19 @@ export abstract class AggregateBuilder<G extends OrmGenerics> extends Executor<G
             return expr;
         }
 
+        const identifierPathRegex = /^[A-Za-z_][A-Za-z0-9_]*\.[A-Za-z_][A-Za-z0-9_]*$/;
+        const isNumericString = (s: string) => /^-?\d+(?:\.\d+)?$/.test(s.trim());
+
         const argList = args
             .map(arg => {
                 if (Array.isArray(arg)) return this.buildAggregateField(arg, params);
                 if (typeof arg === 'string') {
-                    this.assertValidIdentifier(arg, 'SELECT expression');
+                    if (identifierPathRegex.test(arg)) {
+                        this.assertValidIdentifier(arg, 'SELECT expression');
+                        return arg;
+                    }
+                    // Treat numeric-looking strings as literals, not identifier paths
+                    if (isNumericString(arg)) return arg;
                     return arg;
                 }
                 return String(arg);

@@ -30,11 +30,18 @@ export abstract class PaginationBuilder<G extends OrmGenerics> extends JoinBuild
                 }
                 // FUNCTION CALL: val is an array of args
                 if (Array.isArray(val)) {
+                    const identifierPathRegex = /^[A-Za-z_][A-Za-z0-9_]*\.[A-Za-z_][A-Za-z0-9_]*$/;
+                    const isNumericString = (s: string) => /^-?\d+(?:\.\d+)?$/.test(s.trim());
                     const args = val
                         .map((arg) => {
                             if (Array.isArray(arg)) return this.buildAggregateField(arg, params);
-                            if (typeof arg === 'string' && arg.includes('.')) {
-                                this.assertValidIdentifier(arg, 'ORDER BY argument');
+                            if (typeof arg === 'string') {
+                                if (identifierPathRegex.test(arg)) {
+                                    this.assertValidIdentifier(arg, 'ORDER BY argument');
+                                    return arg;
+                                }
+                                // numeric-looking strings should be treated as literals
+                                if (isNumericString(arg)) return arg;
                                 return arg;
                             }
                             return String(arg);

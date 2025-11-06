@@ -301,6 +301,88 @@ describe('SQL Builders - Complex SELECTs', () => {
     expect(() => qb.build(Property_Units.TABLE_NAME)).toThrowError(/Unknown table or alias 'missing_alias'/);
   });
 
+  it('orders by distance to a literal ST_Point with numeric string coords', () => {
+    const config = buildParcelConfig();
+
+    const qb = new SelectQueryBuilder(config as any, {
+      [C6C.SELECT]: [Property_Units.UNIT_ID],
+      [C6C.PAGINATION]: {
+        [C6C.LIMIT]: 200,
+        [C6C.ORDER]: {
+          [C6C.ST_DISTANCE_SPHERE]: [
+            Property_Units.LOCATION,
+            [C6C.ST_POINT, ['-104.8967729', '39.3976764']],
+          ],
+        },
+      },
+    } as any, false);
+
+    const { sql } = qb.build(Property_Units.TABLE_NAME);
+    expect(sql).toContain('ORDER BY ST_Distance_Sphere(property_units.location, ST_POINT(-104.8967729, 39.3976764))');
+  });
+
+  it('orders by distance to ST_SRID(ST_Point(lng, lat), 4326)', () => {
+    const config = buildParcelConfig();
+
+    const qb = new SelectQueryBuilder(config as any, {
+      [C6C.SELECT]: [Property_Units.UNIT_ID],
+      [C6C.PAGINATION]: {
+        [C6C.LIMIT]: 50,
+        [C6C.ORDER]: {
+          [C6C.ST_DISTANCE_SPHERE]: [
+            Property_Units.LOCATION,
+            [C6C.ST_SRID, [C6C.ST_POINT, [10, 20]], 4326],
+          ],
+        },
+      },
+    } as any, false);
+
+    const { sql } = qb.build(Property_Units.TABLE_NAME);
+    expect(sql).toContain('ORDER BY ST_Distance_Sphere(property_units.location, ST_SRID(ST_POINT(10, 20), 4326))');
+  });
+
+  it('orders by distance using placeholders via PARAM inside nested ST_Point', () => {
+    const config = buildParcelConfig();
+
+    const qb = new SelectQueryBuilder(config as any, {
+      [C6C.SELECT]: [Property_Units.UNIT_ID],
+      [C6C.PAGINATION]: {
+        [C6C.LIMIT]: 25,
+        [C6C.ORDER]: {
+          [C6C.ST_DISTANCE_SPHERE]: [
+            Property_Units.LOCATION,
+            [C6C.ST_SRID, [C6C.ST_POINT, [[C6C.PARAM, 10], [C6C.PARAM, 20]]], 4326],
+          ],
+        },
+      },
+    } as any, false);
+
+    const { sql, params } = qb.build(Property_Units.TABLE_NAME);
+    expect(sql).toContain('ORDER BY ST_Distance_Sphere(property_units.location, ST_SRID(ST_POINT(?, ?), 4326))');
+    expect(params.slice(-2)).toEqual([10, 20]);
+  });
+
+  it('orders by distance using named params via PARAM inside nested ST_Point', () => {
+    const config = buildParcelConfig();
+
+    const qb = new SelectQueryBuilder(config as any, {
+      [C6C.SELECT]: [Property_Units.UNIT_ID],
+      [C6C.PAGINATION]: {
+        [C6C.LIMIT]: 25,
+        [C6C.ORDER]: {
+          [C6C.ST_DISTANCE_SPHERE]: [
+            Property_Units.LOCATION,
+            [C6C.ST_SRID, [C6C.ST_POINT, [[C6C.PARAM, 10], [C6C.PARAM, 20]]], 4326],
+          ],
+        },
+      },
+    } as any, true);
+
+    const { sql, params } = qb.build(Property_Units.TABLE_NAME);
+    expect(sql).toMatch(/ST_SRID\(ST_POINT\(:param0, :param1\), 4326\)/);
+    expect(params).toEqual({ param0: 10, param1: 20 });
+  });
+
   it('leaves normal table joins unaffected', () => {
     const config = buildTestConfig();
 
