@@ -92,4 +92,33 @@ describe("ExpressHandler e2e", () => {
         expect(Array.isArray(data?.rest)).toBe(true);
         expect(data?.rest.length).toBe(0);
     });
+
+    it("respects METHOD=GET override on POST", async () => {
+        const {restURL} = GLOBAL_REST_PARAMETERS;
+        const table = Actor.TABLE_NAME;
+
+        const response = await axios.post(`${restURL}${table}?METHOD=GET`, {
+            [C6C.PAGINATION]: { [C6C.LIMIT]: 2 }
+        });
+
+        expect(response.status).toBe(200);
+        expect(Array.isArray(response.data?.rest)).toBe(true);
+        expect(response.data?.rest?.length).toBeGreaterThan(0);
+    });
+
+    it("ignores unsupported METHOD overrides", async () => {
+        const {restURL} = GLOBAL_REST_PARAMETERS;
+        const table = Actor.TABLE_NAME;
+
+        const first_name = `Override${Date.now()}`;
+        const last_name = `User${Date.now()}`;
+
+        const response = await axios.post(`${restURL}${table}?METHOD=PUT`, {
+            first_name,
+            last_name,
+        } as any);
+
+        expect(response.status).toBe(200);
+        expect(response.data?.success).toBeTruthy();
+    });
 });

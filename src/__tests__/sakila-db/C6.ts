@@ -59,7 +59,7 @@ CREATE TABLE `actor` (
   `last_update` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`actor_id`),
   KEY `idx_actor_last_name` (`last_name`)
-) ENGINE=InnoDB AUTO_INCREMENT=207 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=215 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 **/
 
 export interface iActor {
@@ -2009,7 +2009,7 @@ export type RestTableInterfaces = iActor
 
 export const C6 : iC6Object<RestTableInterfaces> = {
     ...C6Constants,
-    C6VERSION: '3.7.20',
+    C6VERSION: '3.8.0',
     IMPORT: async (tableName: string) : Promise<iDynamicApiImport> => {
 
         tableName = tableName.toLowerCase();
@@ -2028,10 +2028,15 @@ export const C6 : iC6Object<RestTableInterfaces> = {
             }
         }
         // This will rightfully throw a dynamic import warning in the console, but it is necessary to use dynamic imports
-        return import(/* @vite-ignore */ './' + (tableName.split('_')
-                .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-                .join('_')) + '.ts');
+        const toPascalUnderscore = (name: string) =>
+          name
+            .split("_")
+            .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+            .join("_");
 
+        return import(
+          /* @vite-ignore */ `./${toPascalUnderscore(tableName)}.ts`
+        );
     },
     PREFIX: RestTablePrefix,
     TABLES: TABLES,

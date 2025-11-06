@@ -11,10 +11,27 @@ export function ExpressHandler({C6, mysqlPool}: { C6: iC6Object, mysqlPool: Pool
 
     return async (req: Request, res: Response, next: NextFunction) => {
         try {
-            const method = req.method.toUpperCase() as iRestMethods;
+            const incomingMethod = req.method.toUpperCase() as iRestMethods;
             const table = req.params.table;
             const primary = req.params.primary;
-            const payload = method === 'GET' ? req.query : req.body;
+            // Support Axios interceptor promoting large GETs to POST with ?METHOD=GET
+            const methodOverrideRaw = (req.query?.METHOD ?? req.query?.method) as unknown;
+            const methodOverride = typeof methodOverrideRaw === 'string' ? methodOverrideRaw.toUpperCase() : undefined;
+
+            const treatAsGet = incomingMethod === 'POST' && methodOverride === 'GET';
+
+            const method: iRestMethods = treatAsGet ? 'GET' : incomingMethod;
+            const payload: any = treatAsGet ? { ...(req.body as any) } : (method === 'GET' ? req.query : req.body);
+
+            // Remove transport-only METHOD flag so it never leaks into ORM parsing
+            if (treatAsGet && 'METHOD' in payload) {
+                try { delete (payload as any).METHOD } catch { /* noop */ }
+            }
+
+            // Warn for unsupported overrides but continue normally
+            if (incomingMethod !== 'GET' && methodOverride && methodOverride !== 'GET') {
+                console.warn(`Ignoring unsupported METHOD override: ${methodOverride}`);
+            }
 
             if (!(table in C6.TABLES)) {
                 res.status(400).json({error: `Invalid table: ${table}`});

@@ -3,6 +3,15 @@ import axios from "axios";
 import Qs from "qs";
 
 
+export const carbonNodeQsStringify = (params: any): string =>
+    Qs.stringify(params, {
+        arrayFormat: "indices",
+        indices: true,
+        skipNulls: false,
+        strictNullHandling: true,
+    });
+
+
 // updating these values
 // @link https://github.com/axios/axios/issues/209
 //
@@ -11,7 +20,8 @@ import Qs from "qs";
 //
 // immediately affects this instance
 // axiosInstance.defaults.headers['Auth-Token'] = 'foo bar';
-export default (axios.create({
+
+const carbonAxiosInstance = (axios.create({
 
     // `baseURL` will be prepended to `url` unless `url` is absolute.
     // It can be convenient to set `baseURL` for an instance of axios to pass relative URLs
@@ -37,7 +47,7 @@ export default (axios.create({
     // (e.g. https://www.npmjs.com/package/qs, http://api.jquery.com/jquery.param/)
     paramsSerializer: function (params) {
         // Nested get params [][][,,,] do not serialize correctly without Qs
-        return Qs.stringify(params, {arrayFormat: 'indices', indices: true, skipNulls: false, strictNullHandling: true})
+        return carbonNodeQsStringify(params)
     },
 
 
@@ -128,4 +138,19 @@ export default (axios.create({
 }));
 
 
+carbonAxiosInstance.interceptors.request.use((config) => {
+    if (config.params) {
+        const serialized = carbonNodeQsStringify(config.params);
+        if (serialized.length > 2000) {
+            // Move params into body but keep track of intended method
+            config.method = "post";
+            config.data = config.params;
+            config.params = {
+                METHOD: "GET", // 👈 explicit signal for your REST parser
+            };
+        }
+    }
+
+    return config;
+});
 
