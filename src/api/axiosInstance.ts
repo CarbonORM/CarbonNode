@@ -21,7 +21,7 @@ export const carbonNodeQsStringify = (params: any): string =>
 // immediately affects this instance
 // axiosInstance.defaults.headers['Auth-Token'] = 'foo bar';
 
-const carbonAxiosInstance = (axios.create({
+const axiosInstance = (axios.create({
 
     // `baseURL` will be prepended to `url` unless `url` is absolute.
     // It can be convenient to set `baseURL` for an instance of axios to pass relative URLs
@@ -138,7 +138,7 @@ const carbonAxiosInstance = (axios.create({
 }));
 
 
-carbonAxiosInstance.interceptors.request.use((config) => {
+axiosInstance.interceptors.request.use((config) => {
     if (config.params) {
         const serialized = carbonNodeQsStringify(config.params);
         if (serialized.length > 2000) {
@@ -154,3 +154,4 @@ carbonAxiosInstance.interceptors.request.use((config) => {
     return config;
 });
 
+export default axiosInstance
