@@ -187,10 +187,30 @@ export abstract class ConditionBuilder<
                 this.OPERATORS.has(column) &&
                 Array.isArray(op)
             ) {
+                // Helper to serialize operand which may be a qualified identifier or a nested function array
+                const serializeOperand = (arg: any): string => {
+                    const identifierPathRegex = /^[A-Za-z_][A-Za-z0-9_]*\.[A-Za-z_][A-Za-z0-9_]*$/;
+                    if (Array.isArray(arg)) {
+                        // Delegate to aggregate builder to handle nested functions/params
+                        // @ts-ignore - buildAggregateField is defined upstream in AggregateBuilder
+                        return this.buildAggregateField(arg, params);
+                    }
+                    if (typeof arg === 'string') {
+                        if (identifierPathRegex.test(arg)) {
+                            this.assertValidIdentifier(arg, 'WHERE argument');
+                            return arg;
+                        }
+                        return arg;
+                    }
+                    return String(arg);
+                };
+
                 if (column === C6C.ST_DISTANCE_SPHERE) {
                     const [col1, col2] = op;
                     const threshold = Array.isArray(value) ? value[0] : value;
-                    return `ST_Distance_Sphere(${col1}, ${col2}) < ${this.addParam(params, '', threshold)}`;
+                    const left = serializeOperand(col1);
+                    const right = serializeOperand(col2);
+                    return `ST_Distance_Sphere(${left}, ${right}) < ${this.addParam(params, '', threshold)}`;
                 }
                 if ([
                     C6C.ST_CONTAINS,
@@ -203,7 +223,9 @@ export abstract class ConditionBuilder<
                     C6C.ST_TOUCHES
                 ].includes(column)) {
                     const [geom1, geom2] = op;
-                    return `${column}(${geom1}, ${geom2})`;
+                    const left = serializeOperand(geom1);
+                    const right = serializeOperand(geom2);
+                    return `${column}(${left}, ${right})`;
                 }
             }
 
@@ -308,6 +330,24 @@ export abstract class ConditionBuilder<
             const numeric = entries.filter(([k]) => !isNaN(Number(k)));
 
             const processEntry = (k: string, v: any) => {
+                // Operator-as-key handling, e.g., { [C6C.ST_DISTANCE_SPHERE]: [arg1, arg2, threshold] }
+                if (typeof k === 'string' && this.OPERATORS.has(k) && Array.isArray(v)) {
+                    if (k === C6C.ST_DISTANCE_SPHERE) {
+                        // Accept either [arg1, arg2, threshold] or [[arg1, arg2], threshold]
+                        let args: any[];
+                        let threshold: any;
+                        if (Array.isArray(v[0]) && v.length >= 2) {
+                            args = v[0];
+                            threshold = v[1];
+                        } else {
+                            args = v.slice(0, 2);
+                            threshold = v[2];
+                        }
+                        subParts.push(addCondition(k, args as any, threshold));
+                        return;
+                    }
+                }
+
                 if (typeof v === 'object' && v !== null && Object.keys(v).length === 1) {
                     const [op, val] = Object.entries(v)[0];
                     subParts.push(addCondition(k, op, val));

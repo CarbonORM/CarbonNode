@@ -19,11 +19,6 @@ const Parcel_Sales = {
   SALE_DATE: 'parcel_sales.sale_date',
 } as const;
 
-const Parcel_Building_Details = {
-  TABLE_NAME: 'parcel_building_details',
-  PARCEL_ID: 'parcel_building_details.parcel_id',
-} as const;
-
 /**
  * Complex SELECT coverage focused on WHERE operators, JOIN chains, ORDER, and pagination.
  */
@@ -56,6 +51,7 @@ describe('SQL Builders - Complex SELECTs', () => {
     const { sql, params } = qb.build('actor');
 
     // SQL fragments
+    // noinspection SqlResolve
     expect(sql).toContain('SELECT actor.actor_id, actor.first_name FROM `actor`');
     expect(sql).toContain('WHERE');
     expect(sql).toMatch(/\(actor\.first_name\) LIKE \?/);
@@ -131,6 +127,7 @@ describe('SQL Builders - Complex SELECTs', () => {
 
     const { sql, params } = qb.build('actor');
 
+    // noinspection SqlResolve
     expect(sql).toContain('SELECT DISTINCT actor.first_name, COUNT(actor.actor_id) AS cnt FROM `actor`');
     expect(sql).toContain('GROUP BY actor.first_name');
     expect(sql).toContain('HAVING');
@@ -238,6 +235,7 @@ describe('SQL Builders - Complex SELECTs', () => {
 
     const { sql, params } = qb.build(Property_Units.TABLE_NAME);
 
+    // noinspection SqlResolve
     expect(sql).toContain('SELECT property_units.unit_id, property_units.location, pu_target.location FROM `property_units`');
     expect(sql).toContain('INNER JOIN `parcel_sales` AS `ps`');
     expect(sql).toContain('INNER JOIN `parcel_building_details` AS `pbd`');
