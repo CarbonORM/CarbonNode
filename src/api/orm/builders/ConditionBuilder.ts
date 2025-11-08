@@ -107,7 +107,16 @@ export abstract class ConditionBuilder<
         [C6C.BETWEEN, C6C.BETWEEN],
         ['BETWEEN', C6C.BETWEEN],
         ['NOT BETWEEN', 'NOT BETWEEN'],
+        [C6C.EXISTS, C6C.EXISTS],
+        ['EXISTS', C6C.EXISTS],
+        ['NOT EXISTS', 'NOT EXISTS'],
         [C6C.MATCH_AGAINST, C6C.MATCH_AGAINST],
+    ]);
+
+    private readonly BOOLEAN_FUNCTION_KEYS = new Set<string>([
+        C6C.ST_CONTAINS?.toUpperCase?.() ?? 'ST_CONTAINS',
+        C6C.ST_WITHIN?.toUpperCase?.() ?? 'ST_WITHIN',
+        C6C.MBRCONTAINS?.toUpperCase?.() ?? 'MBRCONTAINS',
     ]);
 
     private isTableReference(val: any): boolean {
@@ -313,6 +322,10 @@ export abstract class ConditionBuilder<
             return { sql: asParam(operand), isReference: false, isExpression: false, isSubSelect: false };
         }
 
+        if (typeof Buffer !== 'undefined' && Buffer.isBuffer && Buffer.isBuffer(operand)) {
+            return { sql: asParam(operand), isReference: false, isExpression: false, isSubSelect: false };
+        }
+
         if (typeof operand === 'string') {
             if (this.isTableReference(operand) || this.isColumnRef(operand)) {
                 return { sql: operand, isReference: true, isExpression: false, isSubSelect: false };
@@ -365,6 +378,143 @@ export abstract class ConditionBuilder<
         throw new Error('Unsupported operand type in SQL expression.');
     }
 
+    private ensurePlainObject<T>(value: T): any {
+        if (value instanceof Map) {
+            return Object.fromEntries(value as unknown as Map<string, any>);
+        }
+        return value;
+    }
+
+    private resolveExistsInnerColumn(subRequest: Record<string, any>, provided?: string): string {
+        if (provided) {
+            if (typeof provided !== 'string' || provided.trim() === '') {
+                throw new Error('EXISTS correlation column must be a non-empty string.');
+            }
+            return provided;
+        }
+
+        const selectClause = this.ensurePlainObject(subRequest?.[C6C.SELECT]);
+        if (Array.isArray(selectClause) && selectClause.length > 0) {
+            const candidate = selectClause[0];
+            if (typeof candidate === 'string' && candidate.trim() !== '') {
+                return candidate;
+            }
+        }
+
+        const fromTable = subRequest?.[C6C.FROM];
+        if (typeof fromTable === 'string' && fromTable.trim() !== '') {
+            const table = this.config.C6?.TABLES?.[fromTable.trim()];
+            const primary = table?.PRIMARY;
+            if (Array.isArray(primary) && primary.length > 0) {
+                return String(primary[0]);
+            }
+        }
+
+        throw new Error('EXISTS requires a correlation column to be provided or inferable from the subselect.');
+    }
+
+    private normalizeExistsSpec(
+        spec: any
+    ): { outerColumn: string; subRequest: Record<string, any>; innerColumn?: string } {
+        const normalized = this.ensurePlainObject(spec);
+
+        if (!Array.isArray(normalized) || normalized.length < 2) {
+            throw new Error('EXISTS expects an array like [outerColumn, subselect, innerColumn?].');
+        }
+
+        const [outerRaw, payloadRaw, innerRaw] = normalized;
+        if (typeof outerRaw !== 'string' || outerRaw.trim() === '') {
+            throw new Error('EXISTS requires the first element to be an outer column reference string.');
+        }
+
+        const payload = this.ensurePlainObject(payloadRaw);
+        let subSelect: any;
+        if (payload && typeof payload === 'object' && C6C.SUBSELECT in payload) {
+            subSelect = this.ensurePlainObject(payload[C6C.SUBSELECT]);
+        } else if (payload && typeof payload === 'object') {
+            subSelect = payload;
+        } else {
+            throw new Error('EXISTS requires a subselect payload as the second element.');
+        }
+
+        if (!subSelect || typeof subSelect !== 'object') {
+            throw new Error('EXISTS subselect payload must be an object.');
+        }
+
+        const innerColumn = typeof innerRaw === 'string' ? innerRaw : undefined;
+
+        return {
+            outerColumn: outerRaw,
+            subRequest: { ...subSelect },
+            innerColumn,
+        };
+    }
+
+    private buildExistsExpression(
+        spec: any,
+        operator: string,
+        params: any[] | Record<string, any>
+    ): string {
+        const { outerColumn, subRequest, innerColumn } = this.normalizeExistsSpec(spec);
+
+        const fromTableRaw = subRequest[C6C.FROM];
+        if (typeof fromTableRaw !== 'string' || fromTableRaw.trim() === '') {
+            throw new Error('EXISTS subselect requires a table specified with C6C.FROM.');
+        }
+        const fromTable = fromTableRaw.trim();
+
+        this.assertValidIdentifier(outerColumn, 'EXISTS correlation column');
+        const correlationColumn = this.resolveExistsInnerColumn(subRequest, innerColumn);
+        if (!this.isColumnRef(correlationColumn) && !this.isTableReference(correlationColumn)) {
+            throw new Error(`Unknown column reference '${correlationColumn}' used in EXISTS subquery correlation column.`);
+        }
+
+        const existingWhereRaw = this.ensurePlainObject(subRequest[C6C.WHERE]);
+        const correlationCondition = { [correlationColumn]: [C6C.EQUAL, outerColumn] };
+
+        const normalizedExistingWhere = existingWhereRaw && typeof existingWhereRaw === 'object'
+            ? Array.isArray(existingWhereRaw)
+                ? existingWhereRaw.slice()
+                : { ...(existingWhereRaw as Record<string, any>) }
+            : existingWhereRaw;
+
+        const hasExistingWhere = Array.isArray(normalizedExistingWhere)
+            ? normalizedExistingWhere.length > 0
+            : normalizedExistingWhere && typeof normalizedExistingWhere === 'object'
+                ? Object.keys(normalizedExistingWhere).length > 0
+                : normalizedExistingWhere != null;
+
+        let whereClause: any;
+        if (!hasExistingWhere) {
+            whereClause = correlationCondition;
+        } else if (
+            normalizedExistingWhere && typeof normalizedExistingWhere === 'object' &&
+            Object.keys(normalizedExistingWhere).some(key => this.BOOLEAN_OPERATORS.has(key))
+        ) {
+            whereClause = { [C6C.AND]: [normalizedExistingWhere, correlationCondition] };
+        } else if (normalizedExistingWhere && typeof normalizedExistingWhere === 'object') {
+            whereClause = { ...normalizedExistingWhere, ...correlationCondition };
+        } else {
+            whereClause = { [C6C.AND]: [normalizedExistingWhere, correlationCondition] };
+        }
+
+        const subRequestWithCorrelation = {
+            ...subRequest,
+            [C6C.FROM]: fromTable,
+            [C6C.WHERE]: whereClause,
+            [C6C.SELECT]: subRequest[C6C.SELECT] ?? ['1'],
+        };
+
+        const buildScalarSubSelect = (this as any).buildScalarSubSelect;
+        if (typeof buildScalarSubSelect !== 'function') {
+            throw new Error('EXISTS operator requires SelectQueryBuilder context.');
+        }
+
+        const scalar = buildScalarSubSelect.call(this, subRequestWithCorrelation, params);
+        const keyword = operator === 'NOT EXISTS' ? 'NOT EXISTS' : C6C.EXISTS;
+        return `${keyword} ${scalar}`;
+    }
+
     private buildOperatorExpression(
         op: string,
         rawOperands: any,
@@ -372,6 +522,15 @@ export abstract class ConditionBuilder<
         contextColumn?: string
     ): string {
         const operator = this.formatOperator(op);
+
+        if (operator === C6C.EXISTS || operator === 'NOT EXISTS') {
+            const operands = Array.isArray(rawOperands) ? rawOperands : [rawOperands];
+            if (!operands.length) {
+                throw new Error(`${operator} requires at least one subselect specification.`);
+            }
+            const clauses = operands.map(spec => this.buildExistsExpression(spec, operator, params));
+            return this.joinBooleanParts(clauses, 'AND');
+        }
 
         if (operator === C6C.MATCH_AGAINST) {
             if (!Array.isArray(rawOperands) || rawOperands.length !== 2) {
@@ -495,6 +654,20 @@ export abstract class ConditionBuilder<
     ): string {
         if (value instanceof Map) {
             value = Object.fromEntries(value);
+        }
+
+        if (typeof column === 'string') {
+            const normalizedColumn = column.trim().toUpperCase();
+            if (this.BOOLEAN_FUNCTION_KEYS.has(normalizedColumn)) {
+                if (!Array.isArray(value)) {
+                    throw new Error(`${column} expects an array of arguments.`);
+                }
+                return this.buildFunctionCall(column, value, params);
+            }
+        }
+
+        if (typeof Buffer !== 'undefined' && Buffer.isBuffer && Buffer.isBuffer(value)) {
+            return this.buildOperatorExpression(C6C.EQUAL, [column, value], params, column);
         }
 
         if (Array.isArray(value)) {

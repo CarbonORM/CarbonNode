@@ -5,10 +5,157 @@ import {resolveDerivedTable, isDerivedTableKey} from "../queryHelpers";
 
 export abstract class JoinBuilder<G extends OrmGenerics> extends ConditionBuilder<G>{
 
+    private indexHintCache?: Map<string, string>;
+
     protected createSelectBuilder(
         _request: any
     ): { build(table: string, isSubSelect: boolean): { sql: string; params: any[] | Record<string, any> } } {
         throw new Error('Subclasses must implement createSelectBuilder to support derived table serialization.');
+    }
+
+    protected resetIndexHints(): void {
+        this.indexHintCache = undefined;
+    }
+
+    private normalizeIndexHintKey(key: string): string {
+        return key
+            .replace(/`/g, '')
+            .replace(/_/g, ' ')
+            .trim()
+            .replace(/\s+/g, ' ')
+            .toUpperCase();
+    }
+
+    private normalizeHintTargetKey(target: string): string {
+        return target.replace(/`/g, '').trim();
+    }
+
+    private hasIndexHintKeys(obj: Record<string, any>): boolean {
+        const keys = Object.keys(obj ?? {});
+        if (!keys.length) return false;
+
+        const forceKey = this.normalizeIndexHintKey(C6C.FORCE_INDEX);
+        const useKey = this.normalizeIndexHintKey(C6C.USE_INDEX);
+        const ignoreKey = this.normalizeIndexHintKey(C6C.IGNORE_INDEX);
+
+        return keys.some(key => {
+            const normalized = this.normalizeIndexHintKey(key);
+            return normalized === forceKey || normalized === useKey || normalized === ignoreKey;
+        });
+    }
+
+    private normalizeHintSpec(spec: any): Record<string, any> | undefined {
+        if (spec instanceof Map) {
+            spec = Object.fromEntries(spec);
+        }
+
+        if (Array.isArray(spec) || typeof spec === 'string') {
+            return { [C6C.FORCE_INDEX]: spec } as Record<string, any>;
+        }
+
+        if (!spec || typeof spec !== 'object') {
+            return undefined;
+        }
+
+        if (!this.hasIndexHintKeys(spec as Record<string, any>)) {
+            return undefined;
+        }
+
+        return spec as Record<string, any>;
+    }
+
+    private formatIndexHintClause(spec: any): string {
+        const normalizedSpec = this.normalizeHintSpec(spec);
+        if (!normalizedSpec) return '';
+
+        const clauses: string[] = [];
+        const forceKey = this.normalizeIndexHintKey(C6C.FORCE_INDEX);
+        const useKey = this.normalizeIndexHintKey(C6C.USE_INDEX);
+        const ignoreKey = this.normalizeIndexHintKey(C6C.IGNORE_INDEX);
+
+        const pushClause = (keyword: string, rawValue: any) => {
+            const values = Array.isArray(rawValue) ? rawValue : [rawValue];
+            const indexes = values
+                .map(value => String(value ?? '').trim())
+                .filter(Boolean)
+                .map(value => `\`${value.replace(/`/g, '``')}\``);
+            if (!indexes.length) return;
+            clauses.push(`${keyword} (${indexes.join(', ')})`);
+        };
+
+        for (const [key, rawValue] of Object.entries(normalizedSpec)) {
+            const normalizedKey = this.normalizeIndexHintKey(key);
+            if (normalizedKey === forceKey) {
+                pushClause('FORCE INDEX', rawValue);
+            } else if (normalizedKey === useKey) {
+                pushClause('USE INDEX', rawValue);
+            } else if (normalizedKey === ignoreKey) {
+                pushClause('IGNORE INDEX', rawValue);
+            }
+        }
+
+        return clauses.join(' ');
+    }
+
+    private normalizeIndexHints(raw: any): Map<string, string> | undefined {
+        if (raw instanceof Map) {
+            raw = Object.fromEntries(raw);
+        }
+
+        const cache = new Map<string, string>();
+
+        const addEntry = (target: string, spec: any) => {
+            const clause = this.formatIndexHintClause(spec);
+            if (!clause) return;
+            const normalizedTarget = target === '__base__'
+                ? '__base__'
+                : this.normalizeHintTargetKey(target);
+            cache.set(normalizedTarget, clause);
+        };
+
+        if (Array.isArray(raw) || typeof raw === 'string') {
+            addEntry('__base__', raw);
+        } else if (raw && typeof raw === 'object') {
+            if (this.hasIndexHintKeys(raw as Record<string, any>)) {
+                addEntry('__base__', raw);
+            } else {
+                for (const [key, value] of Object.entries(raw as Record<string, any>)) {
+                    const normalizedKey = this.normalizeHintTargetKey(key);
+                    if (!normalizedKey) continue;
+                    addEntry(normalizedKey, value);
+                }
+            }
+        }
+
+        return cache.size ? cache : undefined;
+    }
+
+    protected getIndexHintClause(table: string, alias?: string): string {
+        if (!this.indexHintCache) {
+            const rawHints = (this.request as unknown as Record<string, any> | undefined)?.[C6C.INDEX_HINTS];
+            this.indexHintCache = this.normalizeIndexHints(rawHints);
+        }
+
+        const hints = this.indexHintCache;
+        if (!hints || hints.size === 0) return '';
+
+        const normalizedTable = this.normalizeHintTargetKey(table);
+        const normalizedAlias = alias ? this.normalizeHintTargetKey(alias) : undefined;
+
+        const candidates = [
+            normalizedAlias,
+            normalizedAlias ? `${normalizedTable} ${normalizedAlias}` : undefined,
+            normalizedTable,
+            '__base__',
+        ];
+
+        for (const candidate of candidates) {
+            if (!candidate) continue;
+            const clause = hints.get(candidate);
+            if (clause) return clause;
+        }
+
+        return '';
     }
 
     buildJoinClauses(joinArgs: any, params: any[] | Record<string, any>): string {
@@ -79,7 +226,9 @@ export abstract class JoinBuilder<G extends OrmGenerics> extends ConditionBuilde
                     if (alias) {
                         this.registerAlias(alias, table);
                     }
-                    const joinSql = alias ? `\`${table}\` AS \`${alias}\`` : `\`${table}\``;
+                    const hintClause = this.getIndexHintClause(table, alias);
+                    const baseJoinSql = alias ? `\`${table}\` AS \`${alias}\`` : `\`${table}\``;
+                    const joinSql = hintClause ? `${baseJoinSql} ${hintClause}` : baseJoinSql;
                     const onClause = this.buildBooleanJoinedConditions(conditions, true, params);
                     sql += ` ${joinKind} JOIN ${joinSql}`;
                     if (onClause) {
