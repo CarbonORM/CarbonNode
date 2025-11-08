@@ -72,6 +72,33 @@ describe('SQL Builders - Complex SELECTs', () => {
     expect(params[0]).toBe('A%');
   });
 
+  it('serializes operator-first conditions with nested expressions', () => {
+    const config = buildParcelConfig();
+
+    const qb = new SelectQueryBuilder(config as any, {
+      [C6C.SELECT]: [Property_Units.UNIT_ID],
+      [C6C.WHERE]: {
+        [C6C.LESS_THAN]: [
+          [
+            C6C.ST_DISTANCE_SPHERE,
+            [
+              Property_Units.LOCATION,
+              [C6C.ST_POINT, [-104.9, 39.3]],
+            ],
+          ],
+          5000,
+        ],
+        [Property_Units.UNIT_ID]: [C6C.GREATER_THAN, 10],
+      },
+    } as any, false);
+
+    const { sql, params } = qb.build(Property_Units.TABLE_NAME);
+
+    expect(sql).toMatch(/\(ST_DISTANCE_SPHERE\(property_units\.location, ST_POINT\(-104\.9, 39\.3\)\)\) < \?/);
+    expect(sql).toContain('AND (property_units.unit_id) > ?');
+    expect(params).toEqual([5000, 10]);
+  });
+
   it('builds chained mixed JOINs with aliases', () => {
     const config = buildTestConfig();
 

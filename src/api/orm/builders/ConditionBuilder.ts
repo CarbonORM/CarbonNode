@@ -5,6 +5,9 @@ import {convertHexIfBinary, SqlBuilderResult} from "../utils/sqlUtils";
 import {AggregateBuilder} from "./AggregateBuilder";
 import {isDerivedTableKey} from "../queryHelpers";
 
+type ExpressionMetadata = { referencesTable: boolean; containsSubSelect: boolean };
+type SerializedExpression = ExpressionMetadata & { sql: string };
+
 export abstract class ConditionBuilder<
     G extends OrmGenerics
 > extends AggregateBuilder<G> {
@@ -40,7 +43,10 @@ export abstract class ConditionBuilder<
 
         const [alias] = identifier.split('.', 2);
         if (!(alias in this.aliasMap)) {
-            throw new Error(`Unknown table or alias '${alias}' referenced in ${context}: '${identifier}'.`);
+            const hasTable = Boolean(this.config.C6?.TABLES?.[alias]);
+            if (!hasTable) {
+                throw new Error(`Unknown table or alias '${alias}' referenced in ${context}: '${identifier}'.`);
+            }
         }
     }
 
@@ -123,6 +129,241 @@ export abstract class ConditionBuilder<
         }
     }
 
+    private isExpressionStructure(value: any): boolean {
+        if (Array.isArray(value)) {
+            if (value.length === 0) return false;
+            const [head] = value;
+            if (typeof head === 'string') {
+                if (this.OPERATORS.has(head)) return false;
+                if (head === C6C.PARAM || head === C6C.SUBSELECT) return true;
+                if (value.length === 2 && Array.isArray(value[1])) return true;
+                return false;
+            }
+            return value.some(item => this.isExpressionStructure(item));
+        }
+
+        if (value && typeof value === 'object') {
+            if (C6C.SUBSELECT in value) return true;
+            return Object.values(value).some(entry => this.isExpressionStructure(entry));
+        }
+
+        return false;
+    }
+
+    private inspectExpression(value: any): { referencesTable: boolean; containsSubSelect: boolean } {
+        if (value === null || value === undefined) {
+            return { referencesTable: false, containsSubSelect: false };
+        }
+
+        if (typeof value === 'string') {
+            if (value === C6C.NULL) {
+                return { referencesTable: false, containsSubSelect: false };
+            }
+            return {
+                referencesTable: this.isTableReference(value),
+                containsSubSelect: false
+            };
+        }
+
+        if (typeof value === 'number' || typeof value === 'boolean') {
+            return { referencesTable: false, containsSubSelect: false };
+        }
+
+        if (Array.isArray(value)) {
+            if (value.length >= 1 && typeof value[0] === 'string') {
+                const token = String(value[0]).toUpperCase();
+                if (token === C6C.SUBSELECT) {
+                    return { referencesTable: true, containsSubSelect: true };
+                }
+                if (token === C6C.PARAM) {
+                    return { referencesTable: false, containsSubSelect: false };
+                }
+            }
+
+            return value.reduce<ExpressionMetadata>((acc, entry) => {
+                const meta = this.inspectExpression(entry);
+                return {
+                    referencesTable: acc.referencesTable || meta.referencesTable,
+                    containsSubSelect: acc.containsSubSelect || meta.containsSubSelect
+                };
+            }, { referencesTable: false, containsSubSelect: false });
+        }
+
+        if (typeof value === 'object') {
+            if (value && C6C.SUBSELECT in value) {
+                return { referencesTable: true, containsSubSelect: true };
+            }
+
+            return Object.values(value || {}).reduce<ExpressionMetadata>((acc, entry) => {
+                const meta = this.inspectExpression(entry);
+                return {
+                    referencesTable: acc.referencesTable || meta.referencesTable,
+                    containsSubSelect: acc.containsSubSelect || meta.containsSubSelect
+                };
+            }, { referencesTable: false, containsSubSelect: false });
+        }
+
+        return { referencesTable: false, containsSubSelect: false };
+    }
+
+    private serializeExpression(
+        expression: any,
+        params: any[] | Record<string, any>,
+        columnContext?: string
+    ): SerializedExpression {
+        const placeholderFromValue = (val: any): string => this.addParam(params, columnContext ?? '', val);
+
+        if (expression === undefined) {
+            throw new Error('Undefined expression encountered while building conditions.');
+        }
+
+        if (expression === null) {
+            return {
+                sql: placeholderFromValue(null),
+                referencesTable: false,
+                containsSubSelect: false
+            };
+        }
+
+        if (typeof expression === 'number' || typeof expression === 'boolean') {
+            return {
+                sql: placeholderFromValue(expression),
+                referencesTable: false,
+                containsSubSelect: false
+            };
+        }
+
+        if (typeof expression === 'string') {
+            if (expression === C6C.NULL) {
+                return {
+                    sql: placeholderFromValue(null),
+                    referencesTable: false,
+                    containsSubSelect: false
+                };
+            }
+
+            if (this.isTableReference(expression)) {
+                this.assertValidIdentifier(expression, 'WHERE expression');
+                return {
+                    sql: expression,
+                    referencesTable: true,
+                    containsSubSelect: false
+                };
+            }
+
+            if (expression === '?' || /^:[A-Za-z_][A-Za-z0-9_]*$/.test(expression)) {
+                return {
+                    sql: expression,
+                    referencesTable: false,
+                    containsSubSelect: false
+                };
+            }
+
+            return {
+                sql: placeholderFromValue(expression),
+                referencesTable: false,
+                containsSubSelect: false
+            };
+        }
+
+        if (Array.isArray(expression)) {
+            if (expression.length === 0) {
+                throw new Error('Invalid empty expression array encountered in WHERE clause.');
+            }
+
+            if (expression.length === 2 && typeof expression[0] === 'string' && Array.isArray(expression[1])) {
+                return this.serializeExpression([expression[0], ...expression[1]], params, columnContext);
+            }
+
+            if (typeof expression[0] === 'string') {
+                const tokenUpper = String(expression[0]).toUpperCase();
+
+                if (tokenUpper === C6C.PARAM) {
+                    const paramVal = expression.length > 1 ? expression[1] : undefined;
+                    return {
+                        sql: placeholderFromValue(paramVal),
+                        referencesTable: false,
+                        containsSubSelect: false
+                    };
+                }
+
+                if (tokenUpper === C6C.SUBSELECT) {
+                    const builder = (this as any).buildScalarSubSelect;
+                    if (typeof builder !== 'function') {
+                        throw new Error('Scalar subselect handling requires JoinBuilder context.');
+                    }
+                    const payload = expression[1];
+                    const sql = builder.call(this, payload, params);
+                    return {
+                        sql,
+                        referencesTable: true,
+                        containsSubSelect: true
+                    };
+                }
+
+                const args = expression.slice(1);
+                const hasAlias = args.some((arg, idx) => {
+                    if (typeof arg !== 'string') return false;
+                    if (!arg) return false;
+                    if (idx === args.length - 1) return false;
+                    return arg.toUpperCase() === 'AS';
+                });
+
+                if (hasAlias) {
+                    throw new Error('Aliases are not permitted within conditional expressions.');
+                }
+
+                const aggregateField = [expression[0], ...args] as any;
+                const sql = this.buildAggregateField(aggregateField, params);
+                const meta = this.inspectExpression(aggregateField);
+                return {
+                    sql,
+                    referencesTable: meta.referencesTable,
+                    containsSubSelect: meta.containsSubSelect
+                };
+            }
+
+            const parts = expression.map(item => this.serializeExpression(item, params, columnContext));
+            const meta = parts.reduce<ExpressionMetadata>((acc, part) => ({
+                referencesTable: acc.referencesTable || part.referencesTable,
+                containsSubSelect: acc.containsSubSelect || part.containsSubSelect
+            }), { referencesTable: false, containsSubSelect: false });
+            const sql = parts.map(part => part.sql).join(', ');
+            return {
+                sql,
+                referencesTable: meta.referencesTable,
+                containsSubSelect: meta.containsSubSelect
+            };
+        }
+
+        if (expression && typeof expression === 'object') {
+            if (C6C.SUBSELECT in expression) {
+                const builder = (this as any).buildScalarSubSelect;
+                if (typeof builder !== 'function') {
+                    throw new Error('Scalar subselect handling requires JoinBuilder context.');
+                }
+                const sql = builder.call(this, expression[C6C.SUBSELECT], params);
+                return {
+                    sql,
+                    referencesTable: true,
+                    containsSubSelect: true
+                };
+            }
+
+            return {
+                sql: placeholderFromValue(expression),
+                referencesTable: false,
+                containsSubSelect: false
+            };
+        }
+
+        return {
+            sql: placeholderFromValue(expression),
+            referencesTable: false,
+            containsSubSelect: false
+        };
+    }
+
     public addParam(
         params: any[] | Record<string, any>,
         column: string,
@@ -155,147 +396,99 @@ export abstract class ConditionBuilder<
     ): string {
         const booleanOperator = andMode ? 'AND' : 'OR';
 
-        const addCondition = (column: any, op: any, value: any): string => {
-            // Normalize common variants
-            const valueNorm = (value === C6C.NULL) ? null : value;
-            const displayOp = typeof op === 'string' ? op.replace('_', ' ') : op;
+        const addCondition = (leftOperand: any, operatorRaw: any, rightOperand: any): string => {
+            const operator = typeof operatorRaw === 'string' ? operatorRaw : String(operatorRaw);
+            this.validateOperator(operator);
 
-            const extractSubSelect = (input: any): any | undefined => {
-                if (Array.isArray(input) && input.length >= 2 && input[0] === C6C.SUBSELECT) {
-                    return input[1];
+            const valueNorm = (rightOperand === C6C.NULL) ? null : rightOperand;
+            const displayOp = operator.replace('_', ' ');
+
+            const columnContext = typeof leftOperand === 'string' && leftOperand.includes('.') ? leftOperand : undefined;
+            const leftExpr = this.serializeExpression(leftOperand, params, columnContext);
+
+            if (operator === C6C.MATCH_AGAINST && Array.isArray(valueNorm)) {
+                if (!leftExpr.referencesTable) {
+                    throw new Error(`MATCH_AGAINST requires a table reference as the left operand. Column '${leftExpr.sql}' is not a valid table reference.`);
                 }
-                if (input && typeof input === 'object' && C6C.SUBSELECT in input) {
-                    return input[C6C.SUBSELECT];
-                }
-                return undefined;
-            };
 
-            const rightSubSelectPayload = extractSubSelect(valueNorm);
-            const buildSubSelect = (payload: any): string | undefined => {
-                if (!payload) return undefined;
-                const builder = (this as any).buildScalarSubSelect;
-                if (typeof builder !== 'function') {
-                    throw new Error('Scalar subselect handling requires JoinBuilder context.');
-                }
-                return builder.call(this, payload, params);
-            };
-            const rightSubSelectSql = buildSubSelect(rightSubSelectPayload);
-
-            // Support function-based expressions like [C6C.ST_DISTANCE_SPHERE, col1, col2]
-            if (
-                typeof column === 'string' &&
-                this.OPERATORS.has(column) &&
-                Array.isArray(op)
-            ) {
-                if (column === C6C.ST_DISTANCE_SPHERE) {
-                    const [col1, col2] = op;
-                    const threshold = Array.isArray(value) ? value[0] : value;
-                    return `ST_Distance_Sphere(${col1}, ${col2}) < ${this.addParam(params, '', threshold)}`;
-                }
-                if ([
-                    C6C.ST_CONTAINS,
-                    C6C.ST_INTERSECTS,
-                    C6C.ST_WITHIN,
-                    C6C.ST_CROSSES,
-                    C6C.ST_DISJOINT,
-                    C6C.ST_EQUALS,
-                    C6C.ST_OVERLAPS,
-                    C6C.ST_TOUCHES
-                ].includes(column)) {
-                    const [geom1, geom2] = op;
-                    return `${column}(${geom1}, ${geom2})`;
-                }
-            }
-
-            const leftIsCol = this.isColumnRef(column);
-            const leftIsRef = this.isTableReference(column);
-            const rightIsCol = typeof value === 'string' && this.isColumnRef(value);
-
-            if (!leftIsCol && !leftIsRef && !rightIsCol && !rightSubSelectSql) {
-                throw new Error(`Potential SQL injection detected: '${column} ${op} ${value}'`);
-            }
-
-            this.validateOperator(op);
-
-            if (op === C6C.MATCH_AGAINST && Array.isArray(value)) {
-                const [search, mode] = value;
-                const paramName = this.useNamedParams ? `param${Object.keys(params).length}` : null;
-                if (this.useNamedParams) {
-                    params[paramName!] = search;
-                } else {
-                    params.push(search);
-                }
+                const [search, mode] = valueNorm;
+                const placeholder = this.addParam(params, '', search);
 
                 let againstClause: string;
 
                 switch ((mode || '').toUpperCase()) {
                     case 'BOOLEAN':
-                        againstClause = this.useNamedParams ? `AGAINST(:${paramName} IN BOOLEAN MODE)` : `AGAINST(? IN BOOLEAN MODE)`;
+                        againstClause = `AGAINST(${placeholder} IN BOOLEAN MODE)`;
                         break;
                     case 'WITH QUERY EXPANSION':
-                        againstClause = this.useNamedParams ? `AGAINST(:${paramName} WITH QUERY EXPANSION)` : `AGAINST(? WITH QUERY EXPANSION)`;
+                        againstClause = `AGAINST(${placeholder} WITH QUERY EXPANSION)`;
                         break;
-                    default: // NATURAL or undefined
-                        againstClause = this.useNamedParams ? `AGAINST(:${paramName})` : `AGAINST(?)`;
+                    default:
+                        againstClause = `AGAINST(${placeholder})`;
                         break;
                 }
 
-                if (!leftIsCol) {
-                    throw new Error(`MATCH_AGAINST requires a table reference as the left operand. Column '${column}' is not a valid table reference.`);
-                }
-                const matchClause = `(MATCH(${column}) ${againstClause})`;
+                const matchClause = `(MATCH(${leftExpr.sql}) ${againstClause})`;
                 this.config.verbose && console.log(`[MATCH_AGAINST] ${matchClause}`);
                 return matchClause;
             }
 
-            if ((op === C6C.IN || op === C6C.NOT_IN) && Array.isArray(value)) {
-                if (rightSubSelectSql) {
-                    if (!leftIsRef) {
-                        throw new Error(`IN operator requires a table reference as the left operand. Column '${column}' is not a valid table reference.`);
-                    }
-                    const normalized = op.replace('_', ' ');
-                    return `( ${column} ${normalized} ${rightSubSelectSql} )`;
-                }
-                const placeholders = value.map(v =>
-                    this.isColumnRef(v) ? v : this.addParam(params, column, v)
-                ).join(', ');
-                const normalized = op.replace('_', ' ');
-                if (!leftIsRef) {
-                    throw new Error(`IN operator requires a table reference as the left operand. Column '${column}' is not a valid table reference.`);
-                }
-                return `( ${column} ${normalized} (${placeholders}) )`;
-            }
-
-            if (op === C6C.BETWEEN || op === 'NOT BETWEEN') {
-                if (!Array.isArray(value) || value.length !== 2) {
+            if (operator === C6C.BETWEEN || operator === 'NOT BETWEEN') {
+                if (!Array.isArray(valueNorm) || valueNorm.length !== 2) {
                     throw new Error(`BETWEEN operator requires an array of two values`);
                 }
-                const [start, end] = value;
-                if (!leftIsRef) {
-                    throw new Error(`BETWEEN operator requires a table reference as the left operand. Column '${column}' is not a valid table reference.`);
+
+                if (!leftExpr.referencesTable) {
+                    throw new Error(`BETWEEN operator requires a table reference as the left operand. Column '${leftExpr.sql}' is not a valid table reference.`);
                 }
-                return `(${column}) ${op.replace('_', ' ')} ${this.addParam(params, column, start)} AND ${this.addParam(params, column, end)}`;
+
+                const [start, end] = valueNorm;
+                const startExpr = this.serializeExpression(start, params, columnContext);
+                const endExpr = this.serializeExpression(end, params, columnContext);
+
+                return `(${leftExpr.sql}) ${displayOp} ${startExpr.sql} AND ${endExpr.sql}`;
             }
 
-            const rightIsRef: boolean = rightSubSelectSql ? false : this.isTableReference(value);
+            if (operator === C6C.IN || operator === C6C.NOT_IN || operator === 'NOT IN') {
+                if (!leftExpr.referencesTable) {
+                    throw new Error(`IN operator requires a table reference as the left operand. Column '${leftExpr.sql}' is not a valid table reference.`);
+                }
 
-            if (leftIsRef && rightIsRef) {
-                return `(${column}) ${displayOp} ${value}`;
+                const normalized = displayOp;
+
+                const valueIsExpression = this.isExpressionStructure(valueNorm);
+
+                if (valueIsExpression) {
+                    const rightExpr = this.serializeExpression(valueNorm, params, columnContext);
+                    if (!rightExpr.referencesTable && !rightExpr.containsSubSelect) {
+                        throw new Error(`IN operator expects a subselect or table reference on the right operand. Received '${rightExpr.sql}'.`);
+                    }
+                    return `( ${leftExpr.sql} ${normalized} ${rightExpr.sql} )`;
+                }
+
+                if (Array.isArray(valueNorm)) {
+                    const list = valueNorm.map(item => this.serializeExpression(item, params, columnContext).sql).join(', ');
+                    return `( ${leftExpr.sql} ${normalized} (${list}) )`;
+                }
+
+                const rightExpr = this.serializeExpression(valueNorm, params, columnContext);
+                if (!rightExpr.referencesTable && !rightExpr.containsSubSelect) {
+                    throw new Error(`IN operator expects a collection, subselect, or table reference on the right operand. Received '${rightExpr.sql}'.`);
+                }
+                return `( ${leftExpr.sql} ${normalized} ${rightExpr.sql} )`;
             }
 
-            if (leftIsRef && rightSubSelectSql) {
-                return `(${column}) ${displayOp} ${rightSubSelectSql}`;
+            const rightExpr = this.serializeExpression(valueNorm, params, columnContext);
+
+            if (!leftExpr.referencesTable && !rightExpr.referencesTable && !rightExpr.containsSubSelect) {
+                throw new Error(`Potential SQL injection detected: '${leftExpr.sql} ${displayOp} ${rightExpr.sql}'`);
             }
 
-            if (leftIsRef && !rightIsRef) {
-                return `(${column}) ${displayOp} ${this.addParam(params, column, valueNorm)}`;
+            if (leftExpr.referencesTable && rightExpr.referencesTable) {
+                return `(${leftExpr.sql}) ${displayOp} ${rightExpr.sql}`;
             }
 
-            if (rightIsRef) {
-                return `(${this.addParam(params, column, column)}) ${displayOp} ${value}`;
-            }
-
-            throw new Error(`Neither operand appears to be a table reference (${column}) or (${value})`);
+            return `(${leftExpr.sql}) ${displayOp} ${rightExpr.sql}`;
 
         };
 
@@ -308,6 +501,14 @@ export abstract class ConditionBuilder<
             const numeric = entries.filter(([k]) => !isNaN(Number(k)));
 
             const processEntry = (k: string, v: any) => {
+                if (this.OPERATORS.has(k)) {
+                    if (!Array.isArray(v) || v.length !== 2) {
+                        throw new Error(`Operator '${k}' requires a two-element array [left, right].`);
+                    }
+                    const [left, right] = v;
+                    subParts.push(addCondition(left, k, right));
+                    return;
+                }
                 if (typeof v === 'object' && v !== null && Object.keys(v).length === 1) {
                     const [op, val] = Object.entries(v)[0];
                     subParts.push(addCondition(k, op, val));
