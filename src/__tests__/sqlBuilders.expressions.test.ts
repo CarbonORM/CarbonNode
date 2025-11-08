@@ -106,6 +106,25 @@ describe('Explicit SQL expression grammar', () => {
     expect(() => qb.build(Property_Units.TABLE_NAME)).toThrowError(/Potential SQL injection detected/);
   });
 
+  it('rejects raw function expressions containing SQL keywords', () => {
+    const config = buildParcelConfig();
+
+    const qb = new SelectQueryBuilder(config as any, {
+      [C6C.SELECT]: [Property_Units.PARCEL_ID],
+      [C6C.WHERE]: {
+        0: [
+          [
+            "ST_Distance_Sphere(property_units.location, (SELECT password FROM mysql.user LIMIT 1))",
+            C6C.LESS_THAN,
+            1000,
+          ],
+        ],
+      },
+    } as any, false);
+
+    expect(() => qb.build(Property_Units.TABLE_NAME)).toThrowError(/Potential SQL injection detected/);
+  });
+
   it('supports explicit AND groupings composed of nested OR clauses', () => {
     const config = buildParcelConfig();
 
