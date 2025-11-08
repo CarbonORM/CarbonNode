@@ -64,6 +64,48 @@ describe('Explicit SQL expression grammar', () => {
     expect(params).toEqual([5000, 10000]);
   });
 
+  it('treats safe raw function expressions as SQL expressions', () => {
+    const config = buildParcelConfig();
+
+    const qb = new SelectQueryBuilder(config as any, {
+      [C6C.SELECT]: [Property_Units.PARCEL_ID],
+      [C6C.WHERE]: {
+        0: [
+          [
+            "ST_Distance_Sphere(property_units.location, ST_GeomFromText('POINT(39.4972468 -105.0403593)', 4326))",
+            C6C.LESS_THAN_OR_EQUAL_TO,
+            5000,
+          ],
+        ],
+      },
+    } as any, false);
+
+    const { sql, params } = qb.build(Property_Units.TABLE_NAME);
+    expect(sql).toMatch(
+      /ST_Distance_Sphere\(property_units\.location, ST_GeomFromText\('POINT\(39\.4972468 -105\.0403593\)', 4326\)\) <= \?/
+    );
+    expect(params.slice(-1)[0]).toBe(5000);
+  });
+
+  it('rejects raw function expressions containing unsafe tokens', () => {
+    const config = buildParcelConfig();
+
+    const qb = new SelectQueryBuilder(config as any, {
+      [C6C.SELECT]: [Property_Units.PARCEL_ID],
+      [C6C.WHERE]: {
+        0: [
+          [
+            "ST_Distance_Sphere(property_units.location, ST_GeomFromText('POINT(39.4972468 -105.0403593)', 4326)); DROP TABLE users",
+            C6C.LESS_THAN,
+            1000,
+          ],
+        ],
+      },
+    } as any, false);
+
+    expect(() => qb.build(Property_Units.TABLE_NAME)).toThrowError(/Potential SQL injection detected/);
+  });
+
   it('supports explicit AND groupings composed of nested OR clauses', () => {
     const config = buildParcelConfig();
 
