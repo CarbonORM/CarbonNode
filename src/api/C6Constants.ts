@@ -1,6 +1,4 @@
-
 export const C6Constants = {
-
     // try to 1=1 match the Rest abstract class
     ADDDATE: 'ADDDATE',
     ADDTIME: 'ADDTIME',
@@ -34,11 +32,13 @@ export const C6Constants = {
     DESC: 'DESC',
     DISTINCT: 'DISTINCT',
 
+    EXISTS: 'EXISTS',
     EXTRACT: 'EXTRACT',
     EQUAL: '=',
     EQUAL_NULL_SAFE: '<=>',
 
     FALSE: 'FALSE',
+    FORCE: 'FORCE',
     FULL_OUTER: 'FULL_OUTER',
     FROM_DAYS: 'FROM_DAYS',
     FROM_UNIXTIME: 'FROM_UNIXTIME',
@@ -57,6 +57,7 @@ export const C6Constants = {
     HOUR_MINUTE: 'HOUR_MINUTE',
 
     IN: 'IN',
+    INDEX: 'INDEX',
     IS: 'IS',
     IS_NOT: 'IS_NOT',
     INNER: 'INNER',
@@ -77,6 +78,7 @@ export const C6Constants = {
     MAKEDATE: 'MAKEDATE',
     MAKETIME: 'MAKETIME',
     MATCH_AGAINST: 'MATCH_AGAINST',
+    MBRCONTAINS: 'MBRContains',
     MONTHNAME: 'MONTHNAME',
     MICROSECOND: 'MICROSECOND',
     MINUTE: 'MINUTE',
@@ -97,6 +99,8 @@ export const C6Constants = {
 
     PAGE: 'PAGE',
     PAGINATION: 'PAGINATION',
+    POLYGON: 'POLYGON',
+    POINT: 'POINT',
     RIGHT_OUTER: 'RIGHT_OUTER',
 
     SECOND: 'SECOND',
