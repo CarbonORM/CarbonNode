@@ -16,6 +16,7 @@ export class SelectQueryBuilder<G extends OrmGenerics> extends PaginationBuilder
         // reset any previously collected SELECT aliases (from AggregateBuilder)
         // @ts-ignore
         if (this.selectAliases && this.selectAliases.clear) this.selectAliases.clear();
+        this.resetIndexHints();
         const args = this.request;
         this.initAlias(table, args.JOIN);
         const params = this.useNamedParams ? {} : [];
@@ -25,6 +26,10 @@ export class SelectQueryBuilder<G extends OrmGenerics> extends PaginationBuilder
             .join(', ');
 
         let sql = `SELECT ${selectFields} FROM \`${table}\``;
+        const baseIndexHint = this.getIndexHintClause(table);
+        if (baseIndexHint) {
+            sql += ` ${baseIndexHint}`;
+        }
 
         if (args.JOIN) {
             sql += this.buildJoinClauses(args.JOIN, params);

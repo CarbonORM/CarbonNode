@@ -9,6 +9,7 @@ const Property_Units = {
   UNIT_ID: 'property_units.unit_id',
   LOCATION: 'property_units.location',
   PARCEL_ID: 'property_units.parcel_id',
+  COUNTY_ID: 'property_units.county_id',
 } as const;
 
 const Parcel_Sales = {
@@ -17,6 +18,13 @@ const Parcel_Sales = {
   SALE_PRICE: 'parcel_sales.sale_price',
   SALE_TYPE: 'parcel_sales.sale_type',
   SALE_DATE: 'parcel_sales.sale_date',
+} as const;
+
+const Parcel_Building_Details = {
+  TABLE_NAME: 'parcel_building_details',
+  PARCEL_ID: 'parcel_building_details.parcel_id',
+  YEAR_BUILT: 'parcel_building_details.year_built',
+  GLA: 'parcel_building_details.gla',
 } as const;
 
 /**
@@ -478,5 +486,82 @@ describe('SQL Builders - Complex SELECTs', () => {
     expect(sql).toContain('SELECT property_units.unit_id, (SELECT COUNT(parcel_sales.parcel_id)');
     expect(sql).toContain('WHERE ( property_units.unit_id IN (SELECT parcel_sales.parcel_id');
     expect(params).toContain(5000);
+  });
+
+  it('serializes spatial filtering with FORCE INDEX and correlated EXISTS subqueries', () => {
+    const config = buildParcelConfig();
+    const polygon = 'POLYGON((39.5185659 -105.0142915, 39.5401859 -105.0142915, 39.5401859 -104.9862115, 39.5185659 -104.9862115, 39.5185659 -105.0142915))';
+    const point = [C6C.ST_GEOMFROMTEXT, ['POINT(39.5293759 -105.0002515)', 4326]];
+    const unitId = Buffer.from('11F0615D24861BE1ADD40AFFCF6A1F27', 'hex');
+    const countyId = Buffer.from('11F012CFF561A29DBB0E0AFFF25F1747', 'hex');
+
+    const qb = new SelectQueryBuilder(config as any, {
+      [C6C.SELECT]: ['property_units.*'],
+      [C6C.INDEX_HINTS]: {
+        [C6C.FORCE_INDEX]: ['idx_county_id', 'idx_property_units_location'],
+      },
+      [C6C.WHERE]: {
+        [Property_Units.UNIT_ID]: [C6C.NOT_EQUAL, unitId],
+        [Property_Units.COUNTY_ID]: countyId,
+        [C6C.MBRCONTAINS]: [
+          [C6C.ST_GEOMFROMTEXT, [polygon, 4326]],
+          Property_Units.LOCATION,
+        ],
+        [C6C.LESS_THAN_OR_EQUAL_TO]: [
+          [C6C.ST_DISTANCE_SPHERE, Property_Units.LOCATION, point],
+          1200,
+        ],
+        [C6C.EXISTS]: [
+          [
+            Property_Units.PARCEL_ID,
+            {
+              [C6C.SUBSELECT]: {
+                [C6C.SELECT]: [Parcel_Building_Details.PARCEL_ID],
+                [C6C.FROM]: Parcel_Building_Details.TABLE_NAME,
+                [C6C.WHERE]: {
+                  [Parcel_Building_Details.YEAR_BUILT]: [C6C.BETWEEN, [1988, 2008]],
+                  [Parcel_Building_Details.GLA]: [C6C.BETWEEN, [1876.5, 3127.5]],
+                },
+              },
+            },
+          ],
+          [
+            Property_Units.PARCEL_ID,
+            {
+              [C6C.SUBSELECT]: {
+                [C6C.SELECT]: [Parcel_Sales.PARCEL_ID],
+                [C6C.FROM]: Parcel_Sales.TABLE_NAME,
+                [C6C.WHERE]: {
+                  [Parcel_Sales.SALE_DATE]: [C6C.BETWEEN, ['2023-01-01', '2024-06-30']],
+                  [Parcel_Sales.SALE_PRICE]: [C6C.NOT_EQUAL, 0],
+                },
+              },
+            },
+          ],
+        ],
+      },
+      [C6C.PAGINATION]: {
+        [C6C.LIMIT]: 100,
+        [C6C.ORDER]: {
+          [C6C.ST_DISTANCE_SPHERE]: [Property_Units.LOCATION, point],
+        },
+      },
+    } as any, false);
+
+    const { sql, params } = qb.build(Property_Units.TABLE_NAME);
+
+    expect(sql).toContain('FORCE INDEX (`idx_county_id`, `idx_property_units_location`)');
+    expect(sql).toMatch(/MBRCONTAINS\(ST_GEOMFROMTEXT\('POLYGON\(\(39\.5185659 -105\.0142915, 39\.5401859 -105\.0142915, 39\.5401859 -104\.9862115, 39\.5185659 -104\.9862115, 39\.5185659 -105\.0142915\)\)', 4326\), property_units\.location\)/);
+    expect(sql).toMatch(/ST_DISTANCE_SPHERE\(property_units\.location, ST_GEOMFROMTEXT\('POINT\(39\.5293759 -105\.0002515\)', 4326\)\) <= \?/);
+    expect(sql).toMatch(/\(parcel_building_details\.parcel_id\) = property_units\.parcel_id/);
+    expect(sql).toMatch(/\(parcel_sales\.parcel_id\) = property_units\.parcel_id/);
+    expect(sql).toMatch(/ORDER BY ST[_]Distance[_]Sphere\(property_units\.location, ST_GEOMFROMTEXT\('POINT\(39\.5293759 -105\.0002515\)', 4326\)\)/i);
+
+    expect(params).toHaveLength(10);
+    expect(params[0]).toEqual(unitId);
+    expect(params[1]).toEqual(countyId);
+    expect(params).toContain(1200);
+    expect(params.slice(3, 7)).toEqual([1988, 2008, 1876.5, 3127.5]);
+    expect(params.slice(7)).toEqual(['2023-01-01', '2024-06-30', 0]);
   });
 });

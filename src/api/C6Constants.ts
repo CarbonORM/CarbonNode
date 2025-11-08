@@ -8,6 +8,8 @@ export const C6Constants = {
 
     BETWEEN: 'BETWEEN',
 
+    EXISTS: 'EXISTS',
+
     CONCAT: 'CONCAT',
     CONVERT_TZ: 'CONVERT_TZ',
     COUNT: 'COUNT',
@@ -75,6 +77,8 @@ export const C6Constants = {
     LOCALTIME: 'LOCALTIME',
     LOCALTIMESTAMP: 'LOCALTIMESTAMP',
 
+    MBRCONTAINS: 'MBRContains',
+
     MAKEDATE: 'MAKEDATE',
     MAKETIME: 'MAKETIME',
     MATCH_AGAINST: 'MATCH_AGAINST',
@@ -96,6 +100,12 @@ export const C6Constants = {
 
     ORDER: 'ORDER',
     OR: 'OR',
+
+    INDEX_HINTS: 'INDEX_HINTS',
+
+    FORCE_INDEX: 'FORCE INDEX',
+    USE_INDEX: 'USE INDEX',
+    IGNORE_INDEX: 'IGNORE INDEX',
 
     PAGE: 'PAGE',
     PAGINATION: 'PAGINATION',

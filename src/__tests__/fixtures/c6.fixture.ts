@@ -135,6 +135,7 @@ export function buildParcelConfig() {
     'property_units.unit_id': 'unit_id',
     'property_units.location': 'location',
     'property_units.parcel_id': 'parcel_id',
+    'property_units.county_id': 'county_id',
   } as const;
 
   const parcelSalesCols = {
@@ -146,6 +147,8 @@ export function buildParcelConfig() {
 
   const parcelBuildingCols = {
     'parcel_building_details.parcel_id': 'parcel_id',
+    'parcel_building_details.year_built': 'year_built',
+    'parcel_building_details.gla': 'gla',
   } as const;
 
   const C6 = {
