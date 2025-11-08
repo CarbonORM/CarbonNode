@@ -214,6 +214,25 @@ export abstract class ConditionBuilder<
             return false;
         }
 
+        const upper = trimmed.toUpperCase();
+        const forbiddenKeywords = [
+            'SELECT',
+            'INSERT',
+            'UPDATE',
+            'DELETE',
+            'DROP',
+            'ALTER',
+            'CREATE',
+            'REPLACE',
+            'TRUNCATE',
+            'UNION',
+            'WITH',
+        ];
+
+        if (forbiddenKeywords.some(keyword => upper.includes(keyword))) {
+            return false;
+        }
+
         let depth = 0;
         for (const char of trimmed) {
             if (char === '(') {
