@@ -8,8 +8,6 @@ export const C6Constants = {
 
     BETWEEN: 'BETWEEN',
 
-    EXISTS: 'EXISTS',
-
     CONCAT: 'CONCAT',
     CONVERT_TZ: 'CONVERT_TZ',
     COUNT: 'COUNT',
@@ -76,8 +74,6 @@ export const C6Constants = {
     LIMIT: 'LIMIT',
     LOCALTIME: 'LOCALTIME',
     LOCALTIMESTAMP: 'LOCALTIMESTAMP',
-
-    MBRCONTAINS: 'MBRContains',
 
     MAKEDATE: 'MAKEDATE',
     MAKETIME: 'MAKETIME',
