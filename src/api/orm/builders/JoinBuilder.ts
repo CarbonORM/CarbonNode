@@ -14,19 +14,22 @@ export abstract class JoinBuilder<G extends OrmGenerics> extends ConditionBuilde
     buildJoinClauses(joinArgs: any, params: any[] | Record<string, any>): string {
         let sql = '';
 
-        for (const joinType in joinArgs) {
-            const joinKind = joinType.replace('_', ' ').toUpperCase();
+        const joinTypeEntries: Array<[string, any]> = joinArgs instanceof Map
+            ? Array.from(joinArgs.entries()).map(([key, value]) => [String(key), value])
+            : Object.keys(joinArgs).map(key => [key, (joinArgs as Record<string, any>)[key]]);
+
+        for (const [joinTypeRaw, joinSection] of joinTypeEntries) {
+            const joinKind = joinTypeRaw.replace('_', ' ').toUpperCase();
             const entries: Array<[any, any]> = [];
-            const joinSection = joinArgs[joinType];
 
             if (joinSection instanceof Map) {
                 joinSection.forEach((value, key) => {
                     entries.push([key, value]);
                 });
             } else {
-                for (const raw in joinSection) {
+                Object.keys(joinSection).forEach(raw => {
                     entries.push([raw, joinSection[raw]]);
-                }
+                });
             }
 
             for (const [rawKey, conditions] of entries) {

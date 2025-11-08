@@ -6,6 +6,7 @@ export const C6Constants = {
     ADDTIME: 'ADDTIME',
     AS: 'AS',
     ASC: 'ASC',
+    AND: 'AND',
 
     BETWEEN: 'BETWEEN',
 
@@ -92,6 +93,7 @@ export const C6Constants = {
     NULL: 'NULL',
 
     ORDER: 'ORDER',
+    OR: 'OR',
 
     PAGE: 'PAGE',
     PAGINATION: 'PAGINATION',
