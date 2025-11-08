@@ -545,8 +545,18 @@ export abstract class ConditionBuilder<
         if (Array.isArray(node)) {
             if (node.length === 0) return '';
 
+            // Support both [left, operator, right] and [operator, left, right]
             if (node.length === 3 && typeof node[0] === 'string' && typeof node[1] === 'string') {
-                return this.buildOperatorExpression(node[1], [node[0], node[2]], params, node[0]);
+                const opAsSecond = this.isOperator(node[1]);
+                const opAsFirst = this.isOperator(node[0]);
+
+                if (opAsSecond) {
+                    return this.buildOperatorExpression(node[1], [node[0], node[2]], params, node[0]);
+                }
+                if (opAsFirst) {
+                    return this.buildOperatorExpression(node[0], [node[1], node[2]], params, node[1]);
+                }
+                // fall-through to treat as grouped expressions
             }
 
             const parts = node

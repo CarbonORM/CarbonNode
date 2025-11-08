@@ -64,6 +64,36 @@ describe('Explicit SQL expression grammar', () => {
     expect(params).toEqual([5000, 10000]);
   });
 
+  it('supports operator-first 3-tuple conditions in WHERE', () => {
+    const config = buildParcelConfig();
+
+    const qb = new SelectQueryBuilder(config as any, {
+      [C6C.SELECT]: [Property_Units.PARCEL_ID],
+      [C6C.WHERE]: {
+        0: [[C6C.LESS_THAN_OR_EQUAL_TO, Property_Units.PARCEL_ID, 200]],
+      },
+    } as any, false);
+
+    const { sql, params } = qb.build(Property_Units.TABLE_NAME);
+    expect(sql).toMatch(/\(property_units\.parcel_id\) <= \?/);
+    expect(params.slice(-1)[0]).toBe(200);
+  });
+
+  it('supports operator-first BETWEEN 3-tuple in WHERE', () => {
+    const config = buildParcelConfig();
+
+    const qb = new SelectQueryBuilder(config as any, {
+      [C6C.SELECT]: [Property_Units.PARCEL_ID],
+      [C6C.WHERE]: {
+        0: [[C6C.BETWEEN, Parcel_Sales.SALE_DATE, ['2021-01-01', '2021-12-31']]],
+      },
+    } as any, false);
+
+    const { sql, params } = qb.build(Property_Units.TABLE_NAME);
+    expect(sql).toMatch(/\(parcel_sales\.sale_date\) BETWEEN \? AND \?/);
+    expect(params.slice(-2)).toEqual(['2021-01-01', '2021-12-31']);
+  });
+
   it('treats safe raw function expressions as SQL expressions', () => {
     const config = buildParcelConfig();
 
@@ -160,4 +190,3 @@ describe('Explicit SQL expression grammar', () => {
     expect(secondJoin).toBeGreaterThan(firstJoin);
   });
 });
-
