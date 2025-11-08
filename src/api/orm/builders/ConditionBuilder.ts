@@ -70,24 +70,44 @@ export abstract class ConditionBuilder<
         throw new Error("Method not implemented.");
     }
 
-    private readonly OPERATORS = new Set([
-        C6C.EQUAL, C6C.NOT_EQUAL, C6C.LESS_THAN, C6C.LESS_THAN_OR_EQUAL_TO,
-        C6C.GREATER_THAN, C6C.GREATER_THAN_OR_EQUAL_TO,
-        C6C.LIKE, C6C.NOT_LIKE,
-        C6C.IN, C6C.NOT_IN, 'NOT IN',
-        C6C.IS, C6C.IS_NOT,
-        C6C.BETWEEN, 'NOT BETWEEN',
-        C6C.MATCH_AGAINST,
-        C6C.ST_DISTANCE_SPHERE,
-        // spatial predicates
-        C6C.ST_CONTAINS,
-        C6C.ST_INTERSECTS,
-        C6C.ST_WITHIN,
-        C6C.ST_CROSSES,
-        C6C.ST_DISJOINT,
-        C6C.ST_EQUALS,
-        C6C.ST_OVERLAPS,
-        C6C.ST_TOUCHES
+    private readonly BOOLEAN_OPERATORS = new Map<string, 'AND' | 'OR'>([
+        [C6C.AND, 'AND'],
+        ['AND', 'AND'],
+        [C6C.OR, 'OR'],
+        ['OR', 'OR'],
+    ]);
+
+    private readonly OPERATOR_ALIASES = new Map<string, string>([
+        [C6C.EQUAL, C6C.EQUAL],
+        ['=', C6C.EQUAL],
+        [C6C.EQUAL_NULL_SAFE, C6C.EQUAL_NULL_SAFE],
+        ['<=>', C6C.EQUAL_NULL_SAFE],
+        [C6C.NOT_EQUAL, C6C.NOT_EQUAL],
+        ['<>', C6C.NOT_EQUAL],
+        [C6C.LESS_THAN, C6C.LESS_THAN],
+        ['<', C6C.LESS_THAN],
+        [C6C.LESS_THAN_OR_EQUAL_TO, C6C.LESS_THAN_OR_EQUAL_TO],
+        ['<=', C6C.LESS_THAN_OR_EQUAL_TO],
+        [C6C.GREATER_THAN, C6C.GREATER_THAN],
+        ['>', C6C.GREATER_THAN],
+        [C6C.GREATER_THAN_OR_EQUAL_TO, C6C.GREATER_THAN_OR_EQUAL_TO],
+        ['>=', C6C.GREATER_THAN_OR_EQUAL_TO],
+        [C6C.LIKE, C6C.LIKE],
+        ['LIKE', C6C.LIKE],
+        [C6C.NOT_LIKE, 'NOT LIKE'],
+        ['NOT LIKE', 'NOT LIKE'],
+        [C6C.IN, C6C.IN],
+        ['IN', C6C.IN],
+        [C6C.NOT_IN, 'NOT IN'],
+        ['NOT IN', 'NOT IN'],
+        [C6C.IS, C6C.IS],
+        ['IS', C6C.IS],
+        [C6C.IS_NOT, 'IS NOT'],
+        ['IS NOT', 'IS NOT'],
+        [C6C.BETWEEN, C6C.BETWEEN],
+        ['BETWEEN', C6C.BETWEEN],
+        ['NOT BETWEEN', 'NOT BETWEEN'],
+        [C6C.MATCH_AGAINST, C6C.MATCH_AGAINST],
     ]);
 
     private isTableReference(val: any): boolean {
@@ -117,12 +137,6 @@ export abstract class ConditionBuilder<
         );
     }
 
-    private validateOperator(op: string) {
-        if (!this.OPERATORS.has(op)) {
-            throw new Error(`Invalid or unsupported SQL operator detected: '${op}'`);
-        }
-    }
-
     public addParam(
         params: any[] | Record<string, any>,
         column: string,
@@ -148,260 +162,459 @@ export abstract class ConditionBuilder<
         }
     }
 
+    private normalizeOperatorKey(op: string): string | undefined {
+        if (typeof op !== 'string') return undefined;
+        return this.OPERATOR_ALIASES.get(op);
+    }
+
+    private formatOperator(op: string): string {
+        const normalized = this.normalizeOperatorKey(op);
+        if (!normalized) {
+            throw new Error(`Invalid or unsupported SQL operator detected: '${op}'`);
+        }
+
+        switch (normalized) {
+            case 'NOT LIKE':
+            case 'NOT IN':
+            case 'IS NOT':
+            case 'NOT BETWEEN':
+                return normalized;
+            case C6C.MATCH_AGAINST:
+                return C6C.MATCH_AGAINST;
+            default:
+                return normalized;
+        }
+    }
+
+    private isOperator(op: string): boolean {
+        return !!this.normalizeOperatorKey(op);
+    }
+
+    private ensureWrapped(expression: string): string {
+        const trimmed = expression.trim();
+        if (!trimmed) return trimmed;
+        if (trimmed.startsWith('(') && trimmed.endsWith(')')) {
+            return trimmed;
+        }
+        return `(${trimmed})`;
+    }
+
+    private joinBooleanParts(parts: string[], operator: 'AND' | 'OR'): string {
+        if (parts.length === 0) return '';
+        if (parts.length === 1) {
+            return parts[0];
+        }
+
+        return parts
+            .map(part => {
+                const trimmed = part.trim();
+                const upper = trimmed.toUpperCase();
+                const containsAnd = upper.includes(' AND ');
+                const containsOr = upper.includes(' OR ');
+                const needsWrap =
+                    (operator === 'AND' && containsOr) ||
+                    (operator === 'OR' && containsAnd);
+                return needsWrap ? `(${trimmed})` : trimmed;
+            })
+            .join(` ${operator} `);
+    }
+
+    private normalizeFunctionField(field: any, params: any[] | Record<string, any>): any {
+        if (field instanceof Map) {
+            field = Object.fromEntries(field);
+        }
+
+        if (Array.isArray(field)) {
+            if (field.length === 0) return field;
+            const [fn, ...args] = field;
+            const normalizedArgs = args.map(arg => this.normalizeFunctionField(arg, params));
+            return [fn, ...normalizedArgs];
+        }
+
+        if (field && typeof field === 'object') {
+            if (C6C.SUBSELECT in field) {
+                const builder = (this as any).buildScalarSubSelect;
+                if (typeof builder !== 'function') {
+                    throw new Error('Scalar subselect handling requires JoinBuilder context.');
+                }
+                return builder.call(this, field[C6C.SUBSELECT], params);
+            }
+
+            const entries = Object.entries(field);
+            if (entries.length === 1) {
+                const [key, value] = entries[0];
+                if (this.isOperator(key)) {
+                    return this.buildOperatorExpression(key, value, params);
+                }
+                return this.buildFunctionCall(key, value, params);
+            }
+        }
+
+        return field;
+    }
+
+    private buildFunctionCall(fn: string, value: any, params: any[] | Record<string, any>): string {
+        const args = Array.isArray(value) ? value : [value];
+        const normalized = this.normalizeFunctionField([fn, ...args], params);
+        return this.buildAggregateField(normalized, params);
+    }
+
+    private serializeOperand(
+        operand: any,
+        params: any[] | Record<string, any>,
+        contextColumn?: string
+    ): { sql: string; isReference: boolean; isExpression: boolean; isSubSelect: boolean } {
+        const asParam = (val: any): string => this.addParam(params, contextColumn ?? '', val);
+
+        if (operand === C6C.NULL) {
+            operand = null;
+        }
+
+        if (operand === null || typeof operand === 'number' || typeof operand === 'boolean') {
+            return { sql: asParam(operand), isReference: false, isExpression: false, isSubSelect: false };
+        }
+
+        if (typeof operand === 'string') {
+            if (this.isTableReference(operand) || this.isColumnRef(operand)) {
+                return { sql: operand, isReference: true, isExpression: false, isSubSelect: false };
+            }
+            return { sql: asParam(operand), isReference: false, isExpression: false, isSubSelect: false };
+        }
+
+        if (Array.isArray(operand)) {
+            const normalized = this.normalizeFunctionField(operand, params);
+            const sql = this.buildAggregateField(normalized, params);
+            return { sql, isReference: false, isExpression: true, isSubSelect: false };
+        }
+
+        if (operand instanceof Map) {
+            operand = Object.fromEntries(operand);
+        }
+
+        if (typeof operand === 'object' && operand !== null) {
+            if (C6C.SUBSELECT in operand) {
+                const builder = (this as any).buildScalarSubSelect;
+                if (typeof builder !== 'function') {
+                    throw new Error('Scalar subselect handling requires JoinBuilder context.');
+                }
+                const subSql = builder.call(this, operand[C6C.SUBSELECT], params);
+                return { sql: subSql, isReference: false, isExpression: true, isSubSelect: true };
+            }
+
+            const entries = Object.entries(operand);
+            if (entries.length === 1) {
+                const [key, value] = entries[0];
+
+                if (this.isOperator(key)) {
+                    const sql = this.buildOperatorExpression(key, value, params);
+                    return { sql: this.ensureWrapped(sql), isReference: false, isExpression: true, isSubSelect: false };
+                }
+
+                if (this.BOOLEAN_OPERATORS.has(key)) {
+                    const sql = this.buildBooleanExpression({ [key]: value }, params, 'AND');
+                    return { sql: this.ensureWrapped(sql), isReference: false, isExpression: true, isSubSelect: false };
+                }
+
+                const sql = this.buildFunctionCall(key, value, params);
+                return { sql, isReference: false, isExpression: true, isSubSelect: false };
+            }
+        }
+
+        throw new Error('Unsupported operand type in SQL expression.');
+    }
+
+    private buildOperatorExpression(
+        op: string,
+        rawOperands: any,
+        params: any[] | Record<string, any>,
+        contextColumn?: string
+    ): string {
+        const operator = this.formatOperator(op);
+
+        if (operator === C6C.MATCH_AGAINST) {
+            if (!Array.isArray(rawOperands) || rawOperands.length !== 2) {
+                throw new Error('MATCH_AGAINST requires an array of two operands.');
+            }
+            const [left, right] = rawOperands;
+            const leftInfo = this.serializeOperand(left, params, contextColumn);
+            if (!leftInfo.isReference) {
+                throw new Error('MATCH_AGAINST requires the left operand to be a table reference.');
+            }
+
+            if (!Array.isArray(right) || right.length === 0) {
+                throw new Error('MATCH_AGAINST expects an array [search, mode?].');
+            }
+
+            const [search, mode] = right;
+            const placeholder = this.addParam(params, leftInfo.sql, search);
+            let againstClause: string;
+            switch (typeof mode === 'string' ? mode.toUpperCase() : '') {
+                case 'BOOLEAN':
+                    againstClause = `AGAINST(${placeholder} IN BOOLEAN MODE)`;
+                    break;
+                case 'WITH QUERY EXPANSION':
+                    againstClause = `AGAINST(${placeholder} WITH QUERY EXPANSION)`;
+                    break;
+                case 'NATURAL LANGUAGE MODE':
+                    againstClause = `AGAINST(${placeholder} IN NATURAL LANGUAGE MODE)`;
+                    break;
+                default:
+                    againstClause = `AGAINST(${placeholder})`;
+                    break;
+            }
+
+            const clause = `(MATCH(${leftInfo.sql}) ${againstClause})`;
+            this.config.verbose && console.log(`[MATCH_AGAINST] ${clause}`);
+            return clause;
+        }
+
+        const operands = Array.isArray(rawOperands) ? rawOperands : [rawOperands];
+
+        if (operator === C6C.IN || operator === 'NOT IN') {
+            if (operands.length < 2) {
+                throw new Error(`${operator} requires two operands.`);
+            }
+            const [leftRaw, ...rest] = operands;
+            const left = leftRaw;
+            const right = rest.length <= 1 ? rest[0] : rest;
+            const leftInfo = this.serializeOperand(left, params, typeof left === 'string' ? left : contextColumn);
+            if (!leftInfo.isReference) {
+                throw new Error(`${operator} requires the left operand to be a table reference.`);
+            }
+
+            if (Array.isArray(right)) {
+                if (right.length === 0) {
+                    throw new Error(`${operator} requires at least one value.`);
+                }
+                if (right.length === 2 && right[0] === C6C.SUBSELECT) {
+                    const sub = this.serializeOperand(right, params, typeof left === 'string' ? left : contextColumn);
+                    return `( ${leftInfo.sql} ${operator} ${sub.sql} )`;
+                }
+                const placeholders = right.map(item => {
+                    if (typeof item === 'string' && this.isTableReference(item)) {
+                        return item;
+                    }
+                    const { sql } = this.serializeOperand(item, params, typeof left === 'string' ? left : contextColumn);
+                    return sql;
+                });
+                return `( ${leftInfo.sql} ${operator} (${placeholders.join(', ')}) )`;
+            }
+
+            const rightInfo = this.serializeOperand(right, params, typeof left === 'string' ? left : contextColumn);
+            if (!rightInfo.isSubSelect) {
+                throw new Error(`${operator} requires an array of values or a subselect.`);
+            }
+            return `( ${leftInfo.sql} ${operator} ${rightInfo.sql} )`;
+        }
+
+        if (operator === C6C.BETWEEN || operator === 'NOT BETWEEN') {
+            let left: any;
+            let start: any;
+            let end: any;
+            if (operands.length === 3) {
+                [left, start, end] = operands;
+            } else if (operands.length === 2 && Array.isArray(operands[1]) && operands[1].length === 2) {
+                [left, [start, end]] = operands as [any, any[]];
+            } else {
+                throw new Error(`${operator} requires three operands.`);
+            }
+            const leftInfo = this.serializeOperand(left, params, typeof left === 'string' ? left : contextColumn);
+            if (!leftInfo.isReference) {
+                throw new Error(`${operator} requires the left operand to be a table reference.`);
+            }
+            const startInfo = this.serializeOperand(start, params, typeof left === 'string' ? left : contextColumn);
+            const endInfo = this.serializeOperand(end, params, typeof left === 'string' ? left : contextColumn);
+            const betweenOperator = operator === 'NOT BETWEEN' ? 'NOT BETWEEN' : 'BETWEEN';
+            return `${this.ensureWrapped(leftInfo.sql)} ${betweenOperator} ${startInfo.sql} AND ${endInfo.sql}`;
+        }
+
+        if (operands.length !== 2) {
+            throw new Error(`${operator} requires two operands.`);
+        }
+
+        let [leftOperand, rightOperand] = operands;
+        const leftInfo = this.serializeOperand(leftOperand, params, typeof leftOperand === 'string' ? leftOperand : contextColumn);
+        const rightInfo = this.serializeOperand(rightOperand, params, typeof leftOperand === 'string' ? leftOperand : contextColumn);
+
+        if (!leftInfo.isReference && !leftInfo.isExpression && !rightInfo.isReference && !rightInfo.isExpression) {
+            throw new Error(`Potential SQL injection detected: '${operator}' with non-reference operands.`);
+        }
+
+        const leftSql = leftInfo.isExpression ? leftInfo.sql : this.ensureWrapped(leftInfo.sql);
+        const rightSql = rightInfo.isExpression ? rightInfo.sql : rightInfo.sql;
+
+        return `${leftSql} ${operator} ${rightSql}`;
+    }
+
+    private buildLegacyColumnCondition(
+        column: string,
+        value: any,
+        params: any[] | Record<string, any>
+    ): string {
+        if (value instanceof Map) {
+            value = Object.fromEntries(value);
+        }
+
+        if (Array.isArray(value)) {
+            if (value.length >= 2 && typeof value[0] === 'string') {
+                const [op, ...rest] = value;
+                return this.buildOperatorExpression(op, [column, ...rest], params, column);
+            }
+            if (value.length === 3 && typeof value[0] === 'string' && typeof value[1] === 'string') {
+                return this.buildOperatorExpression(value[1], [value[0], value[2]], params, value[0]);
+            }
+        }
+
+        if (typeof value === 'object' && value !== null) {
+            const entries = Object.entries(value);
+            if (entries.length === 1) {
+                const [op, operand] = entries[0];
+                if (this.isOperator(op)) {
+                    return this.buildOperatorExpression(op, [column, operand], params, column);
+                }
+                if (this.BOOLEAN_OPERATORS.has(op)) {
+                    const expression = this.buildBooleanExpression({ [op]: operand }, params, 'AND');
+                    return expression;
+                }
+            }
+
+            const subParts = entries.map(([op, operand]) => {
+                if (this.isOperator(op)) {
+                    return this.buildOperatorExpression(op, [column, operand], params, column);
+                }
+                return this.buildBooleanExpression({ [op]: operand }, params, 'AND');
+            }).filter(Boolean);
+
+            return this.joinBooleanParts(subParts, 'AND');
+        }
+
+        return this.buildOperatorExpression(C6C.EQUAL, [column, value], params, column);
+    }
+
+    private buildBooleanExpression(
+        node: any,
+        params: any[] | Record<string, any>,
+        defaultOperator: 'AND' | 'OR'
+    ): string {
+        if (node === null || node === undefined) {
+            return '';
+        }
+
+        if (Array.isArray(node)) {
+            if (node.length === 0) return '';
+
+            if (node.length === 3 && typeof node[0] === 'string' && typeof node[1] === 'string') {
+                return this.buildOperatorExpression(node[1], [node[0], node[2]], params, node[0]);
+            }
+
+            const parts = node
+                .map(item => this.buildBooleanExpression(item, params, 'OR'))
+                .filter(Boolean);
+            return this.joinBooleanParts(parts, 'OR');
+        }
+
+        if (node instanceof Map) {
+            node = Object.fromEntries(node);
+        }
+
+        if (typeof node !== 'object') {
+            throw new Error('Invalid WHERE clause structure.');
+        }
+
+        const entries = Object.entries(node);
+        if (entries.length === 0) return '';
+
+        if (entries.length === 1) {
+            const [key, value] = entries[0];
+            if (this.BOOLEAN_OPERATORS.has(key)) {
+                if (!Array.isArray(value)) {
+                    throw new Error(`${key} expects an array of expressions.`);
+                }
+                const op = this.BOOLEAN_OPERATORS.get(key)!;
+                const parts = value
+                    .map(item => this.buildBooleanExpression(item, params, op))
+                    .filter(Boolean);
+                return this.joinBooleanParts(parts, op);
+            }
+            if (this.isOperator(key)) {
+                return this.buildOperatorExpression(key, value, params);
+            }
+            if (!isNaN(Number(key))) {
+                return this.buildBooleanExpression(value, params, 'OR');
+            }
+        }
+
+        const parts: string[] = [];
+        const nonNumeric = entries.filter(([k]) => isNaN(Number(k)));
+        const numeric = entries.filter(([k]) => !isNaN(Number(k)));
+
+        for (const [key, value] of nonNumeric) {
+            if (this.BOOLEAN_OPERATORS.has(key)) {
+                const op = this.BOOLEAN_OPERATORS.get(key)!;
+                if (!Array.isArray(value)) {
+                    throw new Error(`${key} expects an array of expressions.`);
+                }
+                const nested = value
+                    .map(item => this.buildBooleanExpression(item, params, op))
+                    .filter(Boolean);
+                if (nested.length) {
+                    parts.push(this.joinBooleanParts(nested, op));
+                }
+                continue;
+            }
+
+            if (this.isOperator(key)) {
+                parts.push(this.buildOperatorExpression(key, value, params));
+                continue;
+            }
+
+            parts.push(this.buildLegacyColumnCondition(key, value, params));
+        }
+
+        for (const [, value] of numeric) {
+            const nested = this.buildBooleanExpression(value, params, 'OR');
+            if (nested) {
+                parts.push(nested);
+            }
+        }
+
+        return this.joinBooleanParts(parts, defaultOperator);
+    }
+
     buildBooleanJoinedConditions(
         set: any,
         andMode: boolean = true,
         params: any[] | Record<string, any> = []
     ): string {
-        const booleanOperator = andMode ? 'AND' : 'OR';
-
-        const addCondition = (column: any, op: any, value: any): string => {
-            // Normalize common variants
-            const valueNorm = (value === C6C.NULL) ? null : value;
-            const displayOp = typeof op === 'string' ? op.replace('_', ' ') : op;
-
-            const extractSubSelect = (input: any): any | undefined => {
-                if (Array.isArray(input) && input.length >= 2 && input[0] === C6C.SUBSELECT) {
-                    return input[1];
-                }
-                if (input && typeof input === 'object' && C6C.SUBSELECT in input) {
-                    return input[C6C.SUBSELECT];
-                }
-                return undefined;
-            };
-
-            const rightSubSelectPayload = extractSubSelect(valueNorm);
-            const buildSubSelect = (payload: any): string | undefined => {
-                if (!payload) return undefined;
-                const builder = (this as any).buildScalarSubSelect;
-                if (typeof builder !== 'function') {
-                    throw new Error('Scalar subselect handling requires JoinBuilder context.');
-                }
-                return builder.call(this, payload, params);
-            };
-            const rightSubSelectSql = buildSubSelect(rightSubSelectPayload);
-
-            // Support function-based expressions like [C6C.ST_DISTANCE_SPHERE, col1, col2]
-            if (
-                typeof column === 'string' &&
-                this.OPERATORS.has(column) &&
-                Array.isArray(op)
-            ) {
-                // Helper to serialize operand which may be a qualified identifier or a nested function array
-                const serializeOperand = (arg: any): string => {
-                    const identifierPathRegex = /^[A-Za-z_][A-Za-z0-9_]*\.[A-Za-z_][A-Za-z0-9_]*$/;
-                    if (Array.isArray(arg)) {
-                        // Delegate to aggregate builder to handle nested functions/params
-                        // @ts-ignore - buildAggregateField is defined upstream in AggregateBuilder
-                        return this.buildAggregateField(arg, params);
-                    }
-                    if (typeof arg === 'string') {
-                        if (identifierPathRegex.test(arg)) {
-                            this.assertValidIdentifier(arg, 'WHERE argument');
-                            return arg;
-                        }
-                        return arg;
-                    }
-                    return String(arg);
-                };
-
-                if (column === C6C.ST_DISTANCE_SPHERE) {
-                    const [col1, col2] = op;
-                    const threshold = Array.isArray(value) ? value[0] : value;
-                    const left = serializeOperand(col1);
-                    const right = serializeOperand(col2);
-                    return `ST_Distance_Sphere(${left}, ${right}) < ${this.addParam(params, '', threshold)}`;
-                }
-                if ([
-                    C6C.ST_CONTAINS,
-                    C6C.ST_INTERSECTS,
-                    C6C.ST_WITHIN,
-                    C6C.ST_CROSSES,
-                    C6C.ST_DISJOINT,
-                    C6C.ST_EQUALS,
-                    C6C.ST_OVERLAPS,
-                    C6C.ST_TOUCHES
-                ].includes(column)) {
-                    const [geom1, geom2] = op;
-                    const left = serializeOperand(geom1);
-                    const right = serializeOperand(geom2);
-                    return `${column}(${left}, ${right})`;
-                }
-            }
-
-            const leftIsCol = this.isColumnRef(column);
-            const leftIsRef = this.isTableReference(column);
-            const rightIsCol = typeof value === 'string' && this.isColumnRef(value);
-
-            if (!leftIsCol && !leftIsRef && !rightIsCol && !rightSubSelectSql) {
-                throw new Error(`Potential SQL injection detected: '${column} ${op} ${value}'`);
-            }
-
-            this.validateOperator(op);
-
-            if (op === C6C.MATCH_AGAINST && Array.isArray(value)) {
-                const [search, mode] = value;
-                const paramName = this.useNamedParams ? `param${Object.keys(params).length}` : null;
-                if (this.useNamedParams) {
-                    params[paramName!] = search;
-                } else {
-                    params.push(search);
-                }
-
-                let againstClause: string;
-
-                switch ((mode || '').toUpperCase()) {
-                    case 'BOOLEAN':
-                        againstClause = this.useNamedParams ? `AGAINST(:${paramName} IN BOOLEAN MODE)` : `AGAINST(? IN BOOLEAN MODE)`;
-                        break;
-                    case 'WITH QUERY EXPANSION':
-                        againstClause = this.useNamedParams ? `AGAINST(:${paramName} WITH QUERY EXPANSION)` : `AGAINST(? WITH QUERY EXPANSION)`;
-                        break;
-                    default: // NATURAL or undefined
-                        againstClause = this.useNamedParams ? `AGAINST(:${paramName})` : `AGAINST(?)`;
-                        break;
-                }
-
-                if (!leftIsCol) {
-                    throw new Error(`MATCH_AGAINST requires a table reference as the left operand. Column '${column}' is not a valid table reference.`);
-                }
-                const matchClause = `(MATCH(${column}) ${againstClause})`;
-                this.config.verbose && console.log(`[MATCH_AGAINST] ${matchClause}`);
-                return matchClause;
-            }
-
-            if ((op === C6C.IN || op === C6C.NOT_IN) && Array.isArray(value)) {
-                if (rightSubSelectSql) {
-                    if (!leftIsRef) {
-                        throw new Error(`IN operator requires a table reference as the left operand. Column '${column}' is not a valid table reference.`);
-                    }
-                    const normalized = op.replace('_', ' ');
-                    return `( ${column} ${normalized} ${rightSubSelectSql} )`;
-                }
-                const placeholders = value.map(v =>
-                    this.isColumnRef(v) ? v : this.addParam(params, column, v)
-                ).join(', ');
-                const normalized = op.replace('_', ' ');
-                if (!leftIsRef) {
-                    throw new Error(`IN operator requires a table reference as the left operand. Column '${column}' is not a valid table reference.`);
-                }
-                return `( ${column} ${normalized} (${placeholders}) )`;
-            }
-
-            if (op === C6C.BETWEEN || op === 'NOT BETWEEN') {
-                if (!Array.isArray(value) || value.length !== 2) {
-                    throw new Error(`BETWEEN operator requires an array of two values`);
-                }
-                const [start, end] = value;
-                if (!leftIsRef) {
-                    throw new Error(`BETWEEN operator requires a table reference as the left operand. Column '${column}' is not a valid table reference.`);
-                }
-                return `(${column}) ${op.replace('_', ' ')} ${this.addParam(params, column, start)} AND ${this.addParam(params, column, end)}`;
-            }
-
-            const rightIsRef: boolean = rightSubSelectSql ? false : this.isTableReference(value);
-
-            if (leftIsRef && rightIsRef) {
-                return `(${column}) ${displayOp} ${value}`;
-            }
-
-            if (leftIsRef && rightSubSelectSql) {
-                return `(${column}) ${displayOp} ${rightSubSelectSql}`;
-            }
-
-            if (leftIsRef && !rightIsRef) {
-                return `(${column}) ${displayOp} ${this.addParam(params, column, valueNorm)}`;
-            }
-
-            if (rightIsRef) {
-                return `(${this.addParam(params, column, column)}) ${displayOp} ${value}`;
-            }
-
-            throw new Error(`Neither operand appears to be a table reference (${column}) or (${value})`);
-
-        };
-
-        const parts: string[] = [];
-
-        const buildFromObject = (obj: Record<string, any>, mode: boolean) => {
-            const subParts: string[] = [];
-            const entries = Object.entries(obj);
-            const nonNumeric = entries.filter(([k]) => isNaN(Number(k)));
-            const numeric = entries.filter(([k]) => !isNaN(Number(k)));
-
-            const processEntry = (k: string, v: any) => {
-                // Operator-as-key handling, e.g., { [C6C.ST_DISTANCE_SPHERE]: [arg1, arg2, threshold] }
-                if (typeof k === 'string' && this.OPERATORS.has(k) && Array.isArray(v)) {
-                    if (k === C6C.ST_DISTANCE_SPHERE) {
-                        // Accept either [arg1, arg2, threshold] or [[arg1, arg2], threshold]
-                        let args: any[];
-                        let threshold: any;
-                        if (Array.isArray(v[0]) && v.length >= 2) {
-                            args = v[0];
-                            threshold = v[1];
-                        } else {
-                            args = v.slice(0, 2);
-                            threshold = v[2];
-                        }
-                        subParts.push(addCondition(k, args as any, threshold));
-                        return;
-                    }
-                }
-
-                if (typeof v === 'object' && v !== null && Object.keys(v).length === 1) {
-                    const [op, val] = Object.entries(v)[0];
-                    subParts.push(addCondition(k, op, val));
-                } else if (Array.isArray(v) && v.length >= 2 && typeof v[0] === 'string') {
-                    const [op, val] = v as [string, any];
-                    subParts.push(addCondition(k, op, val));
-                } else if (typeof v === 'object' && v !== null) {
-                    const sub = this.buildBooleanJoinedConditions(v, mode, params);
-                    if (sub) subParts.push(sub);
-                } else {
-                    subParts.push(addCondition(k, '=', v));
-                }
-            };
-
-            // Process non-numeric keys first to preserve intuitive insertion order for params
-            for (const [k, v] of nonNumeric) {
-                processEntry(k, v);
-            }
-            // Then process numeric keys (treated as grouped OR conditions)
-            for (const [_k, v] of numeric) {
-                const sub = this.buildBooleanJoinedConditions(v, false, params);
-                if (sub) subParts.push(sub);
-            }
-
-            return subParts.join(` ${mode ? 'AND' : 'OR'} `);
-        };
-
-        if (Array.isArray(set)) {
-            // Detect a single condition triple: [column, op, value]
-            if (set.length === 3 && typeof set[0] === 'string' && typeof set[1] === 'string') {
-                const [column, rawOp, rawVal] = set as [string, string, any];
-                const op = rawOp;
-                const value = rawVal === C6C.NULL ? null : rawVal;
-                const sub = addCondition(column, op, value);
-                if (sub) parts.push(sub);
-            } else {
-                for (const item of set) {
-                    const sub = this.buildBooleanJoinedConditions(item, false, params);
-                    if (sub) parts.push(sub);
-                }
-            }
-        } else if (typeof set === 'object' && set !== null) {
-            const sub = buildFromObject(set, andMode);
-            if (sub) parts.push(sub);
-        }
-
-        const clause = parts.join(` ${booleanOperator} `);
-        return clause ? `(${clause})` : '';
+        const expression = this.buildBooleanExpression(set, params, andMode ? 'AND' : 'OR');
+        if (!expression) return '';
+        return this.ensureWrapped(expression);
     }
 
     buildWhereClause(whereArg: any, params: any[] | Record<string, any>): string {
         const clause = this.buildBooleanJoinedConditions(whereArg, true, params);
         if (!clause) return '';
-        const trimmed = clause.replace(/^\((.*)\)$/, '$1');
+
+        let trimmed = clause.trim();
+        const upper = trimmed.toUpperCase();
+
+        if (!upper.includes(' AND ') && !upper.includes(' OR ')) {
+            if (trimmed.startsWith('(') && trimmed.endsWith(')')) {
+                const inner = trimmed.substring(1, trimmed.length - 1);
+                const innerUpper = inner.toUpperCase();
+                const requiresOuterWrap =
+                    innerUpper.includes(' IN ') ||
+                    innerUpper.includes(' BETWEEN ') ||
+                    innerUpper.includes(' SELECT ');
+
+                if (requiresOuterWrap) {
+                    trimmed = `( ${inner.trim()} )`;
+                } else {
+                    trimmed = inner.trim();
+                }
+            }
+        }
+
         this.config.verbose && console.log(`[WHERE] ${trimmed}`);
         return ` WHERE ${trimmed}`;
     }
