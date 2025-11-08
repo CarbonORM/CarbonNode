@@ -402,6 +402,29 @@ describe('SQL Builders - Complex SELECTs', () => {
     expect(params.slice(-1)[0]).toBe('POINT(-104.8967729 39.3976764)');
   });
 
+  it('orders by distance to ST_GeomFromText(WKT, 4326) using literal WKT', () => {
+    const config = buildParcelConfig();
+
+    const qb = new SelectQueryBuilder(config as any, {
+      [C6C.SELECT]: [Property_Units.UNIT_ID],
+      [C6C.PAGINATION]: {
+        [C6C.LIMIT]: 10,
+        [C6C.ORDER]: {
+          [C6C.ST_DISTANCE_SPHERE]: [
+            Property_Units.LOCATION,
+            [C6C.ST_GEOMFROMTEXT, ['POINT(-104.8967729 39.3976764)', 4326]],
+          ],
+        },
+      },
+    } as any, false);
+
+    const { sql, params } = qb.build(Property_Units.TABLE_NAME);
+    expect(sql).toContain(
+      "ORDER BY ST_Distance_Sphere(property_units.location, ST_GEOMFROMTEXT('POINT(-104.8967729 39.3976764)', 4326))",
+    );
+    expect(params).not.toContain('POINT(-104.8967729 39.3976764)');
+  });
+
   it('leaves normal table joins unaffected', () => {
     const config = buildTestConfig();
 
