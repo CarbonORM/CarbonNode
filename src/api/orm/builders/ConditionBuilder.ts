@@ -190,6 +190,45 @@ export abstract class ConditionBuilder<
         return !!this.normalizeOperatorKey(op);
     }
 
+    private looksLikeSafeFunctionExpression(value: string): boolean {
+        if (typeof value !== 'string') return false;
+
+        const trimmed = value.trim();
+        if (trimmed.length === 0) return false;
+
+        if (trimmed.includes(';') || trimmed.includes('--') || trimmed.includes('/*') || trimmed.includes('*/')) {
+            return false;
+        }
+
+        if (!trimmed.includes('(') || !trimmed.endsWith(')')) {
+            return false;
+        }
+
+        const functionMatch = trimmed.match(/^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\s*\(/);
+        if (!functionMatch) {
+            return false;
+        }
+
+        const allowedCharacters = /^[A-Za-z0-9_().,'"\s-]+$/;
+        if (!allowedCharacters.test(trimmed)) {
+            return false;
+        }
+
+        let depth = 0;
+        for (const char of trimmed) {
+            if (char === '(') {
+                depth += 1;
+            } else if (char === ')') {
+                depth -= 1;
+                if (depth < 0) {
+                    return false;
+                }
+            }
+        }
+
+        return depth === 0;
+    }
+
     private ensureWrapped(expression: string): string {
         const trimmed = expression.trim();
         if (!trimmed) return trimmed;
@@ -277,6 +316,9 @@ export abstract class ConditionBuilder<
         if (typeof operand === 'string') {
             if (this.isTableReference(operand) || this.isColumnRef(operand)) {
                 return { sql: operand, isReference: true, isExpression: false, isSubSelect: false };
+            }
+            if (this.looksLikeSafeFunctionExpression(operand)) {
+                return { sql: operand.trim(), isReference: false, isExpression: true, isSubSelect: false };
             }
             return { sql: asParam(operand), isReference: false, isExpression: false, isSubSelect: false };
         }
