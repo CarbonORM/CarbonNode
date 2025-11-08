@@ -43,6 +43,11 @@ export abstract class AggregateBuilder<G extends OrmGenerics> extends Executor<G
         }
 
         const F = String(fn).toUpperCase();
+        const isGeomFromText = F === C6C.ST_GEOMFROMTEXT.toUpperCase();
+
+        if (args.length === 1 && Array.isArray(args[0])) {
+            args = args[0];
+        }
 
         // Parameter placeholder helper: [C6C.PARAM, value]
         if (F === C6C.PARAM) {
@@ -79,7 +84,7 @@ export abstract class AggregateBuilder<G extends OrmGenerics> extends Executor<G
         const identifierPathRegex = /^[A-Za-z_][A-Za-z0-9_]*\.[A-Za-z_][A-Za-z0-9_]*$/;
 
         const argList = args
-            .map(arg => {
+            .map((arg, index) => {
                 if (Array.isArray(arg)) return this.buildAggregateField(arg, params);
                 if (typeof arg === 'string') {
                     if (identifierPathRegex.test(arg)) {
@@ -88,6 +93,17 @@ export abstract class AggregateBuilder<G extends OrmGenerics> extends Executor<G
                     }
                     // Treat numeric-looking strings as literals, not identifier paths
                     if (isNumericString(arg)) return arg;
+
+                    if (isGeomFromText && index === 0) {
+                        const trimmed = arg.trim();
+                        const alreadyQuoted = trimmed.startsWith("'") && trimmed.endsWith("'") && trimmed.length >= 2;
+                        if (alreadyQuoted) {
+                            return trimmed;
+                        }
+                        const escaped = arg.replace(/'/g, "''");
+                        return `'${escaped}'`;
+                    }
+
                     return arg;
                 }
                 return String(arg);
