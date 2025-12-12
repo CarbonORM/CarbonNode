@@ -18,13 +18,15 @@ export class PostQueryBuilder<G extends OrmGenerics> extends ConditionBuilder<G>
         const verb = C6C.REPLACE in this.request ? C6C.REPLACE : C6C.INSERT;
         const body = verb in this.request ? this.request[verb] : this.request;
         const keys = Object.keys(body);
-        const params: any[] = []
+        const params: any[] | Record<string, any> = this.useNamedParams ? {} : [];
         const placeholders: string[] = []
 
 
         for (const key of keys) {
             const value = body[key];
-            const placeholder = this.addParam(params, key, value);
+            const trimmed = this.trimTablePrefix(table, key);
+            const qualified = `${table}.${trimmed}`;
+            const placeholder = this.serializeUpdateValue(value, params, qualified);
             placeholders.push(placeholder);
         }
 

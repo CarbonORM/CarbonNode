@@ -61,6 +61,34 @@ describe('SQL Builders', () => {
     expect(params).toEqual(['BOB', 'SMITH']);
   });
 
+  it('stringifies plain object inserts for JSON columns', () => {
+    const config = buildTestConfig();
+    const payload = { hello: 'world', nested: { ok: true } };
+    const qb = new PostQueryBuilder(config as any, {
+      [C6C.INSERT]: {
+        'actor.json_data': payload,
+      },
+    } as any, false);
+
+    const { sql, params } = qb.build('actor');
+
+    expect(sql).toContain('`json_data`');
+    expect(params).toEqual([JSON.stringify(payload)]);
+  });
+
+  it('throws on operator-shaped insert payloads', () => {
+    const config = buildTestConfig();
+    const qb = new PostQueryBuilder(config as any, {
+      [C6C.INSERT]: {
+        'actor.first_name': {
+          [C6C.GREATER_THAN]: 'ALICE',
+        },
+      },
+    } as any, false);
+
+    expect(() => qb.build('actor')).toThrowError(/requires two operands/);
+  });
+
   it('builds UPDATE with WHERE and pagination', () => {
     const config = buildTestConfig();
     const qb = new UpdateQueryBuilder(config as any, {
