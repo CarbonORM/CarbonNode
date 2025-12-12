@@ -378,6 +378,60 @@ export abstract class ConditionBuilder<
         throw new Error('Unsupported operand type in SQL expression.');
     }
 
+    private isPlainArrayLiteral(value: any): boolean {
+        if (!Array.isArray(value)) return false;
+        return value.every(item => {
+            if (item === null) return true;
+            const type = typeof item;
+            if (type === 'string' || type === 'number' || type === 'boolean') return true;
+            if (Array.isArray(item)) return this.isPlainArrayLiteral(item);
+            if (item && typeof item === 'object') return this.isPlainObjectLiteral(item);
+            return false;
+        });
+    }
+
+    private isPlainObjectLiteral(value: any): boolean {
+        if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+        if (value instanceof Date) return false;
+        if (typeof Buffer !== 'undefined' && Buffer.isBuffer && Buffer.isBuffer(value)) return false;
+
+        const normalized = value instanceof Map ? Object.fromEntries(value) : value;
+        if (C6C.SUBSELECT in (normalized as any)) return false;
+
+        const entries = Object.entries(normalized as Record<string, any>);
+        if (entries.length === 0) return true;
+
+        if (entries.some(([key]) => this.isOperator(key) || this.BOOLEAN_OPERATORS.has(key))) {
+            return false;
+        }
+
+        if (entries.some(([key]) => typeof key === 'string' && (this.isColumnRef(key) || key.includes('.')))) {
+            return false;
+        }
+
+        return true;
+    }
+
+    protected serializeUpdateValue(
+        value: any,
+        params: any[] | Record<string, any>,
+        contextColumn?: string
+    ): string {
+        const normalized = value instanceof Map ? Object.fromEntries(value) : value;
+
+        if (this.isPlainArrayLiteral(normalized) || this.isPlainObjectLiteral(normalized)) {
+            return this.addParam(params, contextColumn ?? '', JSON.stringify(normalized));
+        }
+
+        const { sql, isReference, isExpression, isSubSelect } = this.serializeOperand(normalized, params, contextColumn);
+
+        if (!isReference && !isExpression && !isSubSelect && typeof normalized === 'object' && normalized !== null) {
+            throw new Error('Unsupported operand type in SQL expression.');
+        }
+
+        return sql;
+    }
+
     private ensurePlainObject<T>(value: T): any {
         if (value instanceof Map) {
             return Object.fromEntries(value as unknown as Map<string, any>);

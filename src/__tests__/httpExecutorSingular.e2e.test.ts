@@ -23,7 +23,12 @@ beforeAll(async () => {
   const { port } = server.address() as AddressInfo;
 
   GLOBAL_REST_PARAMETERS.restURL = `http://127.0.0.1:${port}/rest/`;
-  GLOBAL_REST_PARAMETERS.axios = axios;
+  const axiosClient = axios.create();
+  axiosClient.interceptors.response.use(
+    response => response,
+    error => Promise.reject(new Error(error?.message ?? "Request failed")),
+  );
+  GLOBAL_REST_PARAMETERS.axios = axiosClient;
   GLOBAL_REST_PARAMETERS.verbose = false;
   // ensure HTTP executor is used
   // @ts-ignore

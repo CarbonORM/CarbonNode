@@ -23,7 +23,12 @@ beforeAll(async () => {
     const {port} = server.address() as AddressInfo;
 
     GLOBAL_REST_PARAMETERS.restURL = `http://127.0.0.1:${port}/rest/`;
-    GLOBAL_REST_PARAMETERS.axios = axios;
+    const axiosClient = axios.create();
+    axiosClient.interceptors.response.use(
+        response => response,
+        error => Promise.reject(new Error(error?.message ?? 'Request failed')),
+    );
+    GLOBAL_REST_PARAMETERS.axios = axiosClient;
     GLOBAL_REST_PARAMETERS.verbose = false;
     // ensure HTTP executor is used
     // @ts-ignore
@@ -91,6 +96,79 @@ describe("ExpressHandler e2e", () => {
         } as any);
         expect(Array.isArray(data?.rest)).toBe(true);
         expect(data?.rest.length).toBe(0);
+    });
+
+    it("stringifies plain object values in PUT updates", async () => {
+        const first_name = `Json${Date.now()}`;
+        const last_name = `User${Date.now()}`;
+
+        await Actor.Post({
+            first_name,
+            last_name,
+        } as any);
+
+        const payload = { greeting: "hello", flags: [1, true] };
+
+        let data = await Actor.Get({
+            [C6C.WHERE]: { [Actor.FIRST_NAME]: first_name, [Actor.LAST_NAME]: last_name },
+            [C6C.PAGINATION]: { [C6C.LIMIT]: 1 },
+        } as any);
+
+        const actorId = data?.rest?.[0]?.actor_id;
+        expect(actorId).toBeTruthy();
+
+        await Actor.Put({
+            [C6C.WHERE]: { [Actor.ACTOR_ID]: actorId },
+            [C6C.UPDATE]: { first_name: payload },
+        } as any);
+
+        data = await Actor.Get({
+            [C6C.WHERE]: { [Actor.ACTOR_ID]: actorId },
+        } as any);
+
+        expect(data?.rest?.[0]?.first_name).toBe(JSON.stringify(payload));
+    });
+
+    it("rejects operator-like objects in PUT updates", async () => {
+        const first_name = `Invalid${Date.now()}`;
+        const last_name = `User${Date.now()}`;
+
+        await Actor.Post({
+            first_name,
+            last_name,
+        } as any);
+
+        const data = await Actor.Get({
+            [C6C.WHERE]: { [Actor.FIRST_NAME]: first_name, [Actor.LAST_NAME]: last_name },
+            [C6C.PAGINATION]: { [C6C.LIMIT]: 1 },
+        } as any);
+
+        const actorId = data?.rest?.[0]?.actor_id;
+        expect(actorId).toBeTruthy();
+
+        const operatorLike = { [C6C.GREATER_THAN]: "oops" } as any;
+
+        const prevRestUrl = GLOBAL_REST_PARAMETERS.restURL;
+        const prevAxios = GLOBAL_REST_PARAMETERS.axios;
+        GLOBAL_REST_PARAMETERS.mysqlPool = pool as any;
+        delete (GLOBAL_REST_PARAMETERS as any).restURL;
+        delete (GLOBAL_REST_PARAMETERS as any).axios;
+
+        try {
+            await Actor.Put({
+                [C6C.WHERE]: { [Actor.ACTOR_ID]: actorId },
+                [C6C.UPDATE]: { first_name: operatorLike },
+            } as any);
+            throw new Error('Expected PUT to reject for operator-like payload.');
+        } catch (error: any) {
+            const message = String(error?.message ?? error);
+            expect(message).toMatch(/operand/i);
+        } finally {
+            GLOBAL_REST_PARAMETERS.restURL = prevRestUrl;
+            GLOBAL_REST_PARAMETERS.axios = prevAxios;
+            // @ts-ignore
+            delete GLOBAL_REST_PARAMETERS.mysqlPool;
+        }
     });
 
     it("respects METHOD=GET override on POST", async () => {

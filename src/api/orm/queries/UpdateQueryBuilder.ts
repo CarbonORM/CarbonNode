@@ -39,7 +39,9 @@ export class UpdateQueryBuilder<G extends OrmGenerics> extends PaginationBuilder
             .map(([col, val]) => {
                 const trimmed = this.trimTablePrefix(table, col);
                 const qualified = `${table}.${trimmed}`;
-                return `\`${trimmed}\` = ${this.addParam(params, qualified, val)}`;
+                this.assertValidIdentifier(qualified, 'UPDATE SET');
+                const rightSql = this.serializeUpdateValue(val, params, qualified);
+                return `\`${trimmed}\` = ${rightSql}`;
             });
 
         sql += ` SET ${setClauses.join(', ')}`;
