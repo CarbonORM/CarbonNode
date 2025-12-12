@@ -43,6 +43,7 @@ export function buildTestConfig() {
     'actor.first_name': 'first_name',
     'actor.last_name': 'last_name',
     'actor.binarycol': 'binarycol',
+    'actor.json_data': 'json_data',
   } as const;
 
   const filmActorCols = {
@@ -62,6 +63,7 @@ export function buildTestConfig() {
 
   // Special-case: mark binary column as BINARY to test conversion
   C6.TABLES.actor.TYPE_VALIDATION['binarycol'].MYSQL_TYPE = 'BINARY(16)';
+  C6.TABLES.actor.TYPE_VALIDATION['json_data'].MYSQL_TYPE = 'JSON';
 
   const baseConfig: iRest<any, any, any> = {
     C6,
