@@ -94,4 +94,19 @@ describe("HttpExecutor singular e2e", () => {
     expect(Array.isArray(data.rest)).toBe(true);
     expect(data.rest.length).toBe(0);
   });
+
+  it("exposes next when pagination continues", async () => {
+    const data = await Actor.Get({
+      [C6C.PAGINATION]: { [C6C.LIMIT]: 1 },
+    } as any);
+
+    expect(Array.isArray(data.rest)).toBe(true);
+    expect(data.rest).toHaveLength(1);
+    expect(typeof data.next).toBe("function");
+
+    const nextPage = await data.next?.();
+    expect(nextPage?.rest).toBeDefined();
+    expect(Array.isArray(nextPage?.rest)).toBe(true);
+    expect(nextPage?.rest?.length).toBeGreaterThan(0);
+  });
 });

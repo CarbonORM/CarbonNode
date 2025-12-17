@@ -27,7 +27,10 @@ export class HttpExecutor<
     private isRestResponse<T extends Record<string, any>>(
         r: AxiosResponse<any>
     ): r is AxiosResponse<iGetC6RestResponse<T>> {
-        return !!r && r.data != null && typeof r.data === 'object' && 'rest' in r.data;
+        return !!r
+            && r.data != null
+            && typeof r.data === 'object'
+            && Array.isArray((r.data as iGetC6RestResponse<T>).rest);
     }
 
     private stripTableNameFromKeys<T extends Record<string, any>>(obj: Partial<T> | undefined | null): Partial<T> {
@@ -539,7 +542,9 @@ export class HttpExecutor<
                             const responseData = response.data;
 
                             const pageLimit = query?.[C6.PAGINATION]?.[C6.LIMIT];
-                            const got = responseData.rest.length;
+                            const rest : any[] = Array.isArray(responseData.rest) ? responseData.rest : [responseData.rest];
+
+                            const got = rest.length;
                             hasNext = pageLimit !== 1 && got === pageLimit;
 
                             if (hasNext) {
@@ -558,7 +563,7 @@ export class HttpExecutor<
                             }
 
                             if ((this.config.verbose || debug) && isLocal()) {
-                                console.groupCollapsed(`API: Response (${requestMethod} ${tableName}) len (${responseData.rest?.length}) of (${query?.[C6.PAGINATION]?.[C6.LIMIT]})`)
+                                console.groupCollapsed(`API: Response (${requestMethod} ${tableName}) len (${rest?.length}) of (${query?.[C6.PAGINATION]?.[C6.LIMIT]})`)
                                 console.log('request', this.request)
                                 console.log('response.rest', responseData.rest)
                                 console.groupEnd()
@@ -567,7 +572,7 @@ export class HttpExecutor<
                             // next already set above based on hasNext; avoid duplicate, inverted logic
                             if (fetchDependencies
                                 && 'number' === typeof fetchDependencies
-                                && responseData.rest?.length > 0) {
+                                && rest?.length > 0) {
 
                                 console.groupCollapsed('%c API: Fetch Dependencies segment (' + requestMethod + ' ' + tableName + ')'
                                     + (fetchDependencies & eFetchDependencies.CHILDREN ? ' | (CHILDREN|REFERENCED) ' : '')
@@ -649,7 +654,7 @@ export class HttpExecutor<
                                     .forEach(column => dependencies[column]
                                         .forEach((constraint) => {
 
-                                            const columnValues = responseData.rest[column] ?? responseData.rest.map((row) => {
+                                            const columnValues = responseData.rest[column] ?? rest.map((row) => {
 
                                                 if (operatingTable.endsWith("carbons")
                                                     && 'entity_tag' in row
@@ -695,7 +700,7 @@ export class HttpExecutor<
                                         // todo - rethink the table ref entity system - when tables are renamed? no hooks exist in mysql
                                         // since were already filtering on column, we can assume the first row constraint is the same as the rest
 
-                                        const referencesTables: string[] = responseData.rest.reduce((accumulator: string[], row: {
+                                        const referencesTables: string[] = rest.reduce((accumulator: string[], row: {
                                             [x: string]: string;
                                         }) => {
                                             if ('entity_tag' in row && !accumulator.includes(row['entity_tag'])) {
