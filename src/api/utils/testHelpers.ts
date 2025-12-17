@@ -2,13 +2,15 @@ import {apiRequestCache} from "./cacheManager";
 
 export function checkAllRequestsComplete(): true | (string[]) {
 
-    const stillRunning = apiRequestCache.filter((cache) => undefined === cache.response)
+    const cacheEntries = Array.from(apiRequestCache.values())
+
+    const stillRunning = cacheEntries.filter((cache) => undefined === cache.response)
 
     if (stillRunning.length !== 0) {
 
         if (document === null || document === undefined) {
 
-            throw new Error('document is undefined while waiting for API requests to complete (' + JSON.stringify(apiRequestCache) + ')')
+            throw new Error('document is undefined while waiting for API requests to complete (' + JSON.stringify(cacheEntries) + ')')
 
         }
 

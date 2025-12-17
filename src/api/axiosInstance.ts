@@ -151,7 +151,36 @@ axiosInstance.interceptors.request.use((config) => {
         }
     }
 
+    (config as any).__carbonStart = performance.now();
+
     return config;
 });
+
+
+axiosInstance.interceptors.response.use(
+    (response) => {
+        const end = performance.now();
+        const start = (response.config as any).__carbonStart;
+        (response as any).__carbonTiming = {
+            start,
+            end,
+            duration: end - start,
+        };
+        return response;
+    },
+    (error) => {
+        if (error.config) {
+            const end = performance.now();
+            const start = (error.config as any).__carbonStart;
+            (error as any).__carbonTiming = {
+                start,
+                end,
+                duration: end - start,
+            };
+        }
+        throw error;
+    }
+);
+
 
 export default axiosInstance

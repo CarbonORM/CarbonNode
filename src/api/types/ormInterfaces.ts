@@ -97,7 +97,13 @@ export type RequestQueryBody<
 export interface iCacheAPI<ResponseDataType = any> {
     requestArgumentsSerialized: string;
     request: AxiosPromise<ResponseDataType>;
-    response?: AxiosResponse;
+    response?: AxiosResponse & {
+        __carbonTiming?: {
+            start: number;
+            end: number;
+            duration: number;
+        }
+    },
     final?: boolean;
 }
 

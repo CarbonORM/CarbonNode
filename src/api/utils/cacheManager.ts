@@ -1,46 +1,87 @@
-import {AxiosPromise} from "axios";
+import { AxiosPromise } from "axios";
 import { iCacheAPI } from "../types/ormInterfaces";
 
-// do not remove entries from this array. It is used to track the progress of API requests.
-// position in array is important. Do not sort. To not add to begging.
-export let apiRequestCache: iCacheAPI[] = [];
+// -----------------------------------------------------------------------------
+// Cache Storage
+// -----------------------------------------------------------------------------
+export const apiRequestCache = new Map<string, iCacheAPI>();
+export const userCustomClearCache: (() => void)[] = [];
 
-export let userCustomClearCache: (() => void)[] = [];
-
-interface iClearCache {
-    ignoreWarning: boolean
+// -----------------------------------------------------------------------------
+// Cache Key Generator (safe, fixed-size ~40 chars)
+// -----------------------------------------------------------------------------
+// -----------------------------------------------------------------------------
+// Browser-safe deterministic hash (FNV-1a)
+// -----------------------------------------------------------------------------
+function fnv1a(str: string): string {
+    let h = 0x811c9dc5;
+    for (let i = 0; i < str.length; i++) {
+        h ^= str.charCodeAt(i);
+        h = (h * 0x01000193) >>> 0;
+    }
+    return h.toString(16);
 }
 
-export function clearCache(props?: iClearCache) {
-
-    if (false === props?.ignoreWarning) {
-
-        console.warn('The rest api clearCache should only be used with extreme care! Avoid using this in favor of using `cacheResults : boolean`.')
-
-    }
-
-    userCustomClearCache.map((f) => 'function' === typeof f && f());
-
-    userCustomClearCache = apiRequestCache = []
-
+function makeCacheKey(
+    method: string,
+    tableName: string | string[],
+    requestData: unknown,
+): string {
+    const raw = JSON.stringify([method, tableName, requestData]);
+    return fnv1a(raw);
 }
 
-export function checkCache<ResponseDataType = any, RestShortTableNames = string>(cacheResult: iCacheAPI<ResponseDataType>, requestMethod: string, tableName: RestShortTableNames | RestShortTableNames[], request: any): false | AxiosPromise<ResponseDataType> {
-
-    if (undefined === cacheResult) {
-
-        return false;
-
+// -----------------------------------------------------------------------------
+// Clear Cache (no shared-array bugs)
+// -----------------------------------------------------------------------------
+export function clearCache(props?: { ignoreWarning?: boolean }): void {
+    if (!props?.ignoreWarning) {
+        console.warn(
+            "The REST API clearCache should only be used with extreme care!",
+        );
     }
 
-    console.groupCollapsed('%c API: The request on (' + tableName + ') is in cache. Returning the request Promise!', 'color: #0c0')
+    for (const fn of userCustomClearCache) {
+        try {
+            fn();
+        } catch {}
+    }
 
-    console.log('%c ' + requestMethod + ' ' + tableName, 'color: #0c0')
+    apiRequestCache.clear();
+}
 
-    console.log('%c Request Data (note you may see the success and/or error prompt):', 'color: #0c0', request)
+// -----------------------------------------------------------------------------
+// Check Cache (dedupe via hashed key)
+// -----------------------------------------------------------------------------
+export function checkCache<ResponseDataType = any>(
+    method: string,
+    tableName: string | string[],
+    requestData: any,
+): AxiosPromise<ResponseDataType> | false {
+    const key = makeCacheKey(method, tableName, requestData);
+    const cached = apiRequestCache.get(key);
 
-    console.groupEnd()
+    if (!cached) return false;
 
-    return cacheResult.request;
+    console.groupCollapsed(
+        `%c API cache hit for ${method} ${tableName}`,
+        "color:#0c0",
+    );
+    console.log("Request Data:", requestData);
+    console.groupEnd();
 
+    return cached.request;
+}
+
+// -----------------------------------------------------------------------------
+// Store Cache Entry (drop-in compatible)
+// -----------------------------------------------------------------------------
+export function setCache<ResponseDataType = any>(
+    method: string,
+    tableName: string | string[],
+    requestData: any,
+    cacheEntry: iCacheAPI<ResponseDataType>,
+): void {
+    const key = makeCacheKey(method, tableName, requestData);
+    apiRequestCache.set(key, cacheEntry);
 }

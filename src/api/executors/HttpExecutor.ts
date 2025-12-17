@@ -8,14 +8,13 @@ import {OrmGenerics} from "../types/ormGenerics";
 import {
     DELETE, DetermineResponseDataType,
     GET,
-    iCacheAPI,
     iConstraint,
     iGetC6RestResponse,
     POST,
     PUT, RequestQueryBody
 } from "../types/ormInterfaces";
 import {removeInvalidKeys, removePrefixIfExists, TestRestfulResponse} from "../utils/apiHelpers";
-import {apiRequestCache, checkCache, userCustomClearCache} from "../utils/cacheManager";
+import {checkCache, setCache, userCustomClearCache} from "../utils/cacheManager";
 import {sortAndSerializeQueryObject} from "../utils/sortAndSerializeQueryObject";
 import {Executor} from "./Executor";
 import {toastOptions, toastOptionsDevs} from "variables/toastOptions";
@@ -219,14 +218,6 @@ export class HttpExecutor<
                 console.groupEnd()
             }
 
-            // The problem with creating cache keys with a stringified object is the order of keys matters and it's possible for the same query to be stringified differently.
-            // Here we ensure the key order will be identical between two of the same requests. https://stackoverflow.com/questions/5467129/sort-javascript-object-by-key
-
-            // literally impossible for query to be undefined or null here but the editor is too busy licking windows to understand that
-            let querySerialized: string = sortAndSerializeQueryObject(tables, query ?? {});
-
-            let cacheResult: iCacheAPI | undefined = apiRequestCache.find(cache => cache.requestArgumentsSerialized === querySerialized);
-
             let cachingConfirmed = false;
 
             // determine if we need to paginate.
@@ -253,51 +244,41 @@ export class HttpExecutor<
 
                 query[C6.PAGINATION][C6.LIMIT] = query[C6.PAGINATION][C6.LIMIT] || 100;
 
-                // this will evaluate true most the time
-                if (true === cacheResults) {
-                    if (undefined !== cacheResult) {
-                        do {
-                            const cacheCheck = checkCache<ResponseDataType>(cacheResult, requestMethod, tableName, this.request);
-                            if (false !== cacheCheck) {
-                                return (await cacheCheck).data;
-                            }
-                            ++query[C6.PAGINATION][C6.PAGE];
-                            querySerialized = sortAndSerializeQueryObject(tables, query ?? {});
-                            cacheResult = apiRequestCache.find(cache => cache.requestArgumentsSerialized === querySerialized)
-                        } while (undefined !== cacheResult)
-                        if (debug && isLocal()) {
-                            toast.warning("DEVS: Request pages exhausted in cache; firing network.", toastOptionsDevs);
-                        }
-                    }
-                    cachingConfirmed = true;
-                } else {
-                    if (debug && isLocal()) toast.info("DEVS: Ignore cache was set to true.", toastOptionsDevs);
-                }
+            }
 
-                if (debug && isLocal()) {
-                    toast.success("DEVS: Request not in cache." + (requestMethod === C6.GET ? " Page (" + query[C6.PAGINATION][C6.PAGE] + ")" : ''), toastOptionsDevs);
-                }
+            // The problem with creating cache keys with a stringified object is the order of keys matters and it's possible for the same query to be stringified differently.
+            // Here we ensure the key order will be identical between two of the same requests. https://stackoverflow.com/questions/5467129/sort-javascript-object-by-key
+            const cacheRequestData = JSON.parse(JSON.stringify(query ?? {})) as RequestQueryBody<
+                G['RequestMethod'],
+                G['RestTableInterface'],
+                G['CustomAndRequiredFields'],
+                G['RequestTableOverrides']
+            >;
 
-            } else if (cacheResults) { // if we are not getting, we are updating, deleting, or inserting
+            // literally impossible for query to be undefined or null here but the editor is too busy licking windows to understand that
+            let querySerialized: string = sortAndSerializeQueryObject(tables, cacheRequestData ?? {});
 
-                if (cacheResult) {
-                    const cacheCheck = checkCache<ResponseDataType>(cacheResult, requestMethod, tableName, this.request);
+            let cachedRequest: AxiosPromise<ResponseDataType> | false = false;
 
-                    if (false !== cacheCheck) {
+            if (cacheResults) {
+                cachedRequest = checkCache<ResponseDataType>(requestMethod, tableName, cacheRequestData);
+            }
 
-                        return (await cacheCheck).data;
+            if (cachedRequest) {
+                return (await cachedRequest).data;
+            }
 
-                    }
-                }
-
+            if (cacheResults) {
                 cachingConfirmed = true;
-                // push to cache so we do not repeat the request
+            } else if (debug && isLocal()) {
+                toast.info("DEVS: Ignore cache was set to true.", toastOptionsDevs);
+            }
 
+            if (cacheResults && debug && isLocal()) {
+                toast.success("DEVS: Request not in cache." + (requestMethod === C6.GET ? " Page (" + query[C6.PAGINATION][C6.PAGE] + ")" : ''), toastOptionsDevs);
             }
 
             let apiResponse: G['RestTableInterface'][G['PrimaryKey']] | string | boolean | number | undefined;
-
-            let returnGetNextPageFunction = false;
 
             let restRequestUri: string = restURL + operatingTable + '/';
 
@@ -460,21 +441,29 @@ export class HttpExecutor<
 
 
                 if (cachingConfirmed) {
-
-                    // push to cache so we do not repeat the request
-                    apiRequestCache.push({
+                    setCache<ResponseDataType>(requestMethod, tableName, cacheRequestData, {
                         requestArgumentsSerialized: querySerialized,
-                        request: axiosActiveRequest
+                        request: axiosActiveRequest,
                     });
-
                 }
 
                 // returning the promise with this then is important for tests. todo - we could make that optional.
                 // https://rapidapi.com/guides/axios-async-await
                 return axiosActiveRequest.then(async (response: AxiosResponse<ResponseDataType, any>): Promise<AxiosResponse<ResponseDataType, any>> => {
 
+                        let hasNext: boolean | undefined;
+
                         // noinspection SuspiciousTypeOfGuard
                         if (typeof response.data === 'string') {
+
+                            if (cachingConfirmed) {
+                                setCache<ResponseDataType>(requestMethod, tableName, cacheRequestData, {
+                                    requestArgumentsSerialized: querySerialized,
+                                    request: axiosActiveRequest,
+                                    response,
+                                    final: true,
+                                });
+                            }
 
                             if (isTest()) {
 
@@ -489,15 +478,11 @@ export class HttpExecutor<
                         }
 
                         if (cachingConfirmed) {
-
-                            const cacheIndex = apiRequestCache.findIndex(cache => cache.requestArgumentsSerialized === querySerialized);
-
-                            // TODO - currently nonthing is setting this correctly
-                            apiRequestCache[cacheIndex].final = false === returnGetNextPageFunction
-
-                            // only cache get method requests
-                            apiRequestCache[cacheIndex].response = response
-
+                            setCache<ResponseDataType>(requestMethod, tableName, cacheRequestData, {
+                                requestArgumentsSerialized: querySerialized,
+                                request: axiosActiveRequest,
+                                response,
+                            });
                         }
 
                         this.runLifecycleHooks<"afterExecution">(
@@ -555,7 +540,7 @@ export class HttpExecutor<
 
                             const pageLimit = query?.[C6.PAGINATION]?.[C6.LIMIT];
                             const got = responseData.rest.length;
-                            const hasNext = pageLimit !== 1 && got === pageLimit;
+                            hasNext = pageLimit !== 1 && got === pageLimit;
 
                             if (hasNext) {
                                 responseData.next = apiRequest;   // there might be more
@@ -563,13 +548,13 @@ export class HttpExecutor<
                                 responseData.next = undefined;    // short page => done
                             }
 
-                            // If you keep this flag, make it reflect reality:
-                            returnGetNextPageFunction = hasNext;
-
-                            // and fix cache ‘final’ flag to match:
                             if (cachingConfirmed) {
-                                const cacheIndex = apiRequestCache.findIndex(c => c.requestArgumentsSerialized === querySerialized);
-                                apiRequestCache[cacheIndex].final = !hasNext;
+                                setCache<ResponseDataType>(requestMethod, tableName, cacheRequestData, {
+                                    requestArgumentsSerialized: querySerialized,
+                                    request: axiosActiveRequest,
+                                    response,
+                                    final: !hasNext,
+                                });
                             }
 
                             if ((this.config.verbose || debug) && isLocal()) {
@@ -580,11 +565,9 @@ export class HttpExecutor<
                             }
 
                             // next already set above based on hasNext; avoid duplicate, inverted logic
-
-
                             if (fetchDependencies
                                 && 'number' === typeof fetchDependencies
-                                && responseData.rest.length > 0) {
+                                && responseData.rest?.length > 0) {
 
                                 console.groupCollapsed('%c API: Fetch Dependencies segment (' + requestMethod + ' ' + tableName + ')'
                                     + (fetchDependencies & eFetchDependencies.CHILDREN ? ' | (CHILDREN|REFERENCED) ' : '')
@@ -825,6 +808,15 @@ export class HttpExecutor<
                             }
 
 
+                        }
+
+                        if (cachingConfirmed && hasNext === undefined) {
+                            setCache<ResponseDataType>(requestMethod, tableName, cacheRequestData, {
+                                requestArgumentsSerialized: querySerialized,
+                                request: axiosActiveRequest,
+                                response,
+                                final: true,
+                            });
                         }
 
                         if (debug && isLocal()) {

@@ -13,7 +13,7 @@ export function ExpressHandler({C6, mysqlPool}: { C6: iC6Object, mysqlPool: Pool
         try {
             const incomingMethod = req.method.toUpperCase() as iRestMethods;
             const table = req.params.table;
-            const primary = req.params.primary;
+            let primary = req.params.primary;
             // Support Axios interceptor promoting large GETs to POST with ?METHOD=GET
             const methodOverrideRaw = (req.query?.METHOD ?? req.query?.method) as unknown;
             const methodOverride = typeof methodOverrideRaw === 'string' ? methodOverrideRaw.toUpperCase() : undefined;
@@ -38,17 +38,40 @@ export function ExpressHandler({C6, mysqlPool}: { C6: iC6Object, mysqlPool: Pool
                 return;
             }
 
-            const primaryKeys = C6.TABLES[table].PRIMARY;
+            const restModel = C6.TABLES[table];
+            const primaryKeys = restModel.PRIMARY;
+            const primaryShortKeys = restModel.PRIMARY_SHORT ?? [];
+            const columnMap = restModel.COLUMNS ?? {};
+            const resolveShortKey = (fullKey: string, index: number) =>
+                (columnMap as any)[fullKey] ?? primaryShortKeys[index] ?? fullKey.split('.').pop() ?? fullKey;
+            const hasPrimaryKeyValues = (data: any) => {
+                if (!data || typeof data !== 'object') return false;
+                const whereClause = (data as any)[C6C.WHERE];
+                const hasKeyValue = (obj: any, fullKey: string, shortKey: string) => {
+                    if (!obj || typeof obj !== 'object') return false;
+                    const fullValue = obj[fullKey];
+                    if (fullValue !== undefined && fullValue !== null) return true;
+                    const shortValue = shortKey ? obj[shortKey] : undefined;
+                    return shortValue !== undefined && shortValue !== null;
+                };
+                return primaryKeys.every((fullKey, index) => {
+                    const shortKey = resolveShortKey(fullKey, index);
+                    return hasKeyValue(whereClause, fullKey, shortKey) || hasKeyValue(data, fullKey, shortKey);
+                });
+            };
 
             if (primary && primaryKeys.length !== 1) {
-                if (primaryKeys.length > 1) {
+                if (primaryKeys.length > 1 && hasPrimaryKeyValues(payload)) {
+                    primary = undefined;
+                } else if (primaryKeys.length > 1) {
                     res.status(400).json({error: `Table ${table} has multiple primary keys. Cannot implicitly determine key.`});
                     return;
+                } else {
+                    res.status(400).json({
+                        error: `Table ${table} has no primary keys. Please specify one.`
+                    });
+                    return;
                 }
-                res.status(400).json({
-                    error: `Table ${table} has no primary keys. Please specify one.`
-                });
-                return;
             }
 
             const primaryKeyName = primaryKeys[0];

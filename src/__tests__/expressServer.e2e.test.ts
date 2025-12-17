@@ -2,7 +2,7 @@ import mysql from "mysql2/promise";
 import axios from "axios";
 import { AddressInfo } from "net";
 import {describe, it, expect, beforeAll, afterAll} from "vitest";
-import {Actor, C6, GLOBAL_REST_PARAMETERS} from "./sakila-db/C6.js";
+import {Actor, C6, Film_Actor, GLOBAL_REST_PARAMETERS} from "./sakila-db/C6.js";
 import {C6C} from "../api/C6Constants";
 import createTestServer from "./fixtures/createTestServer";
 
@@ -198,5 +198,29 @@ describe("ExpressHandler e2e", () => {
 
         expect(response.status).toBe(200);
         expect(response.data?.success).toBeTruthy();
+    });
+
+    it("allows composite keys when a URL primary is present", async () => {
+        const {restURL} = GLOBAL_REST_PARAMETERS;
+        const table = Film_Actor.TABLE_NAME;
+
+        const seed = await Film_Actor.Get({
+            [C6C.PAGINATION]: { [C6C.LIMIT]: 1 },
+        } as any);
+
+        const filmActor = seed?.rest?.[0];
+        expect(filmActor).toBeTruthy();
+
+        const response = await axios.post(`${restURL}${table}/${filmActor.actor_id}?METHOD=GET`, {
+            [C6C.WHERE]: {
+                [Film_Actor.ACTOR_ID]: filmActor.actor_id,
+                [Film_Actor.FILM_ID]: filmActor.film_id,
+            },
+        });
+
+        expect(response.status).toBe(200);
+        expect(response.data?.rest).toHaveLength(1);
+        expect(response.data?.rest?.[0]?.actor_id).toBe(filmActor.actor_id);
+        expect(response.data?.rest?.[0]?.film_id).toBe(filmActor.film_id);
     });
 });
