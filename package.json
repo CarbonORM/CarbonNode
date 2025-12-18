@@ -1,6 +1,6 @@
 {
   "name": "@carbonorm/carbonnode",
-  "version": "3.12.0",
+  "version": "4.0.0",
   "browser": "dist/index.umd.js",
   "repository": {
     "type": "git",

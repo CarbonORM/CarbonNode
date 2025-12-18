@@ -111,40 +111,48 @@ export interface iChangeC6Data {
     rowCount: number;
 }
 
-export interface iDeleteC6RestResponse<RestData = any, RequestData = any> extends iChangeC6Data, iC6RestResponse<RestData> {
-    deleted: boolean | number | string | RequestData;
-}
-
-export interface iPostC6RestResponse<RestData = any> extends iC6RestResponse<RestData> {
-    created: boolean | number | string;
-}
-
-export interface iPutC6RestResponse<RestData = any, RequestData = any> extends iChangeC6Data, iC6RestResponse<RestData> {
-    updated: boolean | number | string | RequestData;
-}
+// New discriminated REST response type based on HTTP method
+export type C6RestResponse<
+    Method extends iRestMethods,
+    RestData extends { [key: string]: any },
+    Overrides = {}
+> = {
+    rest: Method extends 'GET' ? Modify<RestData, Overrides>[] : Modify<RestData, Overrides>;
+    session?: any;
+    sql?: any;
+} & (Method extends 'GET'
+    ? { next?: () => Promise<DetermineResponseDataType<'GET', RestData, Overrides>> }
+    : {});
 
 export interface iC6RestResponse<RestData> {
+    // Backwards compatibility: base interface for rest/sql/session (singular)
     rest: RestData;
     session?: any;
     sql?: any;
 }
 
+export interface iDeleteC6RestResponse<RestData extends { [key: string]: any; }, RequestData = any> extends iChangeC6Data, C6RestResponse<'DELETE', RestData> {
+    deleted: boolean | number | string | RequestData;
+}
+
+export interface iPostC6RestResponse<RestData extends { [key: string]: any; }> extends C6RestResponse<'POST', RestData> {
+    created: boolean | number | string;
+}
+
+export interface iPutC6RestResponse<RestData extends { [key: string]: any; }, RequestData = any> extends iChangeC6Data, C6RestResponse<'PUT', RestData> {
+    updated: boolean | number | string | RequestData;
+}
+
 export interface iGetC6RestResponse<
     ResponseDataType extends { [key: string]: any },
     ResponseDataOverrides = {}
-> extends iC6RestResponse<
-    // TODO - We removed Modify<ResponseDataType, ResponseDataOverrides> |
-    Modify<ResponseDataType, ResponseDataOverrides>[]
-> {
-    next?: () => Promise<DetermineResponseDataType<"GET", ResponseDataType, ResponseDataOverrides>>;
-}
+> extends C6RestResponse<'GET', ResponseDataType, ResponseDataOverrides> {}
 
 export type DetermineResponseDataType<
     Method extends iRestMethods,
     RestTableInterface extends { [key: string]: any },
     ResponseDataOverrides = {}
-> = null |
-    (Method extends 'POST'
+> = (Method extends 'POST'
         ? iPostC6RestResponse<RestTableInterface>
         : Method extends 'GET'
             ? iGetC6RestResponse<RestTableInterface, ResponseDataOverrides>

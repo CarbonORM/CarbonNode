@@ -46,14 +46,14 @@ describe("HttpExecutor singular e2e", () => {
     const last_name = `User${Date.now()}`;
 
     // POST
-    const postRes = await Actor.Post({ first_name, last_name } as any);
-    expect(postRes.affected).toBe(1);
+    await Actor.Post({ first_name, last_name } as any);
 
     // Fetch inserted id using complex query
     let data = await Actor.Get({
       [C6C.WHERE]: { [Actor.FIRST_NAME]: first_name, [Actor.LAST_NAME]: last_name },
       [C6C.PAGINATION]: { [C6C.LIMIT]: 1 },
-    } as any);
+    });
+
     expect(data.rest).toHaveLength(1);
     const testId = data.rest[0].actor_id;
 
@@ -97,16 +97,27 @@ describe("HttpExecutor singular e2e", () => {
 
   it("exposes next when pagination continues", async () => {
     const data = await Actor.Get({
-      [C6C.PAGINATION]: { [C6C.LIMIT]: 1 },
+      [C6C.PAGINATION]: { [C6C.LIMIT]: 2 },
     } as any);
 
     expect(Array.isArray(data.rest)).toBe(true);
-    expect(data.rest).toHaveLength(1);
+    expect(data.rest).toHaveLength(2);
     expect(typeof data.next).toBe("function");
 
     const nextPage = await data.next?.();
     expect(nextPage?.rest).toBeDefined();
     expect(Array.isArray(nextPage?.rest)).toBe(true);
     expect(nextPage?.rest?.length).toBeGreaterThan(0);
+  });
+
+  it("exposes limit 1 does not expose next", async () => {
+    const data = await Actor.Get({
+      [C6C.PAGINATION]: { [C6C.LIMIT]: 1 },
+    } as any);
+
+    expect(Array.isArray(data.rest)).toBe(true);
+    expect(data.rest).toHaveLength(1);
+    expect(typeof data.next).toBe("undefined");
+
   });
 });

@@ -208,7 +208,7 @@ describe("ExpressHandler e2e", () => {
             [C6C.PAGINATION]: { [C6C.LIMIT]: 1 },
         } as any);
 
-        const filmActor = seed?.rest?.[0];
+        const filmActor = seed.rest[0];
         expect(filmActor).toBeTruthy();
 
         const response = await axios.post(`${restURL}${table}/${filmActor.actor_id}?METHOD=GET`, {
