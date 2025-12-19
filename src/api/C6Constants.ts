@@ -170,9 +170,9 @@ export const C6Constants = {
     UNKNOWN: 'UNKNOWN',
     UPDATE: 'UPDATE',
     UNHEX: 'UNHEX',
-    UTC_DATE: 'UNHEX',
-    UTC_TIME: 'UNHEX',
-    UTC_TIMESTAMP: 'UNHEX',
+    UTC_DATE: 'UTC_DATE',
+    UTC_TIME: 'UTC_TIME',
+    UTC_TIMESTAMP: 'UTC_TIMESTAMP',
 
     WHERE: 'WHERE',
     WEEKDAY: 'WEEKDAY',
