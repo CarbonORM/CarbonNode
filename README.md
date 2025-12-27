@@ -9,8 +9,26 @@
 
 # CarbonNode
 
-CarbonNode is a part of the CarbonORM series. It is a NodeJS MySQL ORM that can run independantly in the backend or paired with 
-CarbonReact for 1=1 syntax. Note the CarbonNode + CarbonReact experence is unmatched in interoperablillity.
+CarbonNode is a part of the CarbonORM series. It is a NodeJS MySQL ORM that can run independently in the backend or paired with 
+CarbonReact for 1=1 syntax. Note the CarbonNode + CarbonReact experience is unmatched in interoperability.
+
+# Purpose
+
+CarbonNode is designed to generate RESTful API bindings for a MySQL database. The generated code provides a simple and
+consistent interface for performing CRUD operations on the database tables. The goal is to reduce the amount of boilerplate
+code needed to interact with the database and to provide a more efficient and reliable way to work with MySQL data in a NodeJS
+environment. The major goals:
+- Allow a 1-1 interoperability when querying data from the frontend to the backend. 
+- Language based Objects/Arrays for representing and modifying queries to eliminate string manipulation operations.
+- Explicit column references to allow for easier refactoring and code completion in IDEs. 
+  - Selecting a dead column will result in a compile time error instead of a runtime error.
+- TypeScript types generated for each table in the database.
+- Lifecycle hooks for each CRUD operation to allow for custom logic to be executed before and after the operation.
+- Validation of data types and formats before executing CRUD operations to ensure data integrity.
+
+It's easier to scale your middleware than your database. 
+CarbonNode aims to capture issues before they reach your database.
+
 
 ## Alpha Release
 
@@ -68,383 +86,74 @@ generate. Here are the templates used to generate the code:
 
 0) **npx generateRestBindings** is executed.
 1) **The MySQL dump tool** outputs a strcture for every table.
-```sql
---
--- Table structure for table `carbon_users`
---
 
-DROP TABLE IF EXISTS `carbon_users`;
-/*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!50503 SET character_set_client = utf8mb4 */;
-CREATE TABLE `carbon_users` (
-  `user_username` varchar(100) NOT NULL,
-  `user_password` varchar(225) NOT NULL,
-  `user_id` binary(16) NOT NULL,
-  `user_type` varchar(20) NOT NULL DEFAULT 'Athlete',
-  `user_sport` varchar(20) DEFAULT 'GOLF',
-  `user_session_id` varchar(225) DEFAULT NULL,
-  `user_facebook_id` varchar(225) DEFAULT NULL,
-  `user_first_name` varchar(25) NOT NULL,
-  `user_last_name` varchar(25) NOT NULL,
-  `user_profile_pic` varchar(225) DEFAULT NULL,
-  `user_profile_uri` varchar(225) DEFAULT NULL,
-  `user_cover_photo` varchar(225) DEFAULT NULL,
-  `user_birthday` varchar(9) DEFAULT NULL,
-  `user_gender` varchar(25) DEFAULT NULL,
-  `user_about_me` varchar(225) DEFAULT NULL,
-  `user_rank` int DEFAULT '0',
-  `user_email` varchar(50) NOT NULL,
-  `user_email_code` varchar(225) DEFAULT NULL,
-  `user_email_confirmed` tinyint DEFAULT '0' COMMENT 'need to change to enums, but no support in rest yet',
-  `user_generated_string` varchar(200) DEFAULT NULL,
-  `user_membership` int DEFAULT '0',
-  `user_deactivated` tinyint DEFAULT '0',
-  `user_last_login` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  `user_ip` varchar(20) NOT NULL,
-  `user_education_history` varchar(200) DEFAULT NULL,
-  `user_location` varchar(20) DEFAULT NULL,
-  `user_creation_date` datetime DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (`user_id`),
-  UNIQUE KEY `carbon_users_user_username_uindex` (`user_username`),
-  UNIQUE KEY `user_user_profile_uri_uindex` (`user_profile_uri`),
-  UNIQUE KEY `carbon_users_user_facebook_id_uindex` (`user_facebook_id`),
-  CONSTRAINT `user_entity_entity_pk_fk` FOREIGN KEY (`user_id`) REFERENCES `carbon_carbons` (`entity_pk`) ON DELETE CASCADE ON UPDATE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3;
-/*!40101 SET character_set_client = @saved_cs_client */;
+```mysql
+CREATE TABLE actor (
+  actor_id SMALLINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  first_name VARCHAR(45) NOT NULL,
+  last_name VARCHAR(45) NOT NULL,
+  last_update TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY  (actor_id),
+  KEY idx_actor_last_name (last_name)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 ```
-3) **Profit**
-  - C6 will produce 1-1 constants.
+
 ```typescript
-export interface iUsers {
-    'user_username'?: string;
-    'user_password'?: string;
-    'user_id'?: string;
-    'user_type'?: string;
-    'user_sport'?: string | null;
-    'user_session_id'?: string | null;
-    'user_facebook_id'?: string | null;
-    'user_first_name'?: string;
-    'user_last_name'?: string;
-    'user_profile_pic'?: string | null;
-    'user_profile_uri'?: string | null;
-    'user_cover_photo'?: string | null;
-    'user_birthday'?: string | null;
-    'user_gender'?: string | null;
-    'user_about_me'?: string | null;
-    'user_rank'?: number | null;
-    'user_email'?: string;
-    'user_email_code'?: string | null;
-    'user_email_confirmed'?: number | null;
-    'user_generated_string'?: string | null;
-    'user_membership'?: number | null;
-    'user_deactivated'?: number | null;
-    'user_last_login'?: string;
-    'user_ip'?: string;
-    'user_education_history'?: string | null;
-    'user_location'?: string | null;
-    'user_creation_date'?: string | null;
+export interface iActor {
+    'actor_id'?: number;
+    'first_name'?: string;
+    'last_name'?: string;
+    'last_update'?: Date | number | string;
 }
 
-### Derived table joins
+export type ActorPrimaryKeys =
+    'actor_id'
+    ;
 
-The C6 query builder now supports joining derived tables (subselects) so you can project
-single-row lookups and reuse their fields elsewhere in the query. Wrap the derived table
-definition with `derivedTable(...)` to register it, then reference it inside the JOIN tree:
-
-```ts
-import { C6C } from "@carbonorm/carbonnode";
-import { derivedTable, F } from "@carbonorm/carbonnode/api/orm/queryHelpers";
-
-const puTarget = derivedTable({
-  [C6C.SUBSELECT]: {
-    [C6C.SELECT]: [Property_Units.LOCATION],
-    [C6C.FROM]: Property_Units.TABLE_NAME,
-    [C6C.WHERE]: { [Property_Units.UNIT_ID]: [C6C.EQUAL, unitIdParam] },
-    [C6C.LIMIT]: 1,
-  },
-  [C6C.AS]: 'pu_target',
-});
-
-const query = {
-  [C6C.SELECT]: [
-    Property_Units.UNIT_ID,
-    Property_Units.LOCATION,
-    F(Property_Units.LOCATION, 'pu_target'),
-  ],
-  [C6C.JOIN]: {
-    [C6C.INNER]: {
-      'parcel_sales ps': { 'ps.parcel_id': [C6C.EQUAL, Property_Units.PARCEL_ID] },
-      [puTarget as any]: {},
-    },
-  },
-  [C6C.PAGINATION]: {
-    [C6C.ORDER]: {
-      [C6C.ST_DISTANCE_SPHERE]: [
-        Property_Units.LOCATION,
-        F(Property_Units.LOCATION, 'pu_target'),
-      ],
-    },
-  },
-};
-```
-
-Parameters from the subselect are hoisted ahead of the outer query’s bindings and the alias
-(`pu_target` in the example above) is available to `F(...)`, WHERE, ORDER BY, and other
-expressions.
-
-interface iDefineUsers {
-    'USER_USERNAME': string;
-    'USER_PASSWORD': string;
-    'USER_ID': string;
-    'USER_TYPE': string;
-    'USER_SPORT': string;
-    'USER_SESSION_ID': string;
-    'USER_FACEBOOK_ID': string;
-    'USER_FIRST_NAME': string;
-    'USER_LAST_NAME': string;
-    'USER_PROFILE_PIC': string;
-    'USER_PROFILE_URI': string;
-    'USER_COVER_PHOTO': string;
-    'USER_BIRTHDAY': string;
-    'USER_GENDER': string;
-    'USER_ABOUT_ME': string;
-    'USER_RANK': string;
-    'USER_EMAIL': string;
-    'USER_EMAIL_CODE': string;
-    'USER_EMAIL_CONFIRMED': string;
-    'USER_GENERATED_STRING': string;
-    'USER_MEMBERSHIP': string;
-    'USER_DEACTIVATED': string;
-    'USER_LAST_LOGIN': string;
-    'USER_IP': string;
-    'USER_EDUCATION_HISTORY': string;
-    'USER_LOCATION': string;
-    'USER_CREATION_DATE': string;
-}
-
-export const users: iC6RestfulModel<RestTableNames> & iDefineUsers = {
-    TABLE_NAME: 'carbon_users',
-    USER_USERNAME: 'carbon_users.user_username',
-    USER_PASSWORD: 'carbon_users.user_password',
-    USER_ID: 'carbon_users.user_id',
-    USER_TYPE: 'carbon_users.user_type',
-    USER_SPORT: 'carbon_users.user_sport',
-    USER_SESSION_ID: 'carbon_users.user_session_id',
-    USER_FACEBOOK_ID: 'carbon_users.user_facebook_id',
-    USER_FIRST_NAME: 'carbon_users.user_first_name',
-    USER_LAST_NAME: 'carbon_users.user_last_name',
-    USER_PROFILE_PIC: 'carbon_users.user_profile_pic',
-    USER_PROFILE_URI: 'carbon_users.user_profile_uri',
-    USER_COVER_PHOTO: 'carbon_users.user_cover_photo',
-    USER_BIRTHDAY: 'carbon_users.user_birthday',
-    USER_GENDER: 'carbon_users.user_gender',
-    USER_ABOUT_ME: 'carbon_users.user_about_me',
-    USER_RANK: 'carbon_users.user_rank',
-    USER_EMAIL: 'carbon_users.user_email',
-    USER_EMAIL_CODE: 'carbon_users.user_email_code',
-    USER_EMAIL_CONFIRMED: 'carbon_users.user_email_confirmed',
-    USER_GENERATED_STRING: 'carbon_users.user_generated_string',
-    USER_MEMBERSHIP: 'carbon_users.user_membership',
-    USER_DEACTIVATED: 'carbon_users.user_deactivated',
-    USER_LAST_LOGIN: 'carbon_users.user_last_login',
-    USER_IP: 'carbon_users.user_ip',
-    USER_EDUCATION_HISTORY: 'carbon_users.user_education_history',
-    USER_LOCATION: 'carbon_users.user_location',
-    USER_CREATION_DATE: 'carbon_users.user_creation_date',
+const actor:
+    C6RestfulModel<
+        'actor',
+        iActor,
+        ActorPrimaryKeys
+    > = {
+    TABLE_NAME: 'actor',
+    ACTOR_ID: 'actor.actor_id',
+    FIRST_NAME: 'actor.first_name',
+    LAST_NAME: 'actor.last_name',
+    LAST_UPDATE: 'actor.last_update',
     PRIMARY: [
-        'carbon_users.user_id',
+        'actor.actor_id',
     ],
     PRIMARY_SHORT: [
-        'user_id',
+        'actor_id',
     ],
     COLUMNS: {
-        'carbon_users.user_username': 'user_username',
-        'carbon_users.user_password': 'user_password',
-        'carbon_users.user_id': 'user_id',
-        'carbon_users.user_type': 'user_type',
-        'carbon_users.user_sport': 'user_sport',
-        'carbon_users.user_session_id': 'user_session_id',
-        'carbon_users.user_facebook_id': 'user_facebook_id',
-        'carbon_users.user_first_name': 'user_first_name',
-        'carbon_users.user_last_name': 'user_last_name',
-        'carbon_users.user_profile_pic': 'user_profile_pic',
-        'carbon_users.user_profile_uri': 'user_profile_uri',
-        'carbon_users.user_cover_photo': 'user_cover_photo',
-        'carbon_users.user_birthday': 'user_birthday',
-        'carbon_users.user_gender': 'user_gender',
-        'carbon_users.user_about_me': 'user_about_me',
-        'carbon_users.user_rank': 'user_rank',
-        'carbon_users.user_email': 'user_email',
-        'carbon_users.user_email_code': 'user_email_code',
-        'carbon_users.user_email_confirmed': 'user_email_confirmed',
-        'carbon_users.user_generated_string': 'user_generated_string',
-        'carbon_users.user_membership': 'user_membership',
-        'carbon_users.user_deactivated': 'user_deactivated',
-        'carbon_users.user_last_login': 'user_last_login',
-        'carbon_users.user_ip': 'user_ip',
-        'carbon_users.user_education_history': 'user_education_history',
-        'carbon_users.user_location': 'user_location',
-        'carbon_users.user_creation_date': 'user_creation_date',
+        'actor.actor_id': 'actor_id',
+        'actor.first_name': 'first_name',
+        'actor.last_name': 'last_name',
+        'actor.last_update': 'last_update',
     },
     TYPE_VALIDATION: {
-        'carbon_users.user_username': {
-            MYSQL_TYPE: 'varchar',
-            MAX_LENGTH: '100',
-            AUTO_INCREMENT: false,
-            SKIP_COLUMN_IN_POST: false
-        },
-        'carbon_users.user_password': {
-            MYSQL_TYPE: 'varchar',
-            MAX_LENGTH: '225',
-            AUTO_INCREMENT: false,
-            SKIP_COLUMN_IN_POST: false
-        },
-        'carbon_users.user_id': {
-            MYSQL_TYPE: 'binary',
-            MAX_LENGTH: '16',
-            AUTO_INCREMENT: false,
-            SKIP_COLUMN_IN_POST: false
-        },
-        'carbon_users.user_type': {
-            MYSQL_TYPE: 'varchar',
-            MAX_LENGTH: '20',
-            AUTO_INCREMENT: false,
-            SKIP_COLUMN_IN_POST: false
-        },
-        'carbon_users.user_sport': {
-            MYSQL_TYPE: 'varchar',
-            MAX_LENGTH: '20',
-            AUTO_INCREMENT: false,
-            SKIP_COLUMN_IN_POST: false
-        },
-        'carbon_users.user_session_id': {
-            MYSQL_TYPE: 'varchar',
-            MAX_LENGTH: '225',
-            AUTO_INCREMENT: false,
-            SKIP_COLUMN_IN_POST: false
-        },
-        'carbon_users.user_facebook_id': {
-            MYSQL_TYPE: 'varchar',
-            MAX_LENGTH: '225',
-            AUTO_INCREMENT: false,
-            SKIP_COLUMN_IN_POST: false
-        },
-        'carbon_users.user_first_name': {
-            MYSQL_TYPE: 'varchar',
-            MAX_LENGTH: '25',
-            AUTO_INCREMENT: false,
-            SKIP_COLUMN_IN_POST: false
-        },
-        'carbon_users.user_last_name': {
-            MYSQL_TYPE: 'varchar',
-            MAX_LENGTH: '25',
-            AUTO_INCREMENT: false,
-            SKIP_COLUMN_IN_POST: false
-        },
-        'carbon_users.user_profile_pic': {
-            MYSQL_TYPE: 'varchar',
-            MAX_LENGTH: '225',
-            AUTO_INCREMENT: false,
-            SKIP_COLUMN_IN_POST: false
-        },
-        'carbon_users.user_profile_uri': {
-            MYSQL_TYPE: 'varchar',
-            MAX_LENGTH: '225',
-            AUTO_INCREMENT: false,
-            SKIP_COLUMN_IN_POST: false
-        },
-        'carbon_users.user_cover_photo': {
-            MYSQL_TYPE: 'varchar',
-            MAX_LENGTH: '225',
-            AUTO_INCREMENT: false,
-            SKIP_COLUMN_IN_POST: false
-        },
-        'carbon_users.user_birthday': {
-            MYSQL_TYPE: 'varchar',
-            MAX_LENGTH: '9',
-            AUTO_INCREMENT: false,
-            SKIP_COLUMN_IN_POST: false
-        },
-        'carbon_users.user_gender': {
-            MYSQL_TYPE: 'varchar',
-            MAX_LENGTH: '25',
-            AUTO_INCREMENT: false,
-            SKIP_COLUMN_IN_POST: false
-        },
-        'carbon_users.user_about_me': {
-            MYSQL_TYPE: 'varchar',
-            MAX_LENGTH: '225',
-            AUTO_INCREMENT: false,
-            SKIP_COLUMN_IN_POST: false
-        },
-        'carbon_users.user_rank': {
-            MYSQL_TYPE: 'int',
+        'actor.actor_id': {
+            MYSQL_TYPE: 'smallint',
             MAX_LENGTH: '',
-            AUTO_INCREMENT: false,
+            AUTO_INCREMENT: true,
             SKIP_COLUMN_IN_POST: false
         },
-        'carbon_users.user_email': {
+        'actor.first_name': {
             MYSQL_TYPE: 'varchar',
-            MAX_LENGTH: '50',
+            MAX_LENGTH: '45',
             AUTO_INCREMENT: false,
             SKIP_COLUMN_IN_POST: false
         },
-        'carbon_users.user_email_code': {
+        'actor.last_name': {
             MYSQL_TYPE: 'varchar',
-            MAX_LENGTH: '225',
+            MAX_LENGTH: '45',
             AUTO_INCREMENT: false,
             SKIP_COLUMN_IN_POST: false
         },
-        'carbon_users.user_email_confirmed': {
-            MYSQL_TYPE: 'tinyint',
-            MAX_LENGTH: '',
-            AUTO_INCREMENT: false,
-            SKIP_COLUMN_IN_POST: false
-        },
-        'carbon_users.user_generated_string': {
-            MYSQL_TYPE: 'varchar',
-            MAX_LENGTH: '200',
-            AUTO_INCREMENT: false,
-            SKIP_COLUMN_IN_POST: false
-        },
-        'carbon_users.user_membership': {
-            MYSQL_TYPE: 'int',
-            MAX_LENGTH: '',
-            AUTO_INCREMENT: false,
-            SKIP_COLUMN_IN_POST: false
-        },
-        'carbon_users.user_deactivated': {
-            MYSQL_TYPE: 'tinyint',
-            MAX_LENGTH: '',
-            AUTO_INCREMENT: false,
-            SKIP_COLUMN_IN_POST: false
-        },
-        'carbon_users.user_last_login': {
-            MYSQL_TYPE: 'datetime',
-            MAX_LENGTH: '',
-            AUTO_INCREMENT: false,
-            SKIP_COLUMN_IN_POST: false
-        },
-        'carbon_users.user_ip': {
-            MYSQL_TYPE: 'varchar',
-            MAX_LENGTH: '20',
-            AUTO_INCREMENT: false,
-            SKIP_COLUMN_IN_POST: false
-        },
-        'carbon_users.user_education_history': {
-            MYSQL_TYPE: 'varchar',
-            MAX_LENGTH: '200',
-            AUTO_INCREMENT: false,
-            SKIP_COLUMN_IN_POST: false
-        },
-        'carbon_users.user_location': {
-            MYSQL_TYPE: 'varchar',
-            MAX_LENGTH: '20',
-            AUTO_INCREMENT: false,
-            SKIP_COLUMN_IN_POST: false
-        },
-        'carbon_users.user_creation_date': {
-            MYSQL_TYPE: 'datetime',
+        'actor.last_update': {
+            MYSQL_TYPE: 'timestamp',
             MAX_LENGTH: '',
             AUTO_INCREMENT: false,
             SKIP_COLUMN_IN_POST: false
@@ -452,160 +161,83 @@ export const users: iC6RestfulModel<RestTableNames> & iDefineUsers = {
     },
     REGEX_VALIDATION: {
     },
+    LIFECYCLE_HOOKS: {
+        GET: {beforeProcessing:{}, beforeExecution:{}, afterExecution:{}, afterCommit:{}},
+        PUT: {beforeProcessing:{}, beforeExecution:{}, afterExecution:{}, afterCommit:{}},
+        POST: {beforeProcessing:{}, beforeExecution:{}, afterExecution:{}, afterCommit:{}},
+        DELETE: {beforeProcessing:{}, beforeExecution:{}, afterExecution:{}, afterCommit:{}},
+    },
     TABLE_REFERENCES: {
-        'user_id': [{
-            TABLE: 'carbon_carbons',
-            COLUMN: 'entity_pk',
-            CONSTRAINT: 'user_entity_entity_pk_fk',
-        },],
+
     },
     TABLE_REFERENCED_BY: {
-        
+        'actor_id': [{
+            TABLE: 'film_actor',
+            COLUMN: 'actor_id',
+            CONSTRAINT: 'fk_film_actor_actor',
+        },],
     }
 }
+
+export const Actor = {
+    ...actor,
+    ...restOrm<
+        OrmGenerics<any, 'actor', iActor, ActorPrimaryKeys>
+    >(() => ({
+        ...GLOBAL_REST_PARAMETERS,
+        restModel: actor
+    }))
+}
 ```
-  - A File named the pascal case formated table name will be created with bindings to query the middleware (backend langague) -> MySQL.
+
+3) **Profit**
+- C6 will produce 1-1 constants.
+
+Allowing you to do:
+
 ```typescript
-import {AxiosResponse} from "axios";
-import {
-    iPostC6RestResponse,
-    restRequest,
-    GET,
-    POST,
-    PUT,
-    DELETE,
-    iDeleteC6RestResponse,
-    iGetC6RestResponse,
-    iPutC6RestResponse,
-    removeInvalidKeys,
-    iAPI,
-    Modify
-} from "@carbonorm/carbonnode";
-import {deleteRestfulObjectArrays, updateRestfulObjectArrays} from "@carbonorm/carbonreact";
-import {C6, iUsers, users, RestTableNames} from "./C6";
+import { Actor, C6C } from "./api/rest/Actor";
 
-type GetCustomAndRequiredFields = {}
-
-type GetRequestTableOverrides = {}
-
-// required parameters, optional parameters, parameter type overrides, response, and table names
-const Get = restRequest<GetCustomAndRequiredFields, iUsers, GetRequestTableOverrides, iGetC6RestResponse<iUsers>, RestTableNames>({
-    C6: C6,
-    tableName: users.TABLE_NAME,
-    requestMethod: GET,
-    queryCallback: (request) => {
-        request.success ??= 'Successfully received users!'
-        request.error ??= 'An unknown issue occurred creating the users!'
-        return request
+// GET
+const actors = await Actor.GET({
+    [C6C.SELECT]: [
+        Actor.ACTOR_ID,
+        Actor.FIRST_NAME,
+        Actor.LAST_NAME,
+    ],
+    [C6C.WHERE]: {
+        [Actor.LAST_NAME]: { like: "%PITT%" },
     },
-    responseCallback: (response, _request) => {
-        const responseData = response?.data?.rest;
-        updateRestfulObjectArrays<iUsers>(Array.isArray(responseData) ? responseData : [responseData], "users", C6.users.PRIMARY_SHORT as (keyof iUsers)[])
-    }
+    [C6C.LIMIT]: 10,
 });
 
-type PutCustomAndRequiredFields = {}
-
-type PutRequestTableOverrides = {}
-
-export function putStateUsers(response : AxiosResponse<iPutC6RestResponse<iUsers>>, request : iAPI<Modify<iUsers, PutRequestTableOverrides>> & PutCustomAndRequiredFields) {
-    updateRestfulObjectArrays<iUsers>([
-        removeInvalidKeys<iUsers>({
-            ...request,
-            ...response?.data?.rest,
-        }, C6.TABLES)
-    ], "users", users.PRIMARY_SHORT as (keyof iUsers)[])
-}
-
-const Put = restRequest<PutCustomAndRequiredFields, iUsers, PutRequestTableOverrides, iPutC6RestResponse<iUsers>, RestTableNames>({
-    C6: C6,
-    tableName: users.TABLE_NAME,
-    requestMethod: PUT,
-    queryCallback: (request) => {
-        request.success ??= 'Successfully updated users data!'
-        request.error ??= 'An unknown issue occurred updating the users data!'
-        return request
+// POST
+await Actor.POST({
+    [C6C.DATA]: {
+        [Actor.FIRST_NAME]: "Brad",
+        [Actor.LAST_NAME]: "Pitt",
     },
-    responseCallback: putStateUsers
 });
 
-type PostCustomAndRequiredFields = {}
-
-type PostRequestTableOverrides = {}
-
-export function postStateUsers(response : AxiosResponse<iPostC6RestResponse<iUsers>>, request : iAPI<Modify<iUsers, PostRequestTableOverrides>> & PostCustomAndRequiredFields, id: string | number | boolean) {
-    if ('number' === typeof id || 'string' === typeof id) {
-        if (1 !== users.PRIMARY_SHORT.length) {
-            console.error("C6 received unexpected result's given the primary key length");
-        } else {
-            request[users.PRIMARY_SHORT[0]] = id
-        }
-    }
-    updateRestfulObjectArrays<iUsers>(
-        undefined !== request.dataInsertMultipleRows
-            ? request.dataInsertMultipleRows.map((request, index) => {
-                return removeInvalidKeys<iUsers>({
-                    ...request,
-                    ...(index === 0 ? response?.data?.rest : {}),
-                }, C6.TABLES)
-            })
-            : [
-                removeInvalidKeys<iUsers>({
-                    ...request,
-                    ...response?.data?.rest,
-                    }, C6.TABLES)
-            ],
-        "users",
-        users.PRIMARY_SHORT as (keyof iUsers)[]
-    )
-}
-
-const Post = restRequest<PostCustomAndRequiredFields, iUsers, PostRequestTableOverrides, iPostC6RestResponse<iUsers>, RestTableNames>({
-    C6: C6,
-    tableName: users.TABLE_NAME,
-    requestMethod: POST,
-    queryCallback: (request) => {
-        request.success ??= 'Successfully created the users data!'
-        request.error ??= 'An unknown issue occurred creating the users data!'
-        return request
+// PUT
+await Actor.PUT({
+    [C6C.WHERE]: {
+        [Actor.ACTOR_ID]: 42,
     },
-    responseCallback: postStateUsers
+    [C6C.DATA]: {
+        [Actor.LAST_NAME]: "Updated",
+    },
 });
 
-type DeleteCustomAndRequiredFields = {}
-
-type DeleteRequestTableOverrides = {}
-
-export function deleteStateUsers(_response : AxiosResponse<iDeleteC6RestResponse<iUsers>>, request : iAPI<Modify<iUsers, DeleteRequestTableOverrides>> & DeleteCustomAndRequiredFields) {
-    deleteRestfulObjectArrays<iUsers>([
-        request
-    ], "users", users.PRIMARY_SHORT as (keyof iUsers)[])
-}
-
-const Delete = restRequest<DeleteCustomAndRequiredFields, iUsers, DeleteRequestTableOverrides, iDeleteC6RestResponse<iUsers>, RestTableNames>({
-    C6: C6,
-    tableName: users.TABLE_NAME,
-    requestMethod: DELETE,
-    queryCallback: (request) => {
-        request.success ??= 'Successfully removed the users data!'
-        request.error ??= 'An unknown issue occurred removing the users data!'
-        return request
+// DELETE
+await Actor.DELETE({
+    [C6C.WHERE]: {
+        [Actor.ACTOR_ID]: 42,
     },
-    responseCallback: deleteStateUsers
 });
-
-const Users = {
-    // Export all GET, POST, PUT, DELETE functions for each table
-    Get,
-    Post,
-    Put,
-    Delete,
-}
-
-export default Users;
 ```
 
-
+Our CarbonReact extends this solution for automatic state and pagination management.
 
 
 # Git Hooks
