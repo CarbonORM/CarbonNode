@@ -378,19 +378,19 @@ export abstract class ConditionBuilder<
         throw new Error('Unsupported operand type in SQL expression.');
     }
 
-    private isPlainArrayLiteral(value: any): boolean {
+    private isPlainArrayLiteral(value: any, allowColumnRefs = false): boolean {
         if (!Array.isArray(value)) return false;
         return value.every(item => {
             if (item === null) return true;
             const type = typeof item;
             if (type === 'string' || type === 'number' || type === 'boolean') return true;
-            if (Array.isArray(item)) return this.isPlainArrayLiteral(item);
-            if (item && typeof item === 'object') return this.isPlainObjectLiteral(item);
+            if (Array.isArray(item)) return this.isPlainArrayLiteral(item, allowColumnRefs);
+            if (item && typeof item === 'object') return this.isPlainObjectLiteral(item, allowColumnRefs);
             return false;
         });
     }
 
-    private isPlainObjectLiteral(value: any): boolean {
+    private isPlainObjectLiteral(value: any, allowColumnRefs = false): boolean {
         if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
         if (value instanceof Date) return false;
         if (typeof Buffer !== 'undefined' && Buffer.isBuffer && Buffer.isBuffer(value)) return false;
@@ -405,11 +405,28 @@ export abstract class ConditionBuilder<
             return false;
         }
 
-        if (entries.some(([key]) => typeof key === 'string' && (this.isColumnRef(key) || key.includes('.')))) {
-            return false;
+        if (!allowColumnRefs) {
+            if (entries.some(([key]) => typeof key === 'string' && (this.isColumnRef(key) || key.includes('.')))) {
+                return false;
+            }
         }
 
         return true;
+    }
+
+    private resolveColumnDefinition(column?: string): any | undefined {
+        if (!column || typeof column !== 'string' || !column.includes('.')) return undefined;
+        const [prefix, colName] = column.split('.', 2);
+        const tableName = this.aliasMap[prefix] ?? prefix;
+        const table = this.config.C6?.TABLES?.[tableName];
+        if (!table?.TYPE_VALIDATION) return undefined;
+        return table.TYPE_VALIDATION[colName] ?? table.TYPE_VALIDATION[`${tableName}.${colName}`];
+    }
+
+    private isJsonColumn(column?: string): boolean {
+        const columnDef = this.resolveColumnDefinition(column);
+        const mysqlType = columnDef?.MYSQL_TYPE;
+        return typeof mysqlType === 'string' && mysqlType.toLowerCase().includes('json');
     }
 
     protected serializeUpdateValue(
@@ -419,7 +436,10 @@ export abstract class ConditionBuilder<
     ): string {
         const normalized = value instanceof Map ? Object.fromEntries(value) : value;
 
-        if (this.isPlainArrayLiteral(normalized) || this.isPlainObjectLiteral(normalized)) {
+        const allowColumnRefs = this.isJsonColumn(contextColumn);
+
+        if (this.isPlainArrayLiteral(normalized, allowColumnRefs)
+            || this.isPlainObjectLiteral(normalized, allowColumnRefs)) {
             return this.addParam(params, contextColumn ?? '', JSON.stringify(normalized));
         }
 

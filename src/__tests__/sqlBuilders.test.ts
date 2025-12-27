@@ -76,6 +76,23 @@ describe('SQL Builders', () => {
     expect(params).toEqual([JSON.stringify(payload)]);
   });
 
+  it('stringifies dotted-key JSON payloads for JSON columns on UPDATE', () => {
+    const config = buildTestConfig();
+    const payload = { 'section1.preparedBy': 'Prepared by Assessorly, Co.' };
+    const qb = new UpdateQueryBuilder(config as any, {
+      [C6C.UPDATE]: {
+        'actor.json_data': payload,
+      },
+      WHERE: {
+        'actor.actor_id': [C6C.EQUAL, 5],
+      }
+    } as any, false);
+
+    const { params } = qb.build('actor');
+
+    expect(params).toEqual([JSON.stringify(payload), 5]);
+  });
+
   it('throws on operator-shaped insert payloads', () => {
     const config = buildTestConfig();
     const qb = new PostQueryBuilder(config as any, {
