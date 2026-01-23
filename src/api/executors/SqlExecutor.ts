@@ -3,8 +3,10 @@ import {PostQueryBuilder} from "../orm/queries/PostQueryBuilder";
 import {SelectQueryBuilder} from "../orm/queries/SelectQueryBuilder";
 import {UpdateQueryBuilder} from "../orm/queries/UpdateQueryBuilder";
 import {OrmGenerics} from "../types/ormGenerics";
+import {C6Constants as C6C} from "../C6Constants";
 import {
     DetermineResponseDataType,
+    iRestWebsocketPayload,
 } from "../types/ormInterfaces";
 import namedPlaceholders from 'named-placeholders';
 import {PoolConnection} from 'mysql2/promise';
@@ -44,16 +46,19 @@ export class SqlExecutor<
 
             case 'POST': {
                 const result = await this.runQuery();
+                await this.broadcastWebsocketIfConfigured();
                 return result as DetermineResponseDataType<G['RequestMethod'], G['RestTableInterface']>;
             }
 
             case 'PUT': {
                 const result = await this.runQuery();
+                await this.broadcastWebsocketIfConfigured();
                 return result as DetermineResponseDataType<G['RequestMethod'], G['RestTableInterface']>;
             }
 
             case 'DELETE': {
                 const result = await this.runQuery();
+                await this.broadcastWebsocketIfConfigured();
                 return result as DetermineResponseDataType<G['RequestMethod'], G['RestTableInterface']>;
             }
 
@@ -104,6 +109,141 @@ export class SqlExecutor<
         return `'${JSON.stringify(val)}'`;
     }
 
+    private stripRequestMetadata(source: Record<string, any>): Record<string, any> {
+        const ignoredKeys = new Set<string>([
+            C6C.SELECT,
+            C6C.UPDATE,
+            C6C.DELETE,
+            C6C.WHERE,
+            C6C.JOIN,
+            C6C.PAGINATION,
+            C6C.INSERT,
+            C6C.REPLACE,
+            "dataInsertMultipleRows",
+            "cacheResults",
+            "fetchDependencies",
+            "debug",
+            "success",
+            "error",
+        ]);
+
+        const filtered: Record<string, any> = {};
+        for (const [key, value] of Object.entries(source)) {
+            if (!ignoredKeys.has(key)) {
+                filtered[key] = value;
+            }
+        }
+        return filtered;
+    }
+
+    private normalizeRequestPayload(source: Record<string, any>): Record<string, any> {
+        const columns = this.config.restModel.COLUMNS as Record<string, string>;
+        const validColumns = new Set(Object.values(columns));
+        const normalized: Record<string, any> = {};
+
+        for (const [key, value] of Object.entries(source)) {
+            const shortKey = columns[key] ?? (key.includes(".") ? key.split(".").pop()! : key);
+            if (validColumns.has(shortKey)) {
+                normalized[shortKey] = value;
+            }
+        }
+
+        return normalized;
+    }
+
+    private extractRequestBody(): Record<string, any> {
+        const request = this.request as Record<string, any>;
+
+        if (this.config.requestMethod === C6C.POST) {
+            if (Array.isArray(request.dataInsertMultipleRows) && request.dataInsertMultipleRows.length > 0) {
+                return request.dataInsertMultipleRows[0] as Record<string, any>;
+            }
+            if (C6C.INSERT in request) {
+                return (request as any)[C6C.INSERT] ?? {};
+            }
+            if (C6C.REPLACE in request) {
+                return (request as any)[C6C.REPLACE] ?? {};
+            }
+            return this.stripRequestMetadata(request);
+        }
+
+        if (this.config.requestMethod === C6C.PUT) {
+            if (request[C6C.UPDATE] && typeof request[C6C.UPDATE] === "object") {
+                return request[C6C.UPDATE] as Record<string, any>;
+            }
+            return this.stripRequestMetadata(request);
+        }
+
+        return {};
+    }
+
+    private extractPrimaryKeyValues(): Record<string, any> | null {
+        const request = this.request as Record<string, any>;
+        const where = request?.[C6C.WHERE];
+        const sources = [request, (where && typeof where === "object" && !Array.isArray(where)) ? where : undefined];
+        const columns = this.config.restModel.COLUMNS as Record<string, string>;
+        const primaryShorts = this.config.restModel.PRIMARY_SHORT ?? [];
+        const primaryFulls = (this.config.restModel as any).PRIMARY ?? [];
+        const pkValues: Record<string, any> = {};
+
+        for (const pkShort of primaryShorts) {
+            let value: any = undefined;
+
+            for (const source of sources) {
+                if (source && pkShort in source) {
+                    value = source[pkShort];
+                    break;
+                }
+            }
+
+            if (value === undefined) {
+                const fullKey = primaryFulls.find((key: string) => key.endsWith("." + pkShort))
+                    ?? Object.keys(columns).find((key) => columns[key] === pkShort);
+
+                if (fullKey) {
+                    for (const source of sources) {
+                        if (source && fullKey in source) {
+                            value = source[fullKey];
+                            break;
+                        }
+                    }
+                }
+            }
+
+            if (value !== undefined) {
+                pkValues[pkShort] = value;
+            }
+        }
+
+        if (primaryShorts.length > 0 && Object.keys(pkValues).length < primaryShorts.length) {
+            return null;
+        }
+
+        return Object.keys(pkValues).length > 0 ? pkValues : null;
+    }
+
+    private async broadcastWebsocketIfConfigured(): Promise<void> {
+        const broadcast = this.config.websocketBroadcast;
+        if (!broadcast || this.config.requestMethod === C6C.GET) return;
+
+        const payload: iRestWebsocketPayload = {
+            REST: {
+                TABLE_NAME: this.config.restModel.TABLE_NAME as string,
+                TABLE_PREFIX: this.config.C6?.PREFIX ?? "",
+                METHOD: this.config.requestMethod,
+                REQUEST: this.normalizeRequestPayload(this.extractRequestBody()),
+                REQUEST_PRIMARY_KEY: this.extractPrimaryKeyValues(),
+            },
+        };
+
+        try {
+            await broadcast(payload);
+        } catch (error) {
+            if (this.config.verbose) {
+                console.error("[SQL EXECUTOR] websocketBroadcast failed", error);
+            }
+        }
+    }
     async runQuery() {
         const {TABLE_NAME} = this.config.restModel;
         const method = this.config.requestMethod;

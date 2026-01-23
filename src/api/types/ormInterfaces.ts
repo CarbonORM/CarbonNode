@@ -162,6 +162,19 @@ export type DetermineResponseDataType<
                     ? iDeleteC6RestResponse<RestTableInterface>
                     : never);
 
+
+export type iRestWebsocketPayload = {
+    REST: {
+        TABLE_NAME: string;
+        TABLE_PREFIX: string;
+        METHOD: iRestMethods;
+        REQUEST: Record<string, any>;
+        REQUEST_PRIMARY_KEY: Record<string, any> | null;
+    };
+};
+
+export type tWebsocketBroadcast = (payload: iRestWebsocketPayload) => void | Promise<void>;
+
 export interface iRest<
     RestShortTableName extends string = any,
     RestTableInterface extends Record<string, any> = any,
@@ -177,6 +190,7 @@ export interface iRest<
     requestMethod: iRestMethods;
     clearCache?: () => void;
     skipPrimaryCheck?: boolean;
+    websocketBroadcast?: tWebsocketBroadcast;
     verbose?: boolean;
 }
 
