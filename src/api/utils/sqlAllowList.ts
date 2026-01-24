@@ -52,3 +52,70 @@ export const loadSqlAllowList = async (allowListPath: string): Promise<Set<strin
     allowListCache.set(allowListPath, allowList);
     return allowList;
 };
+
+export const extractSqlEntries = (payload: unknown): string[] => {
+    if (typeof payload === "string") {
+        return [payload];
+    }
+
+
+    if (Array.isArray(payload)) {
+        return payload.flatMap(extractSqlEntries);
+    }
+
+    if (!payload || typeof payload !== "object") {
+        return [];
+    }
+
+    const sqlValue = (payload as {sql?: unknown}).sql;
+    if (typeof sqlValue === "string") {
+        return [sqlValue];
+    }
+
+    if (sqlValue && typeof sqlValue === "object") {
+        const nested = (sqlValue as {sql?: unknown}).sql;
+        if (typeof nested === "string") {
+            return [nested];
+        }
+    }
+
+    return [];
+};
+
+export const collectSqlAllowListEntries = (
+    payload: unknown,
+    entries: Set<string> = new Set<string>()
+): Set<string> => {
+    const sqlEntries = extractSqlEntries(payload)
+        .map(normalizeSql)
+        .filter((entry) => entry.length > 0);
+
+    sqlEntries.forEach((entry) => entries.add(entry));
+
+    return entries;
+};
+
+export const compileSqlAllowList = async (
+    allowListPath: string,
+    entries: Iterable<string>
+): Promise<string[]> => {
+    if (!isNode()) {
+        throw new Error("SQL allowlist compilation requires a Node runtime.");
+    }
+
+    const {writeFile, mkdir} = await import("node:fs/promises");
+    const path = await import("node:path");
+
+    await mkdir(path.dirname(allowListPath), {recursive: true});
+
+    const compiled = Array.from(new Set(
+        Array.from(entries)
+            .map(normalizeSql)
+            .filter((entry) => entry.length > 0)
+    )).sort();
+
+    await writeFile(allowListPath, JSON.stringify(compiled, null, 2));
+
+    return compiled;
+};
+

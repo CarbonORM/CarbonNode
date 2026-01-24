@@ -1,9 +1,8 @@
 import {describe, expect, it, vi} from "vitest";
 import path from "node:path";
 import {mkdir, readdir, readFile, writeFile} from "node:fs/promises";
-import restRequest from "../api/restRequest";
-import {Actor, C6} from "./sakila-db/C6.js";
-import {loadSqlAllowList, normalizeSql} from "../api/utils/sqlAllowList";
+import {Actor, C6, GLOBAL_REST_PARAMETERS} from "./sakila-db/C6.js";
+import {collectSqlAllowListEntries, compileSqlAllowList, extractSqlEntries, loadSqlAllowList, normalizeSql} from "../api/utils/sqlAllowList";
 
 const fixturesDir = path.join(process.cwd(), "src/__tests__/fixtures/sqlResponses");
 const fixturePath = path.join(fixturesDir, "actor.get.json");
@@ -20,31 +19,9 @@ const buildMockPool = (rows: Record<string, any>[]) => {
   return {pool, connection};
 };
 
-const extractSqlEntries = (payload: unknown): string[] => {
-  if (Array.isArray(payload)) {
-    return payload.flatMap(extractSqlEntries);
-  }
-  if (!payload || typeof payload !== "object") {
-    return [];
-  }
-
-  const sqlValue = (payload as {sql?: unknown}).sql;
-  if (typeof sqlValue === "string") {
-    return [sqlValue];
-  }
-  if (sqlValue && typeof sqlValue === "object") {
-    const nested = (sqlValue as {sql?: unknown}).sql;
-    if (typeof nested === "string") {
-      return [nested];
-    }
-  }
-
-  return [];
-};
-
-const compileSqlAllowList = async (): Promise<string[]> => {
+const compileSqlAllowListFromFixtures = async (): Promise<string[]> => {
   const entries = await readdir(fixturesDir);
-  const sqlEntries: string[] = [];
+  const sqlEntries = new Set<string>();
 
   for (const entry of entries) {
     if (!entry.endsWith(".json") || entry.startsWith("sqlAllowList")) {
@@ -56,12 +33,28 @@ const compileSqlAllowList = async (): Promise<string[]> => {
     if (extracted.length === 0) {
       throw new Error(`No SQL found in fixture ${entry}`);
     }
-    sqlEntries.push(...extracted);
+    collectSqlAllowListEntries(payload, sqlEntries);
   }
 
-  const compiled = Array.from(new Set(sqlEntries.map(normalizeSql))).sort();
-  await writeFile(compiledPath, JSON.stringify(compiled, null, 2));
-  return compiled;
+  return await compileSqlAllowList(compiledPath, sqlEntries);
+};
+
+const globalRestParameters = GLOBAL_REST_PARAMETERS as typeof GLOBAL_REST_PARAMETERS & {
+  mysqlPool?: unknown;
+  sqlAllowListPath?: string;
+  verbose?: boolean;
+};
+
+const snapshotGlobals = () => ({
+  mysqlPool: globalRestParameters.mysqlPool,
+  sqlAllowListPath: globalRestParameters.sqlAllowListPath,
+  verbose: globalRestParameters.verbose,
+});
+
+const restoreGlobals = (snapshot: ReturnType<typeof snapshotGlobals>) => {
+  globalRestParameters.mysqlPool = snapshot.mysqlPool;
+  globalRestParameters.sqlAllowListPath = snapshot.sqlAllowListPath;
+  globalRestParameters.verbose = snapshot.verbose;
 };
 
 describe("SQL allowlist", () => {
@@ -72,37 +65,35 @@ describe("SQL allowlist", () => {
       {actor_id: 1, first_name: "PENELOPE", last_name: "GUINESS"},
     ]);
 
-    const response = await restRequest({
-      C6,
-      mysqlPool: pool as any,
-      restModel: Actor,
-      requestMethod: "GET",
-      verbose: false,
-    })({
-      [C6.PAGINATION]: {[C6.LIMIT]: 1},
-    } as any);
+    const originalGlobals = snapshotGlobals();
+    try {
+      globalRestParameters.mysqlPool = pool as any;
+      globalRestParameters.sqlAllowListPath = undefined;
+      globalRestParameters.verbose = false;
 
-    await writeFile(fixturePath, JSON.stringify(response, null, 2));
+      const response = await Actor.Get({
+        [C6.PAGINATION]: {[C6.LIMIT]: 1},
+      } as any);
 
-    const compiled = await compileSqlAllowList();
-    expect(compiled.length).toBeGreaterThan(0);
+      await writeFile(fixturePath, JSON.stringify(response, null, 2));
 
-    const allowList = await loadSqlAllowList(compiledPath);
-    const responseSql = normalizeSql((response as any).sql.sql as string);
-    expect(allowList.has(responseSql)).toBe(true);
+      const compiled = await compileSqlAllowListFromFixtures();
+      expect(compiled.length).toBeGreaterThan(0);
 
-    const allowedResponse = await restRequest({
-      C6,
-      mysqlPool: pool as any,
-      restModel: Actor,
-      requestMethod: "GET",
-      sqlAllowListPath: compiledPath,
-      verbose: false,
-    })({
-      [C6.PAGINATION]: {[C6.LIMIT]: 1},
-    } as any);
+      const allowList = await loadSqlAllowList(compiledPath);
+      const responseSql = normalizeSql((response as any).sql.sql as string);
+      expect(allowList.has(responseSql)).toBe(true);
 
-    expect(allowedResponse.rest).toEqual(response.rest);
+      globalRestParameters.sqlAllowListPath = compiledPath;
+
+      const allowedResponse = await Actor.Get({
+        [C6.PAGINATION]: {[C6.LIMIT]: 1},
+      } as any);
+
+      expect(allowedResponse.rest).toEqual(response.rest);
+    } finally {
+      restoreGlobals(originalGlobals);
+    }
   });
 
   it("throws when allowlist file is missing", async () => {
@@ -119,17 +110,19 @@ describe("SQL allowlist", () => {
       {actor_id: 1, first_name: "PENELOPE", last_name: "GUINESS"},
     ]);
 
-    await expect(
-      restRequest({
-        C6,
-        mysqlPool: pool as any,
-        restModel: Actor,
-        requestMethod: "GET",
-        sqlAllowListPath: blockedPath,
-        verbose: false,
-      })({
-        [C6.PAGINATION]: {[C6.LIMIT]: 1},
-      } as any)
-    ).rejects.toThrow("SQL statement is not permitted");
+    const originalGlobals = snapshotGlobals();
+    try {
+      globalRestParameters.mysqlPool = pool as any;
+      globalRestParameters.sqlAllowListPath = blockedPath;
+      globalRestParameters.verbose = false;
+
+      await expect(
+        Actor.Get({
+          [C6.PAGINATION]: {[C6.LIMIT]: 1},
+        } as any)
+      ).rejects.toThrow("SQL statement is not permitted");
+    } finally {
+      restoreGlobals(originalGlobals);
+    }
   });
 });

@@ -4,7 +4,8 @@ import { fileURLToPath } from 'node:url';
 import { mkdir, writeFile } from 'node:fs/promises';
 import {
     checkAllRequestsComplete,
-    normalizeSql,
+    collectSqlAllowListEntries,
+    compileSqlAllowList,
     type DetermineResponseDataType,
     type OrmGenerics,
 } from '@carbonorm/carbonnode';
@@ -63,10 +64,7 @@ async function recordSqlResponse<G extends OrmGenerics = OrmGenerics>(
     if (!response) return;
     const payload = unwrapResponse(response);
     if (!payload) return;
-    const sqlValue = payload?.sql?.sql ?? (typeof payload?.sql === 'string' ? payload.sql : undefined);
-    if (typeof sqlValue === 'string') {
-        sqlAllowListEntries.add(normalizeSql(sqlValue));
-    }
+    collectSqlAllowListEntries(payload, sqlAllowListEntries);
 
     await mkdir(sqlResponsesDir, { recursive: true });
     const filePath = path.join(sqlResponsesDir, `C6.${label}.json`);
@@ -74,9 +72,7 @@ async function recordSqlResponse<G extends OrmGenerics = OrmGenerics>(
 }
 
 async function finalizeSqlAllowList() {
-    await mkdir(sqlResponsesDir, { recursive: true });
-    const compiled = Array.from(sqlAllowListEntries).sort();
-    await writeFile(sqlAllowListPath, JSON.stringify(compiled, null, 2));
+    await compileSqlAllowList(sqlAllowListPath, sqlAllowListEntries);
 }
 
 async function executeAndRecord<G extends OrmGenerics = OrmGenerics>(
