@@ -47,45 +47,104 @@ npm install @carbonorm/carbonnode
 
 ## Generate Models
 
-The command below will generate the models for the database. The models will be generated in the output directory. We do
-recommend you keep this folder separate from other work. It is also best to track the output directory in your version 
-control system. All arguments are optional. If you do not provide them the defaults will be used. The example arguments
-below are the defaults.
+The generator produces a single `C6.ts` file containing all tables, types, and REST bindings. Keep this file in version
+control and share it between server and client. All arguments are optional; the example below shows the defaults.
 
 ```bash
-npx generateRestBindings --user root --pass password --host 127.0.0.1 --port 3306 --dbname carbonPHP --prefix carbon_ --output /src/api/rest
+npx generateRestBindings --user root --pass password --host 127.0.0.1 --port 3306 --dbname carbonPHP --prefix carbon_ --output ./shared/rest/C6.ts
 ```
 
-You can view the [code generated](https://github.com/CarbonORM/CarbonORM.dev/blob/www/src/api/rest/Users.tsx) by 
-[this command](https://github.com/CarbonORM/CarbonNode/blob/main/scripts/generateRestBindings.ts) in 
-[this repository](git@github.com:CarbonORM/CarbonNode.git). We use [Handlebars templates](https://mustache.github.io/) 
-to generate the code.
+The generated file exports `C6`, `GLOBAL_REST_PARAMETERS`, `TABLES`, `ORM`, and per-table bindings (e.g. `Users`):
+
+```typescript
+import { C6, GLOBAL_REST_PARAMETERS, Users } from "./shared/rest/C6";
+```
+
+You can view the generator source in
+[CarbonNode](https://github.com/CarbonORM/CarbonNode/blob/main/scripts/generateRestBindings.ts). We use
+[Handlebars templates](https://mustache.github.io/) to generate the code.
+
+### Runtime Setup
+
+CarbonNode executes SQL directly when `GLOBAL_REST_PARAMETERS.mysqlPool` is provided. If no pool is set, it will use
+the HTTP executor (useful for frontends or non-Node runtimes).
+
+```typescript
+import mysql from "mysql2/promise";
+import { GLOBAL_REST_PARAMETERS } from "./shared/rest/C6";
+
+GLOBAL_REST_PARAMETERS.mysqlPool = mysql.createPool({
+    host: "127.0.0.1",
+    user: "root",
+    password: "password",
+    database: "carbonPHP",
+});
+
+// Optional HTTP path:
+// GLOBAL_REST_PARAMETERS.axios = axiosInstance;
+// GLOBAL_REST_PARAMETERS.restURL = "/rest/";
+
+// Optional websocket broadcast on writes:
+// GLOBAL_REST_PARAMETERS.websocketBroadcast = (payload) => wsServer.broadcast(JSON.stringify(payload));
+```
+
+### Request Flow
+
+```mermaid
+flowchart LR
+    Client["App code\nActor.Get(...)" ] --> RestRequest["restOrm + restRequest"]
+    RestRequest -->|"Node + mysqlPool"| SqlExec["SqlExecutor"] --> MySQL[("MySQL")]
+    RestRequest -->|"No pool"| HttpExec["HttpExecutor"] --> RestApi["/rest/:table"]
+    RestApi --> Express["ExpressHandler"] --> SqlExec
+```
+
+### SQL Allowlist
+
+To restrict which SQL statements can run in production, set `GLOBAL_REST_PARAMETERS.sqlAllowListPath` to a JSON file
+containing allowed SQL strings. When the path is set, `SqlExecutor` normalizes whitespace and validates each query against
+the allowlist. If the file is missing, an error is thrown; if the SQL is not listed, execution is blocked.
+
+```typescript
+GLOBAL_REST_PARAMETERS.sqlAllowListPath = "/path/to/sqlAllowList.json";
+```
+
+Allowlist format:
+
+```json
+[
+  "SELECT * FROM `actor` LIMIT 1"
+]
+```
+
+Generated tests in `src/__tests__/sakila-db/C6.test.ts` write response fixtures into `src/__tests__/sakila-db/sqlResponses/`
+and compile `src/__tests__/sakila-db/C6.sqlAllowList.json` after the suite finishes. Pass that file path to enable
+validation.
+
+When using the REST handler directly, forward the path as well:
+
+```typescript
+app.all("/rest/:table", ExpressHandler({ C6, mysqlPool, sqlAllowListPath }));
+```
 
 ### Generated Tests
 
-Tests are generated for each table in the database. The tests are generated in the same directory as the models. 
-Our Jest tests are not designed to run immediately. You will need to edit the tests manually to change *xdescribe* with just
-*describe*. Once a test does not have xdescribe it will no longer be updated with new generation changes.
+The generator also writes `C6.test.ts` alongside `C6.ts`. Tests use Vitest and the generated bindings. Keep or delete the
+file depending on your workflow.
 
-Note - I prefer to keep tests nested in my IDE project viewer. See the documentation for 
-[IntelliJ](https://www.jetbrains.com/help/idea/file-nesting-dialog.html) or 
-[VSCode](https://code.visualstudio.com/updates/v1_67#_explorer-file-nesting).
+The generator also writes `C6.MySqlDump.json`, `C6.mysqldump.sql`, and `C6.mysql.cnf` into the same output directory for
+debugging and inspection.
 
 ### Templates
 
-Three templates are used to generate the models. The output will be multiple files; two files for each table in the 
-database consisting of your GET PUT POST and DELETE methods and a Jest test file, a C6.tsx file which contains all 
-table information and TypeScript types, and finally a websocket file which contains references to methods that are 
-generate. Here are the templates used to generate the code:
+Two templates are used to generate the output:
 
 1) [C6.ts.handlebars](https://github.com/CarbonORM/CarbonNode/blob/main/scripts/assets/handlebars/C6.ts.handlebars)
-2) [Table.ts.handlebars](https://github.com/CarbonORM/CarbonNode/blob/main/scripts/assets/handlebars/Table.ts.handlebars)
-3) [Websocket.ts.handlebars](https://github.com/CarbonORM/CarbonNode/blob/main/scripts/assets/handlebars/C6RestApi.ts.handlebars)
+2) [C6.test.ts.handlebars](https://github.com/CarbonORM/CarbonNode/blob/main/scripts/assets/handlebars/C6.test.ts.handlebars)
 
 #### Generation Example
 
 0) **npx generateRestBindings** is executed.
-1) **The MySQL dump tool** outputs a strcture for every table.
+1) **The MySQL dump tool** outputs a structure for every table.
 
 ```mysql
 CREATE TABLE actor (
@@ -98,6 +157,7 @@ CREATE TABLE actor (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 ```
 
+2) **The generator** parses the table structure and creates an internal representation.
 ```typescript
 export interface iActor {
     'actor_id'?: number;
@@ -191,50 +251,100 @@ export const Actor = {
 ```
 
 3) **Profit**
-- C6 will produce 1-1 constants.
-
-Allowing you to do:
+You import from the frontend or backend using the same syntax:
 
 ```typescript
-import { Actor, C6C } from "./api/rest/Actor";
+import { Actor, C6 } from "./shared/rest/C6";
 
 // GET
-const actors = await Actor.GET({
-    [C6C.SELECT]: [
+const actors = await Actor.Get({
+    [C6.SELECT]: [
         Actor.ACTOR_ID,
         Actor.FIRST_NAME,
         Actor.LAST_NAME,
     ],
-    [C6C.WHERE]: {
+    [C6.WHERE]: {
         [Actor.LAST_NAME]: { like: "%PITT%" },
     },
-    [C6C.LIMIT]: 10,
+    [C6.PAGINATION]: { [C6.LIMIT]: 10 },
 });
 
 // POST
-await Actor.POST({
-    [C6C.DATA]: {
-        [Actor.FIRST_NAME]: "Brad",
-        [Actor.LAST_NAME]: "Pitt",
-    },
+await Actor.Post({
+    [Actor.FIRST_NAME]: "Brad",
+    [Actor.LAST_NAME]: "Pitt",
 });
 
-// PUT
-await Actor.PUT({
-    [C6C.WHERE]: {
-        [Actor.ACTOR_ID]: 42,
-    },
-    [C6C.DATA]: {
-        [Actor.LAST_NAME]: "Updated",
-    },
+// PUT (singular)
+await Actor.Put({
+    [Actor.ACTOR_ID]: 42,
+    [Actor.LAST_NAME]: "Updated",
 });
 
-// DELETE
-await Actor.DELETE({
-    [C6C.WHERE]: {
-        [Actor.ACTOR_ID]: 42,
-    },
+// DELETE (singular)
+await Actor.Delete({
+    [Actor.ACTOR_ID]: 42,
 });
+```
+
+Example response payloads (HTTP executor):
+
+GET
+
+```json
+{
+  "success": true,
+  "rest": [
+    { "actor_id": 1, "first_name": "PENELOPE", "last_name": "GUINESS" }
+  ],
+  "next": "Function"
+}
+```
+
+POST
+
+```json
+{
+  "success": true,
+  "created": 201,
+  "rest": { "actor_id": 201, "first_name": "Brad", "last_name": "Pitt" }
+}
+```
+
+PUT
+
+```json
+{
+  "success": true,
+  "updated": true,
+  "rest": { "actor_id": 42, "last_name": "Updated" }
+}
+```
+
+DELETE
+
+```json
+{
+  "success": true,
+  "deleted": true,
+  "rest": { "actor_id": 42 }
+}
+```
+
+SQL executor responses omit `success` and include `sql` for GETs plus `affected` for writes. Express responses from `ExpressHandler` add `success: true`.
+
+SQL executor example (GET):
+
+```json
+{
+  "rest": [
+    { "actor_id": 1, "first_name": "PENELOPE", "last_name": "GUINESS" }
+  ],
+  "sql": {
+    "sql": "SELECT * FROM `actor` LIMIT 10",
+    "values": []
+  }
+}
 ```
 
 Our CarbonReact extends this solution for automatic state and pagination management.
@@ -258,4 +368,3 @@ This will configure Git to use the hooks in the `.githooks` directory. The hooks
 # Support and Issues
 
 Any issues found should be reported on [GitHub](https://github.com/CarbonORM/CarbonNode/issues).
-

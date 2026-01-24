@@ -37,6 +37,7 @@ export * from "./api/utils/determineRuntimeJsType";
 export * from "./api/utils/logger";
 export * from "./api/utils/normalizeSingularRequest";
 export * from "./api/utils/sortAndSerializeQueryObject";
+export * from "./api/utils/sqlAllowList";
 export * from "./api/utils/testHelpers";
 export * from "./api/utils/toastNotifier";
 export * from "./variables/getEnvVar";

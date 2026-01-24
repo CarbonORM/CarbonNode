@@ -50,7 +50,7 @@ class MySQLDump {
 
         if ('' === cnfFile) {
 
-            cnfFile = path.join(process.cwd(), '/mysql.cnf');
+            cnfFile = path.join(this.OUTPUT_DIR, 'C6.mysql.cnf');
 
         }
 
@@ -60,11 +60,11 @@ class MySQLDump {
 
             fs.chmodSync(cnfFile, 0o750);
 
-            console.log(`Successfully created mysql.cnf file in (${cnfFile})`);
+            console.log(`Successfully created C6.mysql.cnf file in (${cnfFile})`);
 
         } catch (error) {
 
-            console.error(`Failed to store file contents of mysql.cnf in (${process.cwd()})`, error);
+            console.error(`Failed to store file contents of C6.mysql.cnf in (${process.cwd()})`, error);
 
             process.exit(1);
 
@@ -77,7 +77,7 @@ class MySQLDump {
     static MySQLDump(mysqldump: string = 'mysqldump', data = false, schemas = true, outputFile = '', otherOption = '', specificTable: string = '') {
 
         if (outputFile === '') {
-            outputFile = path.join(process.cwd(), 'mysqldump.sql');
+            outputFile = path.join(this.OUTPUT_DIR, 'C6.mysqldump.sql');
         }
 
         if (!data && !schemas) {
@@ -488,7 +488,7 @@ const sql = fs.readFileSync(dumpFileLocation, 'utf-8');
 const tableData = parseSQLToTypeScript(sql);
 
 // write to file
-fs.writeFileSync(path.join(process.cwd(), 'C6MySqlDump.json'), JSON.stringify(tableData));
+fs.writeFileSync(path.join(MySQLDump.OUTPUT_DIR, 'C6.mysqldump.json'), JSON.stringify(tableData));
 
 // import this file  src/assets/handlebars/C6.tsx.handlebars for a mustache template
 const c6Template = fs.readFileSync(path.resolve(__dirname, 'assets/handlebars/C6.ts.handlebars'), 'utf-8');

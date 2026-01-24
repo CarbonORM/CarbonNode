@@ -1,0 +1,13 @@
+{
+  "rest": [
+    {
+      "actor_id": 1,
+      "first_name": "PENELOPE",
+      "last_name": "GUINESS"
+    }
+  ],
+  "sql": {
+    "sql": "SELECT * FROM `actor` LIMIT 1",
+    "values": []
+  }
+}

@@ -13,6 +13,7 @@ import {PoolConnection} from 'mysql2/promise';
 import {Buffer} from 'buffer';
 import {Executor} from "./Executor";
 import { normalizeSingularRequest } from "../utils/normalizeSingularRequest";
+import {loadSqlAllowList, normalizeSql} from "../utils/sqlAllowList";
 
 export class SqlExecutor<
     G extends OrmGenerics
@@ -276,6 +277,8 @@ export class SqlExecutor<
         const toUnnamed = namedPlaceholders();
         const [sql, values] = toUnnamed(QueryResult.sql, QueryResult.params);
 
+        await this.validateSqlAllowList(sql);
+
         return await this.withConnection(async (conn) => {
             const [result] = await conn.query<any>(sql, values);
 
@@ -293,6 +296,19 @@ export class SqlExecutor<
                 };
             }
         });
+    }
+
+    private async validateSqlAllowList(sql: string): Promise<void> {
+        const allowListPath = this.config.sqlAllowListPath;
+        if (!allowListPath) {
+            return;
+        }
+
+        const allowList = await loadSqlAllowList(allowListPath);
+        const normalized = normalizeSql(sql);
+        if (!allowList.has(normalized)) {
+            throw new Error(`SQL statement is not permitted by allowlist (${allowListPath}).`);
+        }
     }
 
 

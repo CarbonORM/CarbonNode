@@ -192,6 +192,7 @@ export interface iRest<
     skipPrimaryCheck?: boolean;
     websocketBroadcast?: tWebsocketBroadcast;
     verbose?: boolean;
+    sqlAllowListPath?: string;
 }
 
 export interface iConstraint {

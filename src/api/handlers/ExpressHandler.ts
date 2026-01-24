@@ -7,7 +7,15 @@ import {iC6Object, iRestMethods} from "../types/ormInterfaces";
 
 // TODO - WE MUST make this a generic - optional, but helpful
 // note sure how it would help anyone actually...
-export function ExpressHandler({C6, mysqlPool}: { C6: iC6Object, mysqlPool: Pool }) {
+export function ExpressHandler({
+    C6,
+    mysqlPool,
+    sqlAllowListPath,
+}: {
+    C6: iC6Object;
+    mysqlPool: Pool;
+    sqlAllowListPath?: string;
+}) {
 
     return async (req: Request, res: Response, next: NextFunction) => {
         try {
@@ -92,6 +100,7 @@ export function ExpressHandler({C6, mysqlPool}: { C6: iC6Object, mysqlPool: Pool
             const response = await restRequest({
                 C6,
                 mysqlPool,
+                sqlAllowListPath,
                 requestMethod: method,
                 restModel: C6.TABLES[table]
             })(payload);
