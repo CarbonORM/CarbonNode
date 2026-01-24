@@ -1,13 +1,15 @@
 // Refined TypeScript types for CarbonORM
 
-import {AxiosInstance, AxiosPromise, AxiosResponse} from "axios";
-import {Pool} from "mysql2/promise";
+import type {AxiosInstance, AxiosPromise, AxiosResponse} from "axios";
+import type {Pool} from "mysql2/promise";
 import {eFetchDependencies} from "./dynamicFetching";
 import {Modify} from "./modifyTypes";
 import {JoinType, OrderDirection, SQLComparisonOperator, SQLFunction} from "./mysqlTypes";
-import {CarbonReact} from "@carbonorm/carbonreact";
-import {OrmGenerics} from "./ormGenerics";
-import {restOrm} from "../restOrm";
+import type {CarbonReact} from "@carbonorm/carbonreact";
+import type {OrmGenerics} from "./ormGenerics";
+
+type RestOrmFactory = typeof import("../restOrm").restOrm;
+type RestOrmReturn = ReturnType<RestOrmFactory<OrmGenerics<any>>>;
 
 export type iRestMethods = 'GET' | 'POST' | 'PUT' | 'DELETE';
 export const POST = 'POST';
@@ -288,7 +290,7 @@ export interface iC6Object<
     ORM: {
         [K in Extract<keyof RestTableInterfaces, string>]:
         C6RestfulModel<K, RestTableInterfaces[K], keyof RestTableInterfaces[K] & string>
-        & ReturnType<typeof restOrm<OrmGenerics<any>>>
+        & RestOrmReturn
     }
 
     [key: string]: any;

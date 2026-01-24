@@ -1,5 +1,13 @@
-import {ToastOptions} from "react-toastify";
-
+export type ToastOptions = {
+    position?: string;
+    autoClose?: number | false;
+    hideProgressBar?: boolean;
+    closeOnClick?: boolean;
+    pauseOnHover?: boolean;
+    draggable?: boolean;
+    theme?: string;
+    [key: string]: unknown;
+};
 
 export const toastOptions = {
     position: "bottom-left",
@@ -20,4 +28,3 @@ export const   toastOptionsDevs = {
         draggable: true,
         theme: "dark",
 } as ToastOptions;
-

@@ -1,9 +1,9 @@
 // When we capture DropExceptions and display them as a custom page, this will change.
-import {toast} from "react-toastify";
 import isTest from "../../variables/isTest";
-import { AxiosResponse } from "axios";
+import type {AxiosResponse} from "axios";
 import {toastOptions} from "../../variables/toastOptions";
-import {C6RestfulModel} from "../types/ormInterfaces";
+import type {C6RestfulModel} from "../types/ormInterfaces";
+import {notifyToast} from "./toastRuntime";
 
 
 
@@ -21,7 +21,7 @@ export function TestRestfulResponse(response: AxiosResponse | any, success: ((r:
 
         if (typeof successReturn === 'string') {
 
-            toast.success(successReturn, toastOptions);
+            notifyToast("success", successReturn, toastOptions);
 
         }
 
@@ -34,7 +34,7 @@ export function TestRestfulResponse(response: AxiosResponse | any, success: ((r:
 
     if (typeof errorReturn === 'string') {
 
-        toast.error(errorReturn, toastOptions);
+        notifyToast("error", errorReturn, toastOptions);
 
     }
 

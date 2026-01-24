@@ -1,6 +1,6 @@
 {
   "name": "@carbonorm/carbonnode",
-  "version": "5.0.1",
+  "version": "6.0.0",
   "browser": "dist/index.umd.js",
   "repository": {
     "type": "git",
@@ -30,8 +30,7 @@
   "peerDependencies": {
     "axios": "^1.10.0",
     "express": "^5.1.0",
-    "mysql2": "^3.14.1",
-    "react-toastify": "^11.0.5"
+    "mysql2": "^3.14.1"
   },
   "peerDependenciesMeta": {
     "axios": {
@@ -41,9 +40,6 @@
       "optional": false
     },
     "express": {
-      "optional": true
-    },
-    "react-toastify": {
       "optional": true
     },
     "mysql2": {
@@ -72,7 +68,6 @@
     "postcss": "^8.4.27",
     "postcss-nested": "^6.0.1",
     "postcss-simple-vars": "^7.0.1",
-    "react-toastify": "^11.0.5",
     "rimraf": "^5.0.1",
     "rollup": "^4.22.4",
     "rollup-plugin-includepaths": "^0.2.4",

@@ -1,5 +1,5 @@
-import { AxiosPromise } from "axios";
-import { iCacheAPI } from "../types/ormInterfaces";
+import type {AxiosPromise} from "axios";
+import type {iCacheAPI} from "../types/ormInterfaces";
 
 // -----------------------------------------------------------------------------
 // Cache Storage

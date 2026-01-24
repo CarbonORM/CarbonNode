@@ -1,10 +1,9 @@
-import {AxiosPromise, AxiosResponse} from "axios";
-import {toast} from "react-toastify";
+import type {AxiosPromise, AxiosResponse} from "axios";
 import isLocal from "../../variables/isLocal";
 import isTest from "../../variables/isTest";
 import convertForRequestBody from "../convertForRequestBody";
 import {eFetchDependencies} from "../types/dynamicFetching";
-import {OrmGenerics} from "../types/ormGenerics";
+import type {OrmGenerics} from "../types/ormGenerics";
 import {
     DELETE, DetermineResponseDataType,
     GET,
@@ -16,6 +15,7 @@ import {
 import {removeInvalidKeys, removePrefixIfExists, TestRestfulResponse} from "../utils/apiHelpers";
 import {checkCache, setCache, userCustomClearCache} from "../utils/cacheManager";
 import {sortAndSerializeQueryObject} from "../utils/sortAndSerializeQueryObject";
+import {notifyToast} from "../utils/toastRuntime";
 import {Executor} from "./Executor";
 import {toastOptions, toastOptionsDevs} from "variables/toastOptions";
 
@@ -260,11 +260,15 @@ export class HttpExecutor<
             if (cacheResults) {
                 cachingConfirmed = true;
             } else if (debug && isLocal()) {
-                toast.info("DEVS: Ignore cache was set to true.", toastOptionsDevs);
+                notifyToast("info", "DEVS: Ignore cache was set to true.", toastOptionsDevs);
             }
 
             if (cacheResults && debug && isLocal()) {
-                toast.success("DEVS: Request not in cache." + (requestMethod === C6.GET ? " Page (" + query[C6.PAGINATION][C6.PAGE] + ")" : ''), toastOptionsDevs);
+                notifyToast(
+                    "success",
+                    "DEVS: Request not in cache." + (requestMethod === C6.GET ? " Page (" + query[C6.PAGINATION][C6.PAGE] + ")" : ''),
+                    toastOptionsDevs,
+                );
             }
 
             let apiResponse: G['RestTableInterface'][G['PrimaryKey']] | string | boolean | number | undefined;
@@ -308,7 +312,7 @@ export class HttpExecutor<
 
                         if (true === debug && isLocal()) {
 
-                            toast.error('DEVS: The primary key (' + primaryKey + ') was not provided!!')
+                            notifyToast("error", `DEVS: The primary key (${primaryKey}) was not provided!!`);
 
                         }
 
@@ -319,7 +323,7 @@ export class HttpExecutor<
                     const providedPrimary = query?.[primaryKey!] ?? (primaryKeyFullyQualified ? query?.[primaryKeyFullyQualified] : undefined);
                     if (undefined === providedPrimary || null === providedPrimary) {
 
-                        toast.error('The primary key (' + primaryKey + ') provided is undefined or null explicitly!!')
+                        notifyToast("error", `The primary key (${primaryKey}) provided is undefined or null explicitly!!`);
 
                         throw Error('The primary key (' + primaryKey + ') provided in the request was exactly equal to undefined.');
 
@@ -390,7 +394,7 @@ export class HttpExecutor<
                                 data,
                                 fullTableList,
                                 C6,
-                                (message) => toast.error(message, toastOptions)
+                                (message) => notifyToast("error", message, toastOptions)
                             );
 
                         const baseConfig = {
@@ -485,7 +489,7 @@ export class HttpExecutor<
 
                         if (false === apiResponse) {
                             if (debug && isLocal()) {
-                                toast.warning("DEVS: TestRestfulResponse returned false.", toastOptionsDevs);
+                                notifyToast("warning", "DEVS: TestRestfulResponse returned false.", toastOptionsDevs);
                             }
                             // Force a null payload so the final .then(response => response.data) yields null
                             return Promise.resolve({ ...response, data: null as unknown as ResponseDataType });
@@ -813,7 +817,11 @@ export class HttpExecutor<
 
                         if (debug && isLocal()) {
 
-                            toast.success("DEVS: (" + requestMethod + ") request complete.", toastOptionsDevs);
+                            notifyToast(
+                                "success",
+                                `DEVS: (${requestMethod}) request complete.`,
+                                toastOptionsDevs,
+                            );
 
                         }
 

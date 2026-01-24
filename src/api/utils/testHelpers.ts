@@ -8,7 +8,7 @@ export function checkAllRequestsComplete(): true | (string[]) {
 
     if (stillRunning.length !== 0) {
 
-        if (document === null || document === undefined) {
+        if (typeof document === "undefined" || document === null) {
 
             throw new Error('document is undefined while waiting for API requests to complete (' + JSON.stringify(cacheEntries) + ')')
 

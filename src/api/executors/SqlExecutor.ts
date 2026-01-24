@@ -9,7 +9,7 @@ import {
     iRestWebsocketPayload,
 } from "../types/ormInterfaces";
 import namedPlaceholders from 'named-placeholders';
-import {PoolConnection} from 'mysql2/promise';
+import type {PoolConnection} from 'mysql2/promise';
 import {Buffer} from 'buffer';
 import {Executor} from "./Executor";
 import { normalizeSingularRequest } from "../utils/normalizeSingularRequest";

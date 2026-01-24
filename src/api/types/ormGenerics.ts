@@ -1,5 +1,5 @@
 // types/ormGenerics.ts
-import { iRestMethods } from './ormInterfaces';
+import type {iRestMethods} from './ormInterfaces';
 
 export type OrmGenerics<
     RequestMethod extends iRestMethods = iRestMethods,

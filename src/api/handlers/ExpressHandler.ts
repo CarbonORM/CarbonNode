@@ -1,8 +1,8 @@
-import {Request, Response, NextFunction} from "express";
-import {Pool} from "mysql2/promise";
+import type {Request, Response, NextFunction} from "express";
+import type {Pool} from "mysql2/promise";
 import {C6C} from "../C6Constants";
 import restRequest from "../restRequest"; // adjust path as needed
-import {iC6Object, iRestMethods} from "../types/ormInterfaces";
+import type {iC6Object, iRestMethods} from "../types/ormInterfaces";
 
 
 // TODO - WE MUST make this a generic - optional, but helpful
