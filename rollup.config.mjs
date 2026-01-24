@@ -7,32 +7,24 @@ import simpleVars from 'postcss-simple-vars';
 import nested from 'postcss-nested';
 import autoprefixer from 'autoprefixer';
 import {readFileSync} from "fs";
-import nodeResolve from "@rollup/plugin-node-resolve";
 
 const pkg = JSON.parse(readFileSync('package.json', {encoding: 'utf8'}));
 const config = JSON.parse(readFileSync('tsconfig.json', {encoding: 'utf8'}));
 
-// @link https://stackoverflow.com/questions/63128597/how-to-get-rid-of-the-rollup-plugin-typescript-rollup-sourcemap-option-must
-//const production = !process.env.ROLLUP_WATCH;
+const externals = [
+	...Object.keys(pkg.dependencies || {}),
+	...Object.keys(pkg.peerDependencies || {})
+]
 
-
-const plugins = [
-	commonjs(),
+const sharedPlugins = [
 	includePaths({
 		paths: [
 			config.compilerOptions.baseUrl
 		]
 	}),
-	nodeResolve({
-		'browser': true,
-	}),
-	resolve({
-		extensions: ['.js', '.jsx', '.ts', '.tsx']
-	}),
-
 	typescript({
-		sourceMap: true, // !production,
-		inlineSources: false, // !production
+		declaration: true,
+		sourceMap: true
 	}),
 	postcss({
 		sourceMap: true,
@@ -52,55 +44,44 @@ const plugins = [
 	})
 ]
 
-// noinspection JSUnresolvedReference
-const externals = [
-	...Object.keys(pkg.dependencies || {}),
-	...Object.keys(pkg.devDependencies || {}),
-	...Object.keys(pkg.peerDependencies || {}),
-]
+const esmBuild = {
+	input: 'src/index.ts',
+	external: [
+		...externals,
+		/^src\/__tests__\/.+$/
+	],
+	plugins: [
+		resolve({
+			exportConditions: ['import']
+		}),
+		...sharedPlugins
+	],
+	output: {
+		file: pkg.exports['.'].import,
+		format: 'es',
+		sourcemap: true
+	}
+}
 
-console.log('externals', externals)
+const cjsBuild = {
+	input: 'src/index.ts',
+	external: [
+		...externals,
+		/^src\/__tests__\/.+$/
+	],
+	plugins: [
+		resolve({
+			exportConditions: ['require']
+		}),
+		commonjs(),
+		...sharedPlugins
+	],
+	output: {
+		file: pkg.exports['.'].require,
+		format: 'cjs',
+		sourcemap: true,
+		exports: 'named'
+	}
+}
 
-const globals = []
-
-externals.forEach((external) => {
-
-	globals[external] = external
-
-})
-
-console.log(globals)
-
-export default [
-	{
-		input: 'src/index.ts',
-		external: [
-			...externals,
-			/^src\/__tests__\/.+$/
-		],
-		plugins: plugins,
-		output: [
-			// browser-friendly UMD build
-			//{name: 'CarbonReact', file: pkg.browser, format: 'umd', globals: globals, sourcemap: true},
-			// CommonJS (for Node) and ES module (for bundlers) build.
-			// (We could have three entries in the configuration array
-			// instead of two, but it's quicker to generate multiple
-			// builds from a single configuration where possible, using
-			// an array for the `output` option, where we can specify
-			// `file` and `format` for each target)
-			{
-				file: pkg.exports['.'].import,
-				format: 'es', // ✅ this is the ES module
-				globals,
-				sourcemap: true
-			},
-			{
-				file: pkg.exports['.'].require,
-				format: 'cjs', // ✅ this is the CommonJS
-				globals,
-				sourcemap: true
-			}
-		]
-	},
-
-];
+export default [esmBuild, cjsBuild];
