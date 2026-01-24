@@ -1,5 +1,5 @@
 // Alias a table name with a given alias
-import {C6C} from "../C6Constants";
+import {C6C} from "../constants/C6Constants";
 
 type DerivedTableSpec = Record<string, any> & {
     [C6C.SUBSELECT]?: Record<string, any>;
@@ -90,4 +90,3 @@ export const bbox = (minLng: number, minLat: number, maxLng: number, maxLat: num
 // ST_Contains for map envelope/shape queries
 export const stContains = (envelope: string, shape: string): any[] =>
     [C6C.ST_CONTAINS, envelope, shape];
-

@@ -1,6 +1,6 @@
 import {Executor} from "../../executors/Executor";
 import {OrmGenerics} from "../../types/ormGenerics";
-import {C6C} from "../../C6Constants";
+import {C6C} from "../../constants/C6Constants";
 
 export abstract class AggregateBuilder<G extends OrmGenerics> extends Executor<G>{
     protected selectAliases: Set<string> = new Set<string>();

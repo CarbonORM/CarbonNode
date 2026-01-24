@@ -1,4 +1,4 @@
-import {C6C} from "../../C6Constants";
+import {C6C} from "../../constants/C6Constants";
 import {OrmGenerics} from "../../types/ormGenerics";
 import { PaginationBuilder } from '../builders/PaginationBuilder';
 import {SqlBuilderResult} from "../utils/sqlUtils";

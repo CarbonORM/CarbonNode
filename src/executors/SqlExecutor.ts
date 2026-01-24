@@ -3,7 +3,7 @@ import {PostQueryBuilder} from "../orm/queries/PostQueryBuilder";
 import {SelectQueryBuilder} from "../orm/queries/SelectQueryBuilder";
 import {UpdateQueryBuilder} from "../orm/queries/UpdateQueryBuilder";
 import {OrmGenerics} from "../types/ormGenerics";
-import {C6Constants as C6C} from "../C6Constants";
+import {C6Constants as C6C} from "../constants/C6Constants";
 import {
     DetermineResponseDataType,
     iRestWebsocketPayload,

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { normalizeSingularRequest } from '../api/utils/normalizeSingularRequest';
-import { C6C } from '../api/C6Constants';
-import type { C6RestfulModel } from '../api/types/ormInterfaces';
+import { normalizeSingularRequest } from '../utils/normalizeSingularRequest';
+import { C6C } from '../constants/C6Constants';
+import type { C6RestfulModel } from '../types/ormInterfaces';
 
 function makeModel(table: string, pkShorts: string[], extraCols: string[] = []): C6RestfulModel<any, any, any> {
   const COLUMNS: Record<string, string> = {};

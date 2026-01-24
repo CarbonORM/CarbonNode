@@ -5,8 +5,8 @@ import {
   checkCache,
   clearCache,
   setCache,
-} from "../api/utils/cacheManager";
-import { checkAllRequestsComplete } from "../api/utils/testHelpers";
+} from "../utils/cacheManager";
+import { checkAllRequestsComplete } from "../utils/testHelpers";
 
 describe("cacheManager with map storage", () => {
   const requestData = { id: 1 } as const;
@@ -64,4 +64,3 @@ describe("cacheManager with map storage", () => {
     (global as any).document = originalDocument;
   });
 });
-

@@ -1,6 +1,6 @@
 import restRequest from "./restRequest";
-import {OrmGenerics} from "./types/ormGenerics";
-import {iRest, iRestMethods} from "./types/ormInterfaces";
+import {OrmGenerics} from "../types/ormGenerics";
+import {iRest, iRestMethods} from "../types/ormInterfaces";
 
 type WithMethod<G extends Omit<OrmGenerics, "RequestMethod">, M extends iRestMethods> =
     Omit<G, "RequestMethod"> & { RequestMethod: M };

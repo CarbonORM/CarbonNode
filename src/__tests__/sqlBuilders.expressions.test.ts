@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { C6C } from '../api/C6Constants';
-import { SelectQueryBuilder } from '../api/orm/queries/SelectQueryBuilder';
+import { C6C } from '../constants/C6Constants';
+import { SelectQueryBuilder } from '../orm/queries/SelectQueryBuilder';
 import { buildParcelConfig } from './fixtures/c6.fixture';
 
 const Property_Units = {

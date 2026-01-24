@@ -3,7 +3,7 @@ import axios from "axios";
 import { AddressInfo } from "net";
 import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import { Actor, C6, GLOBAL_REST_PARAMETERS } from "./sakila-db/C6.js";
-import { C6C } from "../api/C6Constants";
+import { C6C } from "../constants/C6Constants";
 import createTestServer from "./fixtures/createTestServer";
 
 let pool: mysql.Pool;

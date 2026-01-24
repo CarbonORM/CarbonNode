@@ -1,4 +1,4 @@
-import isNode from "../../variables/isNode";
+import isNode from "../variables/isNode";
 
 const allowListCache = new Map<string, Set<string>>();
 
@@ -118,4 +118,3 @@ export const compileSqlAllowList = async (
 
     return compiled;
 };
-

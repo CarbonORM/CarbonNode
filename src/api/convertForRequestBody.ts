@@ -1,5 +1,5 @@
-import { C6Constants } from "./C6Constants";
-import {iC6Object, C6RestfulModel, iRestMethods, RequestQueryBody} from "./types/ormInterfaces";
+import { C6Constants } from "../constants/C6Constants";
+import {iC6Object, C6RestfulModel, iRestMethods, RequestQueryBody} from "../types/ormInterfaces";
 
 export default function <
     RequestMethod extends iRestMethods,

@@ -1,4 +1,4 @@
-import { C6Constants as C6C } from "../C6Constants";
+import { C6Constants as C6C } from "../constants/C6Constants";
 import { C6RestfulModel, iRestMethods, RequestQueryBody } from "../types/ormInterfaces";
 
 /**

@@ -2,7 +2,7 @@ import {describe, expect, it, vi} from "vitest";
 import path from "node:path";
 import {mkdir, readdir, readFile, writeFile} from "node:fs/promises";
 import {Actor, C6, GLOBAL_REST_PARAMETERS} from "./sakila-db/C6.js";
-import {collectSqlAllowListEntries, compileSqlAllowList, extractSqlEntries, loadSqlAllowList, normalizeSql} from "../api/utils/sqlAllowList";
+import {collectSqlAllowListEntries, compileSqlAllowList, extractSqlEntries, loadSqlAllowList, normalizeSql} from "../utils/sqlAllowList";
 
 const fixturesDir = path.join(process.cwd(), "src/__tests__/fixtures/sqlResponses");
 const fixturePath = path.join(fixturesDir, "actor.get.json");

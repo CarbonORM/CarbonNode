@@ -1,7 +1,7 @@
 // When we capture DropExceptions and display them as a custom page, this will change.
-import isTest from "../../variables/isTest";
+import isTest from "../variables/isTest";
 import type {AxiosResponse} from "axios";
-import {toastOptions} from "../../variables/toastOptions";
+import {toastOptions} from "../variables/toastOptions";
 import type {C6RestfulModel} from "../types/ormInterfaces";
 import {notifyToast} from "./toastRuntime";
 

@@ -1,6 +1,6 @@
 import {afterEach, describe, expect, it, vi} from "vitest";
 
-import {notifyToast, setToastHandler} from "../api/utils/toastRuntime";
+import {notifyToast, setToastHandler} from "../utils/toastRuntime";
 
 describe("toastRuntime", () => {
     afterEach(() => {

@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import mysql from 'mysql2/promise';
-import { C6C } from '../api/C6Constants';
+import { C6C } from '../constants/C6Constants';
 import { restOrm } from '../api/restOrm';
 import { buildBinaryTestConfig } from './fixtures/c6.fixture';
 

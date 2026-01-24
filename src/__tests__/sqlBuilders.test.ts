@@ -1,9 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { C6C } from '../api/C6Constants';
-import { SelectQueryBuilder } from '../api/orm/queries/SelectQueryBuilder';
-import { PostQueryBuilder } from '../api/orm/queries/PostQueryBuilder';
-import { UpdateQueryBuilder } from '../api/orm/queries/UpdateQueryBuilder';
-import { DeleteQueryBuilder } from '../api/orm/queries/DeleteQueryBuilder';
+import { C6C } from '../constants/C6Constants';
+import { SelectQueryBuilder } from '../orm/queries/SelectQueryBuilder';
+import { PostQueryBuilder } from '../orm/queries/PostQueryBuilder';
+import { UpdateQueryBuilder } from '../orm/queries/UpdateQueryBuilder';
+import { DeleteQueryBuilder } from '../orm/queries/DeleteQueryBuilder';
 import { buildTestConfig, buildBinaryTestConfig, buildBinaryTestConfigFqn } from './fixtures/c6.fixture';
 
 describe('SQL Builders', () => {

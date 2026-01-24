@@ -1,7 +1,7 @@
 import express, {Express} from "express";
 import {Pool} from "mysql2/promise";
-import {iC6Object} from "src/api/types/ormInterfaces";
-import {ExpressHandler} from "../../api/handlers/ExpressHandler";
+import {iC6Object} from "../../types/ormInterfaces";
+import {ExpressHandler} from "../../handlers/ExpressHandler";
 
 export function createTestServer({
     C6,

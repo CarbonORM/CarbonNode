@@ -1,7 +1,7 @@
 import type {AxiosPromise, AxiosResponse} from "axios";
-import isLocal from "../../variables/isLocal";
-import isTest from "../../variables/isTest";
-import convertForRequestBody from "../convertForRequestBody";
+import isLocal from "../variables/isLocal";
+import isTest from "../variables/isTest";
+import convertForRequestBody from "../api/convertForRequestBody";
 import {eFetchDependencies} from "../types/dynamicFetching";
 import type {OrmGenerics} from "../types/ormGenerics";
 import {

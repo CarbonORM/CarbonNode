@@ -1,4 +1,4 @@
-import type { iRest, C6RestfulModel } from "../../api/types/ormInterfaces";
+import type { iRest, C6RestfulModel } from "../../types/ormInterfaces";
 
 function tableModel<T extends Record<string, any>>(name: string, columns: Record<string, keyof T>): C6RestfulModel<string, T, keyof T & string> {
   const TYPE_VALIDATION: any = {};
@@ -69,4 +69,3 @@ export function buildPuSalesConfig() {
 
   return baseConfig;
 }
-

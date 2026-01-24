@@ -1,7 +1,7 @@
 import type {Request, Response, NextFunction} from "express";
 import type {Pool} from "mysql2/promise";
-import {C6C} from "../C6Constants";
-import restRequest from "../restRequest"; // adjust path as needed
+import {C6C} from "../constants/C6Constants";
+import restRequest from "../api/restRequest";
 import type {iC6Object, iRestMethods} from "../types/ormInterfaces";
 
 

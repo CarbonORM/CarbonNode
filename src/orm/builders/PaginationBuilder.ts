@@ -1,4 +1,4 @@
-import {C6Constants} from "../../C6Constants";
+import {C6Constants} from "../../constants/C6Constants";
 import {OrmGenerics} from "../../types/ormGenerics";
 import {JoinBuilder} from "./JoinBuilder";
 

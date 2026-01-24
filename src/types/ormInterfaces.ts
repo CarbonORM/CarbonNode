@@ -8,7 +8,7 @@ import {JoinType, OrderDirection, SQLComparisonOperator, SQLFunction} from "./my
 import type {CarbonReact} from "@carbonorm/carbonreact";
 import type {OrmGenerics} from "./ormGenerics";
 
-type RestOrmFactory = typeof import("../restOrm").restOrm;
+type RestOrmFactory = typeof import("../api/restOrm").restOrm;
 type RestOrmReturn = ReturnType<RestOrmFactory<OrmGenerics<any>>>;
 
 export type iRestMethods = 'GET' | 'POST' | 'PUT' | 'DELETE';

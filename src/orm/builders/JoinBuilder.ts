@@ -1,6 +1,6 @@
 import {OrmGenerics} from "../../types/ormGenerics";
 import {ConditionBuilder} from "./ConditionBuilder";
-import {C6C} from "../../C6Constants";
+import {C6C} from "../../constants/C6Constants";
 import {resolveDerivedTable, isDerivedTableKey} from "../queryHelpers";
 
 export abstract class JoinBuilder<G extends OrmGenerics> extends ConditionBuilder<G>{

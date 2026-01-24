@@ -1,9 +1,9 @@
 import isNode from '../variables/isNode';
-import {OrmGenerics} from "./types/ormGenerics";
+import {OrmGenerics} from "../types/ormGenerics";
 import {
     DetermineResponseDataType,
     iRest, RequestQueryBody
-} from "./types/ormInterfaces";
+} from "../types/ormInterfaces";
 
 /**
  * Facade: routes API calls to SQL or HTTP executors based on runtime context.
@@ -36,15 +36,14 @@ export default function restRequest<
 
         // SQL path if on Node with a provided pool
         if (isNode() && config.mysqlPool) {
-            const {SqlExecutor} = await import('./executors/SqlExecutor');
+            const {SqlExecutor} = await import('../executors/SqlExecutor');
             const executor = new SqlExecutor<G>(config, request);
             return executor.execute();
         }
 
         // HTTP path fallback
-        const {HttpExecutor} = await import('./executors/HttpExecutor');
+        const {HttpExecutor} = await import('../executors/HttpExecutor');
         const http = new HttpExecutor<G>(config, request);
         return http.execute();
     };
 }
-

@@ -1,4 +1,4 @@
-import {C6C} from "../../C6Constants";
+import {C6C} from "../../constants/C6Constants";
 import {ConditionBuilder} from "../builders/ConditionBuilder";
 import {OrmGenerics} from "../../types/ormGenerics";
 
