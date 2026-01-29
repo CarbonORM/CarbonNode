@@ -69,7 +69,7 @@ export class SqlExecutor<
     }
 
     private async withConnection<T>(cb: (conn: PoolConnection) => Promise<T>): Promise<T> {
-        console.log(`[SQL EXECUTOR] 📡 Getting DB connection`);
+        this.config.verbose && console.log(`[SQL EXECUTOR] 📡 Getting DB connection`);
         const conn = await this.config.mysqlPool!.getConnection();
         try {
             this.config.verbose && console.log(`[SQL EXECUTOR] ✅ Connection acquired`);

@@ -1,4 +1,5 @@
 import isNode from '../variables/isNode';
+import isVerbose from '../variables/isVerbose';
 import {OrmGenerics} from "../types/ormGenerics";
 import {
     DetermineResponseDataType,
@@ -32,7 +33,7 @@ export default function restRequest<
 
         const config = typeof configX === "function" ? configX() : configX;
 
-        config.verbose ??= true; // Default to verbose logging if not set
+        config.verbose ??= isVerbose(); // Default to env-driven verbosity if not set
 
         // SQL path if on Node with a provided pool
         if (isNode() && config.mysqlPool) {

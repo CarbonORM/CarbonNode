@@ -7,9 +7,10 @@ import {Modify} from "./modifyTypes";
 import {JoinType, OrderDirection, SQLComparisonOperator, SQLFunction} from "./mysqlTypes";
 import type {CarbonReact} from "@carbonorm/carbonreact";
 import type {OrmGenerics} from "./ormGenerics";
+import {restOrm} from "../api/restOrm";
 
-type RestOrmFactory = typeof import("../api/restOrm").restOrm;
-type RestOrmReturn = ReturnType<RestOrmFactory<OrmGenerics<any>>>;
+type RestOrmFactory = typeof restOrm<OrmGenerics<any>>;
+type RestOrmReturn = ReturnType<RestOrmFactory>;
 
 export type iRestMethods = 'GET' | 'POST' | 'PUT' | 'DELETE';
 export const POST = 'POST';
