@@ -1,5 +1,3 @@
-// Refined TypeScript types for CarbonORM
-
 import type {AxiosInstance, AxiosPromise, AxiosResponse} from "axios";
 import type {Pool} from "mysql2/promise";
 import {eFetchDependencies} from "./dynamicFetching";
