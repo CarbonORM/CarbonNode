@@ -5,9 +5,10 @@ import type {Pool} from "mysql2/promise";
 import {eFetchDependencies} from "./dynamicFetching";
 import {Modify} from "./modifyTypes";
 import {JoinType, OrderDirection, SQLComparisonOperator, SQLFunction} from "./mysqlTypes";
-import type {CarbonReact} from "@carbonorm/carbonreact";
+import type {CarbonReact, iStateAdapter} from "@carbonorm/carbonreact";
 import type {OrmGenerics} from "./ormGenerics";
 import {restOrm} from "../api/restOrm";
+
 
 type RestOrmFactory = typeof restOrm<OrmGenerics<any>>;
 type RestOrmReturn = ReturnType<RestOrmFactory>;
@@ -190,6 +191,7 @@ export interface iRest<
     withCredentials?: boolean;
     restModel: C6RestfulModel<RestShortTableName, RestTableInterface, PrimaryKey>;
     reactBootstrap?: CarbonReact<any, any>;
+    stateAdapter?: iStateAdapter<any>;
     requestMethod: iRestMethods;
     clearCache?: () => void;
     skipPrimaryCheck?: boolean;
