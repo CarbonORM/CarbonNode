@@ -529,7 +529,8 @@ export class HttpExecutor<
 
                         if (C6.GET === requestMethod && this.isRestResponse(response)) {
 
-                            const responseData = response.data;
+                            const responseData =
+                                response.data as DetermineResponseDataType<'GET', G['RestTableInterface']>;
 
                             const pageLimit = query?.[C6.PAGINATION]?.[C6.LIMIT];
 

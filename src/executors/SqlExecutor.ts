@@ -260,7 +260,16 @@ export class SqlExecutor<
         response?: DetermineResponseDataType<G['RequestMethod'], G['RestTableInterface']>
     ): Promise<void> {
         const broadcast = this.config.websocketBroadcast;
-        if (!broadcast || this.config.requestMethod === C6C.GET) return;
+        this.config.verbose && console.log("[SQL EXECUTOR] 📣 broadcastWebsocketIfConfigured start", {
+            method: this.config.requestMethod,
+            hasBroadcast: Boolean(broadcast),
+        });
+        if (!broadcast || this.config.requestMethod === C6C.GET) {
+            this.config.verbose && console.log("[SQL EXECUTOR] 📣 websocket broadcast skipped", {
+                reason: !broadcast ? "no broadcast configured" : "GET request",
+            });
+            return;
+        }
 
         const normalizedRequest = this.normalizeRequestPayload(this.extractRequestBody());
         const pkShorts = this.config.restModel.PRIMARY_SHORT ?? [];
@@ -269,11 +278,27 @@ export class SqlExecutor<
         let responseRest = response?.rest;
         let responsePrimaryKey = this.extractPrimaryKeyValuesFromData(responseRest);
 
+        this.config.verbose && console.log("[SQL EXECUTOR] 📣 websocket request payload", {
+            normalizedRequest,
+            requestPrimaryKey: this.extractPrimaryKeyValues(),
+            pkShorts,
+        });
+        this.config.verbose && console.log("[SQL EXECUTOR] 📣 websocket response payload", {
+            responseRest,
+            responsePrimaryKey,
+        });
+
         if (
             (responseRest === null || (Array.isArray(responseRest) && responseRest.length === 0))
             && this.config.requestMethod === C6C.POST
         ) {
+            this.config.verbose && console.log("[SQL EXECUTOR] 📣 response rest empty, attempting synthesize", {
+                responseRest,
+            });
             const insertId = (response as DetermineResponseDataType<G['RequestMethod'], G['RestTableInterface']> & { insertId?: number | string | null })?.insertId;
+            this.config.verbose && console.log("[SQL EXECUTOR] 📣 POST insertId lookup", {
+                insertId,
+            });
             if (insertId !== undefined && pkShorts.length === 1) {
                 const synthesizedRequest = {
                     ...normalizedRequest,
@@ -298,6 +323,10 @@ export class SqlExecutor<
                 responsePrimaryKey = {
                     [pkShorts[0]]: insertId,
                 };
+                this.config.verbose && console.log("[SQL EXECUTOR] 📣 synthesized response payload", {
+                    synthesized,
+                    responsePrimaryKey,
+                });
             }
         }
 
@@ -313,8 +342,12 @@ export class SqlExecutor<
             },
         };
 
+        this.config.verbose && console.log("[SQL EXECUTOR] 📣 websocket payload ready", payload);
+
         try {
+            this.config.verbose && console.log("[SQL EXECUTOR] 📣 websocket broadcast dispatch start");
             await broadcast(payload);
+            this.config.verbose && console.log("[SQL EXECUTOR] 📣 websocket broadcast dispatch complete");
         } catch (error) {
             if (this.config.verbose) {
                 console.error("[SQL EXECUTOR] websocketBroadcast failed", error);

@@ -2,7 +2,7 @@ import type {Request, Response, NextFunction} from "express";
 import type {Pool} from "mysql2/promise";
 import {C6C} from "../constants/C6Constants";
 import restRequest from "../api/restRequest";
-import type {iC6Object, iRestMethods} from "../types/ormInterfaces";
+import type {iC6Object, iRestMethods, tWebsocketBroadcast} from "../types/ormInterfaces";
 
 
 // TODO - WE MUST make this a generic - optional, but helpful
@@ -11,10 +11,12 @@ export function ExpressHandler({
     C6,
     mysqlPool,
     sqlAllowListPath,
+    websocketBroadcast,
 }: {
     C6: iC6Object;
     mysqlPool: Pool;
     sqlAllowListPath?: string;
+    websocketBroadcast?: tWebsocketBroadcast;
 }) {
 
     return async (req: Request, res: Response, next: NextFunction) => {
@@ -101,6 +103,7 @@ export function ExpressHandler({
                 C6,
                 mysqlPool,
                 sqlAllowListPath,
+                websocketBroadcast,
                 requestMethod: method,
                 restModel: C6.TABLES[table]
             })(payload);
