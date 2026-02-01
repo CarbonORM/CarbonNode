@@ -47,19 +47,19 @@ export class SqlExecutor<
 
             case 'POST': {
                 const result = await this.runQuery();
-                await this.broadcastWebsocketIfConfigured();
+                await this.broadcastWebsocketIfConfigured(result);
                 return result as DetermineResponseDataType<G['RequestMethod'], G['RestTableInterface']>;
             }
 
             case 'PUT': {
                 const result = await this.runQuery();
-                await this.broadcastWebsocketIfConfigured();
+                await this.broadcastWebsocketIfConfigured(result);
                 return result as DetermineResponseDataType<G['RequestMethod'], G['RestTableInterface']>;
             }
 
             case 'DELETE': {
                 const result = await this.runQuery();
-                await this.broadcastWebsocketIfConfigured();
+                await this.broadcastWebsocketIfConfigured(result);
                 return result as DetermineResponseDataType<G['RequestMethod'], G['RestTableInterface']>;
             }
 
@@ -110,7 +110,7 @@ export class SqlExecutor<
         return `'${JSON.stringify(val)}'`;
     }
 
-    private stripRequestMetadata(source: Record<string, any>): Record<string, any> {
+    private stripRequestMetadata(source: Record<string, unknown>): Record<string, unknown> {
         const ignoredKeys = new Set<string>([
             C6C.SELECT,
             C6C.UPDATE,
@@ -128,7 +128,7 @@ export class SqlExecutor<
             "error",
         ]);
 
-        const filtered: Record<string, any> = {};
+        const filtered: Record<string, unknown> = {};
         for (const [key, value] of Object.entries(source)) {
             if (!ignoredKeys.has(key)) {
                 filtered[key] = value;
@@ -137,10 +137,10 @@ export class SqlExecutor<
         return filtered;
     }
 
-    private normalizeRequestPayload(source: Record<string, any>): Record<string, any> {
+    private normalizeRequestPayload(source: Record<string, unknown>): Record<string, unknown> {
         const columns = this.config.restModel.COLUMNS as Record<string, string>;
         const validColumns = new Set(Object.values(columns));
-        const normalized: Record<string, any> = {};
+        const normalized: Record<string, unknown> = {};
 
         for (const [key, value] of Object.entries(source)) {
             const shortKey = columns[key] ?? (key.includes(".") ? key.split(".").pop()! : key);
@@ -152,25 +152,27 @@ export class SqlExecutor<
         return normalized;
     }
 
-    private extractRequestBody(): Record<string, any> {
-        const request = this.request as Record<string, any>;
+
+    private extractRequestBody() {
+        const request = this.request;
 
         if (this.config.requestMethod === C6C.POST) {
-            if (Array.isArray(request.dataInsertMultipleRows) && request.dataInsertMultipleRows.length > 0) {
-                return request.dataInsertMultipleRows[0] as Record<string, any>;
+            const insertRows = request.dataInsertMultipleRows;
+            if (Array.isArray(insertRows) && insertRows.length > 0) {
+                return insertRows[0] as Record<string, unknown>;
             }
             if (C6C.INSERT in request) {
-                return (request as any)[C6C.INSERT] ?? {};
+                return request[C6C.INSERT] ?? {};
             }
             if (C6C.REPLACE in request) {
-                return (request as any)[C6C.REPLACE] ?? {};
+                return request[C6C.REPLACE] ?? {};
             }
             return this.stripRequestMetadata(request);
         }
 
         if (this.config.requestMethod === C6C.PUT) {
             if (request[C6C.UPDATE] && typeof request[C6C.UPDATE] === "object") {
-                return request[C6C.UPDATE] as Record<string, any>;
+                return request[C6C.UPDATE] as Record<string, unknown>;
             }
             return this.stripRequestMetadata(request);
         }
@@ -223,17 +225,91 @@ export class SqlExecutor<
         return Object.keys(pkValues).length > 0 ? pkValues : null;
     }
 
-    private async broadcastWebsocketIfConfigured(): Promise<void> {
+    private extractPrimaryKeyValuesFromData(data: any): Record<string, any> | null {
+        if (!data) return null;
+        const row = Array.isArray(data) ? data[0] : data;
+        if (!row || typeof row !== "object") return null;
+
+        const pkShorts = this.config.restModel.PRIMARY_SHORT;
+        const columns = this.config.restModel.COLUMNS as Record<string, string>;
+        const pkValues: Record<string, any> = {};
+
+        for (const pk of pkShorts) {
+            if (pk in row) {
+                pkValues[pk] = (row as any)[pk];
+                continue;
+            }
+
+            const fullKey = Object.keys(columns).find(
+                (key) => columns[key] === pk,
+            );
+
+            if (fullKey && fullKey in row) {
+                pkValues[pk] = (row as any)[fullKey];
+            }
+        }
+
+        if (pkShorts.length > 0 && Object.keys(pkValues).length < pkShorts.length) {
+            return null;
+        }
+
+        return Object.keys(pkValues).length > 0 ? pkValues : null;
+    }
+
+    private async broadcastWebsocketIfConfigured(
+        response?: DetermineResponseDataType<G['RequestMethod'], G['RestTableInterface']>
+    ): Promise<void> {
         const broadcast = this.config.websocketBroadcast;
         if (!broadcast || this.config.requestMethod === C6C.GET) return;
+
+        const normalizedRequest = this.normalizeRequestPayload(this.extractRequestBody());
+        const pkShorts = this.config.restModel.PRIMARY_SHORT ?? [];
+        const columns = this.config.restModel.COLUMNS as Record<string, string>;
+        const validColumns = new Set(Object.values(columns));
+        let responseRest = response?.rest;
+        let responsePrimaryKey = this.extractPrimaryKeyValuesFromData(responseRest);
+
+        if (
+            (responseRest === null || (Array.isArray(responseRest) && responseRest.length === 0))
+            && this.config.requestMethod === C6C.POST
+        ) {
+            const insertId = (response as DetermineResponseDataType<G['RequestMethod'], G['RestTableInterface']> & { insertId?: number | string | null })?.insertId;
+            if (insertId !== undefined && pkShorts.length === 1) {
+                const synthesizedRequest = {
+                    ...normalizedRequest,
+                };
+                const now = new Date().toISOString();
+                if (validColumns.has("changed_at") && (synthesizedRequest as Record<string, unknown>).changed_at === undefined) {
+                    synthesizedRequest.changed_at = now;
+                }
+                if (validColumns.has("created_at") && (synthesizedRequest as Record<string, unknown>).created_at === undefined) {
+                    synthesizedRequest.created_at = now;
+                }
+                if (validColumns.has("updated_at") && (synthesizedRequest as Record<string, unknown>).updated_at === undefined) {
+                    synthesizedRequest.updated_at = now;
+                }
+
+                const synthesized = {
+                    ...synthesizedRequest,
+                    [pkShorts[0]]: insertId,
+                };
+                // @ts-ignore - todo
+                responseRest = [synthesized];
+                responsePrimaryKey = {
+                    [pkShorts[0]]: insertId,
+                };
+            }
+        }
 
         const payload: iRestWebsocketPayload = {
             REST: {
                 TABLE_NAME: this.config.restModel.TABLE_NAME as string,
                 TABLE_PREFIX: this.config.C6?.PREFIX ?? "",
                 METHOD: this.config.requestMethod,
-                REQUEST: this.normalizeRequestPayload(this.extractRequestBody()),
+                REQUEST: normalizedRequest,
                 REQUEST_PRIMARY_KEY: this.extractPrimaryKeyValues(),
+                RESPONSE: responseRest,
+                RESPONSE_PRIMARY_KEY: responsePrimaryKey,
             },
         };
 
@@ -245,7 +321,7 @@ export class SqlExecutor<
             }
         }
     }
-    async runQuery() {
+    async runQuery(): Promise<DetermineResponseDataType<G['RequestMethod'], G['RestTableInterface']>> {
         const {TABLE_NAME} = this.config.restModel;
         const method = this.config.requestMethod;
         let builder: SelectQueryBuilder<G> | UpdateQueryBuilder<G> | DeleteQueryBuilder<G> | PostQueryBuilder<G>;
@@ -286,14 +362,15 @@ export class SqlExecutor<
                 return {
                     rest: result.map(this.serialize),
                     sql: {sql, values}
-                };
+                } as DetermineResponseDataType<G['RequestMethod'], G['RestTableInterface']>;
             } else {
                 this.config.verbose &&  console.log(`[SQL EXECUTOR] ✏️ Rows affected:`, result.affectedRows);
                 return {
-                    affected: result.affectedRows,
-                    rest: [],
+                    affected: result.affectedRows as number,
+                    insertId: result.insertId as number,
+                    rest: [], // TODO - remove rest empty array from non-GET responses?
                     sql: {sql, values}
-                };
+                } as DetermineResponseDataType<G['RequestMethod'], G['RestTableInterface']>;
             }
         });
     }

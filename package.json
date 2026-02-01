@@ -1,6 +1,6 @@
 {
   "name": "@carbonorm/carbonnode",
-  "version": "6.0.3",
+  "version": "6.0.4",
   "browser": "dist/index.umd.js",
   "repository": {
     "type": "git",
@@ -19,7 +19,7 @@
     "hooksPath": ".githooks"
   },
   "dependencies": {
-    "@carbonorm/carbonreact": "^6.0.2",
+    "@carbonorm/carbonreact": "^6.0.3",
     "buffer": "^6.0.3",
     "geojson": "^0.5.0",
     "handlebars": "^4.7.8",

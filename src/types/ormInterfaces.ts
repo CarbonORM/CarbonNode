@@ -77,6 +77,11 @@ export type RequestGetPutDeleteBody<T extends { [key: string]: any } = any> = T 
     PAGINATION?: Pagination<T>;
 };
 
+export type RequestPostBody<T extends { [key: string]: any } = any> = T | {
+    INSERT?: Partial<T>;
+    REPLACE?: Partial<T>;
+};
+
 export type iAPI<T extends { [key: string]: any }> = T & {
     dataInsertMultipleRows?: T[];
     cacheResults?: boolean;
@@ -94,7 +99,7 @@ export type RequestQueryBody<
     Overrides extends { [key: string]: any } = {}
 > = Method extends 'GET' | 'PUT' | 'DELETE'
     ? iAPI<RequestGetPutDeleteBody<Modify<T, Overrides> & Custom>>
-    : iAPI<Modify<T, Overrides> & Custom>;
+    : iAPI<RequestPostBody<Modify<T, Overrides> & Custom>>;
 
 export interface iCacheAPI<ResponseDataType = any> {
     requestArgumentsSerialized: string;
@@ -119,12 +124,15 @@ export type C6RestResponse<
     RestData extends { [key: string]: any },
     Overrides = {}
 > = {
-    rest: Method extends 'GET' ? Modify<RestData, Overrides>[] : Modify<RestData, Overrides>;
+    rest: Method extends 'GET' ? Modify<RestData, Overrides>[] : never;
     session?: any;
     sql?: any;
 } & (Method extends 'GET'
     ? { next?: () => Promise<DetermineResponseDataType<'GET', RestData, Overrides>> }
-    : {});
+    : {
+        affected: number,
+        insertId?: number | string,
+    });
 
 export interface iC6RestResponse<RestData> {
     // Backwards compatibility: base interface for rest/sql/session (singular)
@@ -172,6 +180,8 @@ export type iRestWebsocketPayload = {
         METHOD: iRestMethods;
         REQUEST: Record<string, any>;
         REQUEST_PRIMARY_KEY: Record<string, any> | null;
+        RESPONSE?: Record<string, any> | Record<string, any>[];
+        RESPONSE_PRIMARY_KEY?: Record<string, any> | null;
     };
 };
 
