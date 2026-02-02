@@ -1,26 +1,26 @@
-import {DeleteQueryBuilder} from "../orm/queries/DeleteQueryBuilder";
-import {PostQueryBuilder} from "../orm/queries/PostQueryBuilder";
-import {SelectQueryBuilder} from "../orm/queries/SelectQueryBuilder";
-import {UpdateQueryBuilder} from "../orm/queries/UpdateQueryBuilder";
-import {OrmGenerics} from "../types/ormGenerics";
-import {C6Constants as C6C} from "../constants/C6Constants";
+import { DeleteQueryBuilder } from "../orm/queries/DeleteQueryBuilder";
+import { PostQueryBuilder } from "../orm/queries/PostQueryBuilder";
+import { SelectQueryBuilder } from "../orm/queries/SelectQueryBuilder";
+import { UpdateQueryBuilder } from "../orm/queries/UpdateQueryBuilder";
+import { OrmGenerics } from "../types/ormGenerics";
+import { C6Constants as C6C } from "../constants/C6Constants";
 import {
     DetermineResponseDataType,
     iRestWebsocketPayload,
 } from "../types/ormInterfaces";
 import namedPlaceholders from 'named-placeholders';
-import type {PoolConnection} from 'mysql2/promise';
-import {Buffer} from 'buffer';
-import {Executor} from "./Executor";
+import type { PoolConnection } from 'mysql2/promise';
+import { Buffer } from 'buffer';
+import { Executor } from "./Executor";
 import { normalizeSingularRequest } from "../utils/normalizeSingularRequest";
-import {loadSqlAllowList, normalizeSql} from "../utils/sqlAllowList";
+import { loadSqlAllowList, normalizeSql } from "../utils/sqlAllowList";
 
 export class SqlExecutor<
     G extends OrmGenerics
 > extends Executor<G> {
 
     async execute(): Promise<DetermineResponseDataType<G['RequestMethod'], G['RestTableInterface']>> {
-        const {TABLE_NAME} = this.config.restModel;
+        const { TABLE_NAME } = this.config.restModel;
         const method = this.config.requestMethod;
 
         // Normalize singular T-shaped requests into complex ORM shape (GET/PUT/DELETE)
@@ -42,6 +42,13 @@ export class SqlExecutor<
         switch (method) {
             case 'GET': {
                 const rest = await this.runQuery();
+                if (this.config.reactBootstrap) {
+                    this.config.reactBootstrap.updateRestfulObjectArrays({
+                        dataOrCallback: (rest as any).rest,
+                        stateKey: this.config.restModel.TABLE_NAME,
+                        uniqueObjectId: this.config.restModel.PRIMARY_SHORT as any,
+                    });
+                }
                 return rest as DetermineResponseDataType<G['RequestMethod'], G['RestTableInterface']>;
             }
 
@@ -355,7 +362,7 @@ export class SqlExecutor<
         }
     }
     async runQuery(): Promise<DetermineResponseDataType<G['RequestMethod'], G['RestTableInterface']>> {
-        const {TABLE_NAME} = this.config.restModel;
+        const { TABLE_NAME } = this.config.restModel;
         const method = this.config.requestMethod;
         let builder: SelectQueryBuilder<G> | UpdateQueryBuilder<G> | DeleteQueryBuilder<G> | PostQueryBuilder<G>;
 
@@ -394,15 +401,15 @@ export class SqlExecutor<
             if (method === 'GET') {
                 return {
                     rest: result.map(this.serialize),
-                    sql: {sql, values}
+                    sql: { sql, values }
                 } as DetermineResponseDataType<G['RequestMethod'], G['RestTableInterface']>;
             } else {
-                this.config.verbose &&  console.log(`[SQL EXECUTOR] ✏️ Rows affected:`, result.affectedRows);
+                this.config.verbose && console.log(`[SQL EXECUTOR] ✏️ Rows affected:`, result.affectedRows);
                 return {
                     affected: result.affectedRows as number,
                     insertId: result.insertId as number,
                     rest: [], // TODO - remove rest empty array from non-GET responses?
-                    sql: {sql, values}
+                    sql: { sql, values }
                 } as DetermineResponseDataType<G['RequestMethod'], G['RestTableInterface']>;
             }
         });

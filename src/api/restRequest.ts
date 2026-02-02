@@ -37,9 +37,19 @@ export default function restRequest<
 
         // SQL path if on Node with a provided pool
         if (isNode() && config.mysqlPool) {
+            if (config.verbose) {
+                console.log("Using SQL Executor");
+            }
             const {SqlExecutor} = await import('../executors/SqlExecutor');
             const executor = new SqlExecutor<G>(config, request);
             return executor.execute();
+        }
+
+        if (config.verbose) {
+            console.log("Using HTTP Executor", {
+                isNode: isNode(),
+                hasPool: !!config.mysqlPool
+            });
         }
 
         // HTTP path fallback
