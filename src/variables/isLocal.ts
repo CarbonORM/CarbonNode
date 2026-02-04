@@ -1,7 +1,7 @@
-import {getEnvVar} from "./getEnvVar";
+import {getEnv} from "./getEnv";
 
 
 
 export default function () {
-    return  getEnvVar('NODE_ENV', '') === 'development';
+    return  getEnv('NODE_ENV', '') === 'development';
 };

@@ -844,7 +844,7 @@ export class HttpExecutor<
 
                 console.groupEnd()
 
-                throw new Error(JSON.stringify(throwableError))
+                throw throwableError
 
             }
 

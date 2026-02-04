@@ -1,6 +1,5 @@
-import {getEnvVar} from "./getEnvVar";
+import {getEnvBool} from "./getEnv";
 
 export default function () {
-    const envVerbose = getEnvVar('VERBOSE') || getEnvVar('REACT_APP_VERBOSE') || getEnvVar('VITE_VERBOSE') || ''
-    return ['true', '1', 'yes', 'on'].includes(envVerbose.toLowerCase());
+    return getEnvBool('VERBOSE', false) || getEnvBool('REACT_APP_VERBOSE', false) || getEnvBool('VITE_VERBOSE', false)
 }

@@ -35,22 +35,21 @@ export default function restRequest<
 
         config.verbose ??= isVerbose(); // Default to env-driven verbosity if not set
 
+        if (!config.mysqlPool && !config.axios) {
+            throw new Error("No execution method available: neither mysqlPool nor axios instance provided in config.");
+        }
+
         // SQL path if on Node with a provided pool
-        if (isNode() && config.mysqlPool) {
-            if (config.verbose) {
-                console.log("Using SQL Executor");
-            }
+        if (config.mysqlPool) {
+            config.verbose && console.log("Using SQL Executor");
             const {SqlExecutor} = await import('../executors/SqlExecutor');
             const executor = new SqlExecutor<G>(config, request);
             return executor.execute();
         }
 
-        if (config.verbose) {
-            console.log("Using HTTP Executor", {
-                isNode: isNode(),
-                hasPool: !!config.mysqlPool
-            });
-        }
+        config.verbose && console.log("Using HTTP Executor", {
+            isNode: isNode(),
+        });
 
         // HTTP path fallback
         const {HttpExecutor} = await import('../executors/HttpExecutor');

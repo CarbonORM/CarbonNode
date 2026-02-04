@@ -1,8 +1,8 @@
-import {getEnvVar} from "./getEnvVar";
+import {getEnv, getEnvBool} from "./getEnv";
 
 
 export default function () {
-    return getEnvVar('JEST_WORKER_ID') || getEnvVar('NODE_ENV') === 'test'
-        || getEnvVar('REACT_APP_TEST') === 'true' || getEnvVar('VITE_TEST') === 'true'
-        || getEnvVar('MODE') === 'test' || getEnvVar('VITE_TEST_MODE') === 'true';
+    return getEnv('JEST_WORKER_ID', null) || getEnv('NODE_ENV', "") === 'test'
+        || getEnvBool('REACT_APP_TEST', false) || getEnvBool('VITE_TEST', false)
+        || getEnv('MODE', '') === 'test' || getEnvBool('VITE_TEST_MODE', false);
 };

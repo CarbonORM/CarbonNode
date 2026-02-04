@@ -1,6 +1,16 @@
 import {OrmGenerics} from "../../types/ormGenerics";
 import {PaginationBuilder} from "../builders/PaginationBuilder";
 import {SqlBuilderResult} from "../utils/sqlUtils";
+import {getEnvBool} from "../../variables/getEnv";
+import colorSql from "../../utils/colorSql";
+
+
+const C = {
+    SSR: "\x1b[95m",     // bright magenta
+    HTTP: "\x1b[94m",    // bright blue
+    SQL: "\x1b[96m",     // bright cyan (your SELECT teal)
+    RESET: "\x1b[0m",
+};
 
 export class SelectQueryBuilder<G extends OrmGenerics> extends PaginationBuilder<G>{
 
@@ -56,7 +66,9 @@ export class SelectQueryBuilder<G extends OrmGenerics> extends PaginationBuilder
             sql += ` LIMIT 100`;
         }
 
-        console.log(`[SELECT] ${sql.trim()}`);
+        const preText = getEnvBool("SSR", false) ? `${C.SSR}[SSR]${C.RESET} ` : `${C.HTTP}[API]${C.RESET} `;
+
+        console.log(`${preText}${C.SQL}[SELECT]${C.RESET} ${colorSql(sql)}`);
 
         return { sql, params };
     }
