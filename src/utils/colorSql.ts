@@ -13,7 +13,7 @@ const C = {
 
 const ansi256 = (n: number) => `\x1b[38;5;${n}m`;
 
-/* ---------- table color hashing ---------- */
+/* ---------- hashing ---------- */
 
 function hashString(str: string): number {
     let hash = 0;
@@ -23,36 +23,45 @@ function hashString(str: string): number {
     return Math.abs(hash);
 }
 
-function tableColor(tableName: string): string {
+/* ---------- table color ---------- */
+
+function tableRGB(tableName: string): [number, number, number] {
     const name = tableName.replace(/[`"]/g, "").toLowerCase();
     const hash = hashString(name);
 
-    // major hue bucket from first letter
+    // Stable hue bucket by first letter
     const first = name.charCodeAt(0) || 97;
     const hueBase = (first - 97) % 6;
 
-    // minor variation
-    const shade = hash % 6;
-    const brightness = 3 + (hash % 2);
+    const r = (hueBase + (hash % 3)) % 6;
+    const g = (hash >> 3) % 6;
+    const b = (hash >> 6) % 6;
 
-    // ANSI 256 color cube
-    const r = (hueBase + shade) % 6;
-    const g = (shade + brightness) % 6;
-    const b = (hash % 3) + 2;
+    return [r, g, Math.max(2, b)]; // avoid muddy dark blues
+}
 
+function tableColor(table: string): string {
+    const [r, g, b] = tableRGB(table);
     return ansi256(16 + 36 * r + 6 * g + b);
 }
 
-/* ---------- placeholder collapsing ---------- */
+/* ---------- column color (same hue, lighter) ---------- */
 
+function columnColorFromTable(table: string): string {
+    const [r, g, b] = tableRGB(table);
+
+    // Lift toward white, preserve hue
+    const lr = Math.min(5, r + 1);
+    const lg = Math.min(5, g + 1);
+    const lb = Math.min(5, b + 2);
+
+    return ansi256(16 + 36 * lr + 6 * lg + lb);
+}
+
+/* ---------- bind collapsing ---------- */
 /**
- * Collapses long bind runs:
- *   ?, ?, ?, ?, ?, ?   →   ? ×6
- *
- * Rules:
- * - ≥4 binds collapse
- * - BETWEEN ? AND ? is preserved
- * - Works across wrapping / truncation
+ * ?, ?, ?, ?, ?, ?  →  ? ×6
+ * triggers at 4+
  */
 function collapseBinds(sql: string): string {
     return sql.replace(
@@ -69,23 +78,31 @@ function collapseBinds(sql: string): string {
 export default function colorSql(sql: string): string {
     let s = sql.trim();
 
-    // 1️⃣ Collapse noisy bind runs FIRST
+    /* 1️⃣ collapse bind noise */
     s = collapseBinds(s);
 
-    // 2️⃣ Color tables FIRST (before keywords)
+    /* 2️⃣ table.column coloring (core visual grouping) */
+    s = s.replace(
+        /\b(`?\w+`?)\.(\w+)\b/g,
+        (_, table, column) =>
+            `${tableColor(table)}${table}${RESET}.` +
+            `${columnColorFromTable(table)}${column}${RESET}`,
+    );
+
+    /* 3️⃣ FROM / JOIN tables */
     s = s.replace(
         /\b(FROM|JOIN|UPDATE|INTO)\s+(`[^`]+`|\w+)/gi,
         (_, kw, table) =>
             `${C.KEYWORD}${kw}${RESET} ${tableColor(table)}${table}${RESET}`,
     );
 
-    // 3️⃣ SQL keywords (safe after table coloring)
+    /* 4️⃣ SQL keywords */
     s = s.replace(
-        /\b(SELECT|WHERE|AND|OR|BETWEEN|ON|IN)\b/gi,
+        /\b(SELECT|WHERE|AND|OR|ON|IN|BETWEEN|EXISTS|ORDER BY)\b/gi,
         `${C.KEYWORD}$1${RESET}`,
     );
 
-    // 4️⃣ LIMIT highlighting
+    /* 5️⃣ LIMIT */
     s = s.replace(
         /\bLIMIT\s+(\d+)/gi,
         `${C.LIMIT}LIMIT${RESET} ${C.NUMBER}$1${RESET}`,
