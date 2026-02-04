@@ -3,7 +3,10 @@ name: Publish to npm on version bump (registry check)
 on:
   push:
     branches: [ main ]
-    # paths: [ package.json ]
+
+permissions:
+  id-token: write  # Required for OIDC
+  contents: read
 
 jobs:
   publish:
@@ -14,30 +17,17 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
       - name: Setup Node
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@v6
         with:
           node-version: '20'
           registry-url: 'https://registry.npmjs.com'  # <- use .com to match publish
           scope: '@carbonorm'
           cache: 'npm'
-
-      # Write auth into THE npmrc that setup-node told npm to use
-      - name: Configure npm auth
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}     # npm Automation Token w/ publish rights
-        run: |
-          echo "registry=https://registry.npmjs.com" >> "$NPM_CONFIG_USERCONFIG"
-          echo "always-auth=true" >> "$NPM_CONFIG_USERCONFIG"
-          printf "//registry.npmjs.com/:_authToken=%s\n" "$NODE_AUTH_TOKEN" >> "$NPM_CONFIG_USERCONFIG"
-          # also cover .org just in case something resolves there
-          printf "//registry.npmjs.org/:_authToken=%s\n" "$NODE_AUTH_TOKEN" >> "$NPM_CONFIG_USERCONFIG"
-          echo "Using npmrc at: $NPM_CONFIG_USERCONFIG"
-          npm whoami --registry=https://registry.npmjs.com
 
       - uses: shogo82148/actions-setup-mysql@v1
         with:
@@ -82,8 +72,6 @@ jobs:
       # Private/scoped packages: npm view will use NODE_AUTH_TOKEN if provided.
       - name: Check if version already published
         id: exists
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }} # optional for private
         run: |
           set -euo pipefail
           NAME="${{ steps.pkg.outputs.name }}"
@@ -107,8 +95,6 @@ jobs:
 
       - name: Publish
         if: steps.exists.outputs.published == 'false'
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: npm publish --provenance --access public
 
       - name: Skip (already published)
