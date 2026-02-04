@@ -54,6 +54,7 @@
     "@drop-in-gaming/barrelsby": "^0.0.2",
     "@jest/globals": "^29.7.0",
     "@rollup/plugin-commonjs": "^28",
+    "@rollup/plugin-json": "^6.1.0",
     "@rollup/plugin-node-resolve": "^16",
     "@rollup/plugin-typescript": "^12",
     "@types/geojson": "^7946.0.16",

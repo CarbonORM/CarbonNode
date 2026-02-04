@@ -3,6 +3,7 @@ import {PaginationBuilder} from "../builders/PaginationBuilder";
 import {SqlBuilderResult} from "../utils/sqlUtils";
 import {getEnvBool} from "../../variables/getEnv";
 import colorSql from "../../utils/colorSql";
+import { version } from "../../../package.json";
 
 
 const C = {
@@ -68,7 +69,7 @@ export class SelectQueryBuilder<G extends OrmGenerics> extends PaginationBuilder
 
         const preText = getEnvBool("SSR", false) ? `${C.SSR}[SSR]${C.RESET} ` : `${C.HTTP}[API]${C.RESET} `;
 
-        console.log(`${preText}${C.SQL}[SELECT]${C.RESET} ${colorSql(sql)}`);
+        console.log(`[${version}] ${preText}${C.SQL}[SELECT]${C.RESET} ${colorSql(sql)}`);
 
         return { sql, params };
     }

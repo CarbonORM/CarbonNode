@@ -1,6 +1,7 @@
 import resolve from '@rollup/plugin-node-resolve';
 import commonjs from '@rollup/plugin-commonjs';
 import typescript from '@rollup/plugin-typescript';
+import json from '@rollup/plugin-json';
 import postcss from '@carbonorm/rollup-plugin-postcss';
 import includePaths from 'rollup-plugin-includepaths';
 import simpleVars from 'postcss-simple-vars';
@@ -22,6 +23,7 @@ const sharedPlugins = [
 			config.compilerOptions.baseUrl
 		]
 	}),
+	json(),
 	typescript({
 		declaration: true,
 		sourceMap: true

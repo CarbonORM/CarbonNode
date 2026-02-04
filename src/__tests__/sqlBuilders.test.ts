@@ -1,10 +1,11 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { C6C } from '../constants/C6Constants';
 import { SelectQueryBuilder } from '../orm/queries/SelectQueryBuilder';
 import { PostQueryBuilder } from '../orm/queries/PostQueryBuilder';
 import { UpdateQueryBuilder } from '../orm/queries/UpdateQueryBuilder';
 import { DeleteQueryBuilder } from '../orm/queries/DeleteQueryBuilder';
 import { buildTestConfig, buildBinaryTestConfig, buildBinaryTestConfigFqn } from './fixtures/c6.fixture';
+import { version } from '../../package.json';
 
 describe('SQL Builders', () => {
   it('builds SELECT with JOIN, WHERE, GROUP BY, HAVING and default LIMIT', () => {
@@ -41,6 +42,25 @@ describe('SQL Builders', () => {
     expect(sql).toContain('HAVING');
     expect(sql.trim().endsWith('LIMIT 100')).toBe(true);
     expect(params).toEqual(['%A%', 10, 1]);
+  });
+
+  it('logs SELECT statements with package version', () => {
+    const config = buildTestConfig();
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    const qb = new SelectQueryBuilder(config as any, {
+      SELECT: ['actor.first_name'],
+    } as any, false);
+
+    qb.build('actor');
+
+    const logLines = logSpy.mock.calls
+      .map((call) => call[0])
+      .filter((entry): entry is string => typeof entry === 'string');
+    const selectLine = logLines.find((line) => line.includes('[SELECT]'));
+
+    expect(selectLine).toBeDefined();
+    expect(selectLine).toContain(`[${version}]`);
+    logSpy.mockRestore();
   });
 
   it('builds INSERT with ON DUPLICATE KEY UPDATE', () => {
