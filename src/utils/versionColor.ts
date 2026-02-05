@@ -6,18 +6,25 @@ export interface RgbColor {
 
 const DEFAULT_STEP = 8;
 
-function parseSemver(version: string): { major: number; minor: number; patch: number } {
-    const [core] = version.trim().split("-");
+function parseSemver(version: string): {
+    major: number;
+    minor: number;
+    patch: number;
+    prereleaseParts: number;
+} {
+    const [core, prerelease] = version.trim().split("-");
     const [majorRaw, minorRaw, patchRaw] = core.split(".");
 
     const major = Number.parseInt(majorRaw ?? "0", 10);
     const minor = Number.parseInt(minorRaw ?? "0", 10);
     const patch = Number.parseInt(patchRaw ?? "0", 10);
+    const prereleaseParts = prerelease ? prerelease.split(".").filter(Boolean).length : 0;
 
     return {
         major: Number.isFinite(major) ? major : 0,
         minor: Number.isFinite(minor) ? minor : 0,
         patch: Number.isFinite(patch) ? patch : 0,
+        prereleaseParts,
     };
 }
 
@@ -28,8 +35,8 @@ function channelValue(n: number, step: number): number {
 
 export default function versionToRgb(version: string, step: number = DEFAULT_STEP): RgbColor {
     const safeStep = Number.isFinite(step) && step > 0 ? Math.floor(step) : DEFAULT_STEP;
-    const { major, minor, patch } = parseSemver(version);
-    const rotation = major % 3;
+    const { major, minor, patch, prereleaseParts } = parseSemver(version);
+    const rotation = (major + minor + patch + prereleaseParts) % 3;
 
     const base = [major, minor, patch] as const;
     const rotated =

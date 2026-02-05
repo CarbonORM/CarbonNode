@@ -1,4 +1,5 @@
 import type { iRest, C6RestfulModel } from "../../types/ormInterfaces";
+import { LogLevel } from "../../utils/logLevel";
 
 // Minimal C6 table descriptor for tests
 function tableModel<T extends Record<string, any>>(name: string, columns: Record<string, keyof T>): C6RestfulModel<string, T, keyof T & string> {
@@ -70,6 +71,7 @@ export function buildTestConfig() {
     restModel: C6.TABLES.actor,
     requestMethod: 'GET',
     verbose: false,
+    logLevel: LogLevel.DEBUG,
   } as any;
 
   return baseConfig;
@@ -97,6 +99,7 @@ export function buildBinaryTestConfig() {
     restModel: C6.TABLES.binary_test,
     requestMethod: 'POST',
     verbose: false,
+    logLevel: LogLevel.DEBUG,
   } as any;
 
   return baseConfig;
@@ -127,6 +130,7 @@ export function buildBinaryTestConfigFqn() {
     restModel: C6.TABLES.binary_test,
     requestMethod: 'POST',
     verbose: false,
+    logLevel: LogLevel.DEBUG,
   } as any;
 
   return baseConfig;
@@ -169,6 +173,7 @@ export function buildParcelConfig() {
     restModel: C6.TABLES.property_units,
     requestMethod: 'GET',
     verbose: false,
+    logLevel: LogLevel.DEBUG,
   } as any;
 
   return baseConfig;

@@ -12,16 +12,18 @@ export function getEnv(key: string, fallback?: string): string;
 export function getEnv<T>(key: string, fallback: T): T;
 export function getEnv<T = string>(key: string, fallback?: T): T {
     try {
+        if (typeof process !== "undefined" && process.env?.[key] !== undefined) {
+            return process.env[key] as T;
+        }
+    } catch {}
+
+    try {
         const viteEnv = getViteEnv(key);
         if (viteEnv !== undefined) return viteEnv as T;
     } catch {}
 
     const runtimeEnv = getRuntimeEnv(key);
     if (runtimeEnv !== undefined) return runtimeEnv as T;
-
-    if (typeof process !== "undefined" && process.env?.[key] !== undefined) {
-        return process.env[key] as T;
-    }
 
     if (fallback !== undefined) return fallback;
     throw new Error(`Missing environment variable: ${key}`);
