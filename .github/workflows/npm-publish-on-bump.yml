@@ -29,6 +29,8 @@ jobs:
           scope: '@carbonorm'
           cache: 'npm'
 
+      - run: npm whoami || echo "OIDC mode (expected)"
+
       - uses: shogo82148/actions-setup-mysql@v1
         with:
           mysql-version: "8.0"
