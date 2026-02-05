@@ -98,7 +98,7 @@ export default function colorSql(sql: string): string {
 
     /* 4️⃣ SQL keywords */
     s = s.replace(
-        /\b(SELECT|WHERE|AND|OR|ON|IN|BETWEEN|EXISTS|ORDER BY)\b/gi,
+        /\b(SELECT|WHERE|AND|OR|ON|IN|BETWEEN|EXISTS|ORDER BY|GROUP BY|HAVING|SET|VALUES|INSERT|REPLACE|DELETE|UPDATE|DUPLICATE|KEY)\b/gi,
         `${C.KEYWORD}$1${RESET}`,
     );
 

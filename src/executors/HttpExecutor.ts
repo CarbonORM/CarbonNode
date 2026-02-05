@@ -18,6 +18,7 @@ import {sortAndSerializeQueryObject} from "../utils/sortAndSerializeQueryObject"
 import {notifyToast} from "../utils/toastRuntime";
 import {Executor} from "./Executor";
 import {toastOptions, toastOptionsDevs} from "variables/toastOptions";
+import {getLogContext, LogLevel, logWithLevel, shouldLog} from "../utils/logLevel";
 
 export class HttpExecutor<
     G extends OrmGenerics
@@ -87,7 +88,12 @@ export class HttpExecutor<
                 (request as unknown as Record<PK, RT[PK]>)[pk] = (response.data as any)?.created as RT[PK];
             } catch {/* best-effort */}
         } else if (isLocal()) {
-            console.error("C6 received unexpected results given the primary key length");
+            logWithLevel(
+                LogLevel.ERROR,
+                getLogContext(this.config, this.request),
+                console.error,
+                "C6 received unexpected results given the primary key length",
+            );
         }
 
         this.config.reactBootstrap?.updateRestfulObjectArrays<RT>({
@@ -178,10 +184,13 @@ export class HttpExecutor<
             userCustomClearCache.push(clearCache);
         }
 
-        if (isLocal() && (this.config.verbose || (this.request as any)?.debug)) {
-            console.groupCollapsed('%c API:', 'color: #0c0', `(${requestMethod}) Request for (${tableName})`)
-            console.log('request', this.request)
-            console.groupEnd()
+        const logContext = getLogContext(this.config, this.request);
+        const debugEnabled = shouldLog(LogLevel.DEBUG, logContext);
+        const traceEnabled = shouldLog(LogLevel.TRACE, logContext);
+        if (isLocal() && shouldLog(LogLevel.DEBUG, logContext)) {
+            console.groupCollapsed('%c API:', 'color: #0c0', `(${requestMethod}) Request for (${tableName})`);
+            console.log('request', this.request);
+            console.groupEnd();
         }
 
         let query = this.request;
@@ -201,10 +210,11 @@ export class HttpExecutor<
             if (C6.GET === requestMethod
                 && undefined !== query?.[C6.PAGINATION]?.[C6.PAGE]
                 && 1 !== query[C6.PAGINATION][C6.PAGE]
-                && isLocal()) {
-                console.groupCollapsed(`Request (${tableName}) page (${query[C6.PAGINATION][C6.PAGE]})`)
-                console.log('request', this.request)
-                console.groupEnd()
+                && isLocal()
+                && shouldLog(LogLevel.DEBUG, logContext)) {
+                console.groupCollapsed(`Request (${tableName}) page (${query[C6.PAGINATION][C6.PAGE]})`);
+                console.log('request', this.request);
+                console.groupEnd();
             }
 
             let cachingConfirmed = false;
@@ -298,7 +308,7 @@ export class HttpExecutor<
 
                     if (whereIsEmpty) {
 
-                        console.error(query)
+                        logWithLevel(LogLevel.ERROR, logContext, console.error, query);
 
                         throw Error('Failed to parse primary key information. Query: (' + JSON.stringify(query) + ') Primary Key: (' + JSON.stringify(primaryKey) + ') TABLES[operatingTable]?.PRIMARY: (' + JSON.stringify(TABLES[operatingTable]?.PRIMARY) + ') for operatingTable (' + operatingTable + ').')
 
@@ -347,32 +357,32 @@ export class HttpExecutor<
 
                     restRequestUri += primaryVal + '/'
 
-                    if (isLocal() && (this.config.verbose || (this.request as any)?.debug)) {
-                        console.log('query', query, 'primaryKey', primaryKey)
+                    if (isLocal() && shouldLog(LogLevel.DEBUG, logContext)) {
+                        console.log('query', query, 'primaryKey', primaryKey);
                     }
 
                 } else {
 
-                    if (isLocal() && (this.config.verbose || (this.request as any)?.debug)) {
-                        console.log('query', query)
+                    if (isLocal() && shouldLog(LogLevel.DEBUG, logContext)) {
+                        console.log('query', query);
                     }
 
                 }
 
             } else {
 
-                if (isLocal() && (this.config.verbose || (this.request as any)?.debug)) {
-                    console.log('query', query)
+                if (isLocal() && shouldLog(LogLevel.DEBUG, logContext)) {
+                    console.log('query', query);
                 }
 
             }
 
             try {
 
-                if (isLocal() && (this.config.verbose || (this.request as any)?.debug)) {
-                    console.groupCollapsed('%c API:', 'color: #A020F0', `(${requestMethod}) (${operatingTable}) firing`)
-                    console.log(this.request)
-                    console.groupEnd()
+                if (isLocal() && shouldLog(LogLevel.DEBUG, logContext)) {
+                    console.groupCollapsed('%c API:', 'color: #A020F0', `(${requestMethod}) (${operatingTable}) firing`);
+                    console.log(this.request);
+                    console.groupEnd();
                 }
 
                 this.runLifecycleHooks<"beforeExecution">(
@@ -460,7 +470,9 @@ export class HttpExecutor<
 
                             if (isTest()) {
 
-                                console.trace()
+                                if (shouldLog(LogLevel.TRACE, logContext)) {
+                                    console.trace();
+                                }
 
                                 throw new Error('The response data was a string this typically indicated html was sent. Make sure all cookies (' + JSON.stringify(response.config.headers) + ') needed are present! (' + response.data + ')')
 
@@ -554,11 +566,11 @@ export class HttpExecutor<
                                 });
                             }
 
-                            if ((this.config.verbose || debug) && isLocal()) {
-                                console.groupCollapsed(`API: Response (${requestMethod} ${tableName}) len (${responseData.rest?.length}) of (${query?.[C6.PAGINATION]?.[C6.LIMIT]})`)
-                                console.log('request', this.request)
-                                console.log('response.rest', responseData.rest)
-                                console.groupEnd()
+                            if (isLocal() && shouldLog(LogLevel.DEBUG, logContext)) {
+                                console.groupCollapsed(`API: Response (${requestMethod} ${tableName}) len (${responseData.rest?.length}) of (${query?.[C6.PAGINATION]?.[C6.LIMIT]})`);
+                                console.log('request', this.request);
+                                console.log('response.rest', responseData.rest);
+                                console.groupEnd();
                             }
 
                             // next already set above based on hasNext; avoid duplicate, inverted logic
@@ -566,15 +578,19 @@ export class HttpExecutor<
                                 && 'number' === typeof fetchDependencies
                                 && responseData.rest?.length > 0) {
 
-                                console.groupCollapsed('%c API: Fetch Dependencies segment (' + requestMethod + ' ' + tableName + ')'
-                                    + (fetchDependencies & eFetchDependencies.CHILDREN ? ' | (CHILDREN|REFERENCED) ' : '')
-                                    + (fetchDependencies & eFetchDependencies.PARENTS ? ' | (PARENTS|REFERENCED_BY)' : '')
-                                    + (fetchDependencies & eFetchDependencies.C6ENTITY ? ' | (C6ENTITY)' : '')
-                                    + (fetchDependencies & eFetchDependencies.RECURSIVE ? ' | (RECURSIVE)' : ''), 'color: #33ccff')
+                                if (debugEnabled) {
+                                    console.groupCollapsed('%c API: Fetch Dependencies segment (' + requestMethod + ' ' + tableName + ')'
+                                        + (fetchDependencies & eFetchDependencies.CHILDREN ? ' | (CHILDREN|REFERENCED) ' : '')
+                                        + (fetchDependencies & eFetchDependencies.PARENTS ? ' | (PARENTS|REFERENCED_BY)' : '')
+                                        + (fetchDependencies & eFetchDependencies.C6ENTITY ? ' | (C6ENTITY)' : '')
+                                        + (fetchDependencies & eFetchDependencies.RECURSIVE ? ' | (RECURSIVE)' : ''), 'color: #33ccff');
 
-                                console.groupCollapsed('Collapsed JS Trace');
-                                console.trace(); // hidden in collapsed group
-                                console.groupEnd();
+                                    if (traceEnabled) {
+                                        console.groupCollapsed('Collapsed JS Trace');
+                                        console.trace(); // hidden in collapsed group
+                                        console.groupEnd();
+                                    }
+                                }
 
                                 // noinspection JSBitwiseOperatorUsage
                                 let dependencies: {
@@ -640,7 +656,9 @@ export class HttpExecutor<
 
                                 let apiRequestPromises: Array<Promise<DetermineResponseDataType<"GET", any>>> = []
 
-                                console.log('%c Dependencies', 'color: #005555', dependencies)
+                                if (debugEnabled) {
+                                    console.log('%c Dependencies', 'color: #005555', dependencies);
+                                }
 
                                 Object.keys(dependencies)
                                     .forEach(column => dependencies[column]
@@ -681,7 +699,9 @@ export class HttpExecutor<
 
                                         }));
 
-                                console.log('fetchReferences', fetchReferences)
+                                if (debugEnabled) {
+                                    console.log('fetchReferences', fetchReferences);
+                                }
 
                                 for (const tableToFetch in fetchReferences) {
 
@@ -705,13 +725,17 @@ export class HttpExecutor<
 
                                         if (!shouldContinue) {
 
-                                            console.log('%c C6ENTITY: The constraintTableName (' + tableToFetch + ') did not end with any value in referencesTables', 'color: #c00', referencesTables)
+                                            if (debugEnabled) {
+                                                console.log('%c C6ENTITY: The constraintTableName (' + tableToFetch + ') did not end with any value in referencesTables', 'color: #c00', referencesTables);
+                                            }
 
                                             continue;
 
                                         }
 
-                                        console.log('%c C6ENTITY: The constraintTableName (' + tableToFetch + ') will be fetched.', 'color: #0c0')
+                                        if (debugEnabled) {
+                                            console.log('%c C6ENTITY: The constraintTableName (' + tableToFetch + ') will be fetched.', 'color: #0c0');
+                                        }
 
                                     }
 
@@ -722,7 +746,9 @@ export class HttpExecutor<
 
                                     const RestApi = C6.ORM[ormKey] ?? new Error(`Fetch Dependencies could not find table (${ormKey}) in the set ∉ [ ${Object.keys(C6.ORM).join(', ')} ]`);
 
-                                    console.log('%c Fetch Dependencies will select (' + tableToFetch + ') using GET request', 'color: #33ccff')
+                                    if (debugEnabled) {
+                                        console.log('%c Fetch Dependencies will select (' + tableToFetch + ') using GET request', 'color: #33ccff');
+                                    }
 
                                     let nextFetchDependencies = eFetchDependencies.NONE
 
@@ -753,12 +779,16 @@ export class HttpExecutor<
 
                                     }
 
-                                    console.log('fetchReferences', fetchReferences[tableToFetch], "Current fetchDependencies for (" + operatingTable + "):", fetchDependencies, "New fetchDependencies for (" + tableToFetch + "): ", nextFetchDependencies)
+                                    if (debugEnabled) {
+                                        console.log('fetchReferences', fetchReferences[tableToFetch], "Current fetchDependencies for (" + operatingTable + "):", fetchDependencies, "New fetchDependencies for (" + tableToFetch + "): ", nextFetchDependencies);
+                                    }
 
                                     // todo - filter out ids that exist in state?!? note - remember that this does not necessarily mean the pk, but only known is its an FK to somewhere
                                     // it not certain that they are using carbons' entities either
 
-                                    console.log('RestApi object', RestApi)
+                                    if (debugEnabled) {
+                                        console.log('RestApi object', RestApi);
+                                    }
 
                                     // this is a dynamic call to the rest api, any generated table may resolve with (RestApi)
                                     // todo - using value to avoid joins.... but. maybe this should be a parameterizable option -- think race conditions; its safer to join
@@ -769,7 +799,13 @@ export class HttpExecutor<
 
                                                     if (0 === fetchReferences[tableToFetch][column].length) {
 
-                                                        console.warn('The column (' + column + ') was not found in the response data. We will not fetch.', responseData)
+                                                        logWithLevel(
+                                                            LogLevel.WARN,
+                                                            logContext,
+                                                            console.warn,
+                                                            'The column (' + column + ') was not found in the response data. We will not fetch.',
+                                                            responseData,
+                                                        );
 
                                                         return false;
 
@@ -790,7 +826,9 @@ export class HttpExecutor<
 
                                 }
 
-                                console.groupEnd()
+                                if (debugEnabled) {
+                                    console.groupEnd();
+                                }
 
                                 await Promise.all(apiRequestPromises)
 
@@ -834,15 +872,15 @@ export class HttpExecutor<
 
             } catch (throwableError) {
 
-                console.groupCollapsed('%c API: An error occurred in the try catch block. returning null!', 'color: #ff0000')
-
-                console.log('%c ' + requestMethod + ' ' + tableName, 'color: #A020F0')
-
-                console.error(throwableError)
-
-                console.trace()
-
-                console.groupEnd()
+                if (shouldLog(LogLevel.ERROR, logContext)) {
+                    console.groupCollapsed('%c API: An error occurred in the try catch block. returning null!', 'color: #ff0000');
+                    console.log('%c ' + requestMethod + ' ' + tableName, 'color: #A020F0');
+                    console.error(throwableError);
+                    if (traceEnabled) {
+                        console.trace();
+                    }
+                    console.groupEnd();
+                }
 
                 throw throwableError
 

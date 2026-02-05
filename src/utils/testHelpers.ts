@@ -1,4 +1,5 @@
 import {apiRequestCache} from "./cacheManager";
+import {LogLevel, logWithLevel} from "./logLevel";
 
 export function checkAllRequestsComplete(): true | (string[]) {
 
@@ -15,7 +16,7 @@ export function checkAllRequestsComplete(): true | (string[]) {
         }
 
         // when requests return emtpy sets in full renders, it may not be possible to track their progress.
-        console.warn('stillRunning...', stillRunning)
+        logWithLevel(LogLevel.WARN, undefined, console.warn, 'stillRunning...', stillRunning);
 
         return stillRunning.map((cache) => cache.requestArgumentsSerialized)
 

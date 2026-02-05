@@ -3,6 +3,7 @@ import type {Pool} from "mysql2/promise";
 import {C6C} from "../constants/C6Constants";
 import restRequest from "../api/restRequest";
 import type {iC6Object, iRestMethods, tWebsocketBroadcast} from "../types/ormInterfaces";
+import {LogLevel, logWithLevel} from "../utils/logLevel";
 
 
 // TODO - WE MUST make this a generic - optional, but helpful
@@ -40,7 +41,12 @@ export function ExpressHandler({
 
             // Warn for unsupported overrides but continue normally
             if (incomingMethod !== 'GET' && methodOverride && methodOverride !== 'GET') {
-                console.warn(`Ignoring unsupported METHOD override: ${methodOverride}`);
+                logWithLevel(
+                    LogLevel.WARN,
+                    undefined,
+                    console.warn,
+                    `Ignoring unsupported METHOD override: ${methodOverride}`,
+                );
             }
 
             if (!(table in C6.TABLES)) {

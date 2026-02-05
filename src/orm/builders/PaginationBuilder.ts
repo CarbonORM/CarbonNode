@@ -1,6 +1,7 @@
 import {C6Constants} from "../../constants/C6Constants";
 import {OrmGenerics} from "../../types/ormGenerics";
 import {JoinBuilder} from "./JoinBuilder";
+import {getLogContext, LogLevel, logWithLevel} from "../../utils/logLevel";
 
 export abstract class PaginationBuilder<G extends OrmGenerics> extends JoinBuilder<G> {
 
@@ -72,7 +73,12 @@ export abstract class PaginationBuilder<G extends OrmGenerics> extends JoinBuild
             }
         }
 
-        this.config.verbose && console.log(`[PAGINATION] ${sql.trim()}`);
+        logWithLevel(
+            LogLevel.DEBUG,
+            getLogContext(this.config, this.request),
+            console.log,
+            `[PAGINATION] ${sql.trim()}`,
+        );
         return sql;
     }
 }

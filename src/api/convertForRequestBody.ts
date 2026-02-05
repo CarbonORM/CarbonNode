@@ -1,5 +1,6 @@
 import { C6Constants } from "../constants/C6Constants";
 import {iC6Object, C6RestfulModel, iRestMethods, RequestQueryBody} from "../types/ormInterfaces";
+import {LogLevel, logWithLevel} from "../utils/logLevel";
 
 export default function <
     RequestMethod extends iRestMethods,
@@ -18,7 +19,13 @@ export default function <
     const tableDefinitions: (C6RestfulModel<any, any, any> & any)[] = tableNames.map((name) => {
         const tableDefinition = Object.values(C6.TABLES).find((t) => t.TABLE_NAME === name);
         if (!tableDefinition) {
-            console.error(`Table name (${name}) is not found in the C6.TABLES object.`, C6.TABLES);
+            logWithLevel(
+                LogLevel.ERROR,
+                undefined,
+                console.error,
+                `Table name (${name}) is not found in the C6.TABLES object.`,
+                C6.TABLES,
+            );
             throw new Error(`Table name (${name}) is not found in the C6.TABLES object.`);
         }
         return tableDefinition;

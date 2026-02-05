@@ -1,5 +1,6 @@
 import type {AxiosPromise} from "axios";
 import type {iCacheAPI} from "../types/ormInterfaces";
+import {LogLevel, logWithLevel, shouldLog} from "./logLevel";
 
 // -----------------------------------------------------------------------------
 // Cache Storage
@@ -36,7 +37,10 @@ function makeCacheKey(
 // -----------------------------------------------------------------------------
 export function clearCache(props?: { ignoreWarning?: boolean }): void {
     if (!props?.ignoreWarning) {
-        console.warn(
+        logWithLevel(
+            LogLevel.WARN,
+            undefined,
+            console.warn,
             "The REST API clearCache should only be used with extreme care!",
         );
     }
@@ -63,12 +67,14 @@ export function checkCache<ResponseDataType = any>(
 
     if (!cached) return false;
 
-    console.groupCollapsed(
-        `%c API cache hit for ${method} ${tableName}`,
-        "color:#0c0",
-    );
-    console.log("Request Data:", requestData);
-    console.groupEnd();
+    if (shouldLog(LogLevel.DEBUG, undefined)) {
+        console.groupCollapsed(
+            `%c API cache hit for ${method} ${tableName}`,
+            "color:#0c0",
+        );
+        console.log("Request Data:", requestData);
+        console.groupEnd();
+    }
 
     return cached.request;
 }

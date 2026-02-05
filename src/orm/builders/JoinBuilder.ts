@@ -2,6 +2,7 @@ import {OrmGenerics} from "../../types/ormGenerics";
 import {ConditionBuilder} from "./ConditionBuilder";
 import {C6C} from "../../constants/C6Constants";
 import {resolveDerivedTable, isDerivedTableKey} from "../queryHelpers";
+import {getLogContext, LogLevel, logWithLevel} from "../../utils/logLevel";
 
 export abstract class JoinBuilder<G extends OrmGenerics> extends ConditionBuilder<G>{
 
@@ -238,7 +239,12 @@ export abstract class JoinBuilder<G extends OrmGenerics> extends ConditionBuilde
             }
         }
 
-        this.config.verbose && console.log(`[JOIN] ${sql.trim()}`);
+        logWithLevel(
+            LogLevel.DEBUG,
+            getLogContext(this.config, this.request),
+            console.log,
+            `[JOIN] ${sql.trim()}`,
+        );
 
         return sql;
     }

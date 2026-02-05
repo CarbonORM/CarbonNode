@@ -3,6 +3,8 @@ import {OrmGenerics} from "../../types/ormGenerics";
 import { PaginationBuilder } from '../builders/PaginationBuilder';
 import {SqlBuilderResult} from "../utils/sqlUtils";
 import {SelectQueryBuilder} from "./SelectQueryBuilder";
+import logSql from "../../utils/logSql";
+import {getLogContext} from "../../utils/logLevel";
 
 export class UpdateQueryBuilder<G extends OrmGenerics> extends PaginationBuilder<G>{
     protected createSelectBuilder(request: any) {
@@ -53,6 +55,8 @@ export class UpdateQueryBuilder<G extends OrmGenerics> extends PaginationBuilder
         if (args.PAGINATION) {
             sql += this.buildPaginationClause(args.PAGINATION, params);
         }
+
+        logSql("UPDATE", sql, getLogContext(this.config, this.request));
 
         return { sql, params };
     }

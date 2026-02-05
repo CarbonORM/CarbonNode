@@ -1,10 +1,10 @@
 import isNode from '../variables/isNode';
-import isVerbose from '../variables/isVerbose';
 import {OrmGenerics} from "../types/ormGenerics";
 import {
     DetermineResponseDataType,
     iRest, RequestQueryBody
 } from "../types/ormInterfaces";
+import {applyLogLevelDefaults, getLogContext, LogLevel, logWithLevel} from "../utils/logLevel";
 
 /**
  * Facade: routes API calls to SQL or HTTP executors based on runtime context.
@@ -33,7 +33,8 @@ export default function restRequest<
 
         const config = typeof configX === "function" ? configX() : configX;
 
-        config.verbose ??= isVerbose(); // Default to env-driven verbosity if not set
+        applyLogLevelDefaults(config, request);
+        const logContext = getLogContext(config, request);
 
         if (!config.mysqlPool && !config.axios) {
             throw new Error("No execution method available: neither mysqlPool nor axios instance provided in config.");
@@ -41,13 +42,13 @@ export default function restRequest<
 
         // SQL path if on Node with a provided pool
         if (config.mysqlPool) {
-            config.verbose && console.log("Using SQL Executor");
+            logWithLevel(LogLevel.DEBUG, logContext, console.log, "Using SQL Executor");
             const {SqlExecutor} = await import('../executors/SqlExecutor');
             const executor = new SqlExecutor<G>(config, request);
             return executor.execute();
         }
 
-        config.verbose && console.log("Using HTTP Executor", {
+        logWithLevel(LogLevel.DEBUG, logContext, console.log, "Using HTTP Executor", {
             isNode: isNode(),
         });
 

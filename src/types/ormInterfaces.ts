@@ -204,6 +204,7 @@ export interface iRest<
     clearCache?: () => void;
     skipPrimaryCheck?: boolean;
     websocketBroadcast?: tWebsocketBroadcast;
+    logLevel?: number;
     verbose?: boolean;
     sqlAllowListPath?: string;
 }

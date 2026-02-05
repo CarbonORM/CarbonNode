@@ -14,6 +14,7 @@ import { Buffer } from 'buffer';
 import { Executor } from "./Executor";
 import { normalizeSingularRequest } from "../utils/normalizeSingularRequest";
 import { loadSqlAllowList, normalizeSql } from "../utils/sqlAllowList";
+import { getLogContext, LogLevel, logWithLevel } from "../utils/logLevel";
 
 export class SqlExecutor<
     G extends OrmGenerics
@@ -36,8 +37,20 @@ export class SqlExecutor<
             throw e;
         }
 
-        this.config.verbose && console.log(`[SQL EXECUTOR] ▶️ Executing ${method} on table "${TABLE_NAME}"`);
-        this.config.verbose && console.log(`[SQL EXECUTOR] 🧩 Request:`, this.request);
+        const logContext = getLogContext(this.config, this.request);
+        logWithLevel(
+            LogLevel.DEBUG,
+            logContext,
+            console.log,
+            `[SQL EXECUTOR] ▶️ Executing ${method} on table "${TABLE_NAME}"`,
+        );
+        logWithLevel(
+            LogLevel.DEBUG,
+            logContext,
+            console.log,
+            `[SQL EXECUTOR] 🧩 Request:`,
+            this.request,
+        );
 
         switch (method) {
             case 'GET': {
@@ -76,13 +89,29 @@ export class SqlExecutor<
     }
 
     private async withConnection<T>(cb: (conn: PoolConnection) => Promise<T>): Promise<T> {
-        this.config.verbose && console.log(`[SQL EXECUTOR] 📡 Getting DB connection`);
+        const logContext = getLogContext(this.config, this.request);
+        logWithLevel(
+            LogLevel.DEBUG,
+            logContext,
+            console.log,
+            `[SQL EXECUTOR] 📡 Getting DB connection`,
+        );
         const conn = await this.config.mysqlPool!.getConnection();
         try {
-            this.config.verbose && console.log(`[SQL EXECUTOR] ✅ Connection acquired`);
+            logWithLevel(
+                LogLevel.DEBUG,
+                logContext,
+                console.log,
+                `[SQL EXECUTOR] ✅ Connection acquired`,
+            );
             return await cb(conn);
         } finally {
-            this.config.verbose && console.log(`[SQL EXECUTOR] 🔌 Releasing DB connection`);
+            logWithLevel(
+                LogLevel.DEBUG,
+                logContext,
+                console.log,
+                `[SQL EXECUTOR] 🔌 Releasing DB connection`,
+            );
             conn.release();
         }
     }
@@ -267,14 +296,27 @@ export class SqlExecutor<
         response?: DetermineResponseDataType<G['RequestMethod'], G['RestTableInterface']>
     ): Promise<void> {
         const broadcast = this.config.websocketBroadcast;
-        this.config.verbose && console.log("[SQL EXECUTOR] 📣 broadcastWebsocketIfConfigured start", {
-            method: this.config.requestMethod,
-            hasBroadcast: Boolean(broadcast),
-        });
+        const logContext = getLogContext(this.config, this.request);
+        logWithLevel(
+            LogLevel.DEBUG,
+            logContext,
+            console.log,
+            "[SQL EXECUTOR] 📣 broadcastWebsocketIfConfigured start",
+            {
+                method: this.config.requestMethod,
+                hasBroadcast: Boolean(broadcast),
+            },
+        );
         if (!broadcast || this.config.requestMethod === C6C.GET) {
-            this.config.verbose && console.log("[SQL EXECUTOR] 📣 websocket broadcast skipped", {
-                reason: !broadcast ? "no broadcast configured" : "GET request",
-            });
+            logWithLevel(
+                LogLevel.DEBUG,
+                logContext,
+                console.log,
+                "[SQL EXECUTOR] 📣 websocket broadcast skipped",
+                {
+                    reason: !broadcast ? "no broadcast configured" : "GET request",
+                },
+            );
             return;
         }
 
@@ -285,27 +327,51 @@ export class SqlExecutor<
         let responseRest = response?.rest;
         let responsePrimaryKey = this.extractPrimaryKeyValuesFromData(responseRest);
 
-        this.config.verbose && console.log("[SQL EXECUTOR] 📣 websocket request payload", {
-            normalizedRequest,
-            requestPrimaryKey: this.extractPrimaryKeyValues(),
-            pkShorts,
-        });
-        this.config.verbose && console.log("[SQL EXECUTOR] 📣 websocket response payload", {
-            responseRest,
-            responsePrimaryKey,
-        });
+        logWithLevel(
+            LogLevel.DEBUG,
+            logContext,
+            console.log,
+            "[SQL EXECUTOR] 📣 websocket request payload",
+            {
+                normalizedRequest,
+                requestPrimaryKey: this.extractPrimaryKeyValues(),
+                pkShorts,
+            },
+        );
+        logWithLevel(
+            LogLevel.DEBUG,
+            logContext,
+            console.log,
+            "[SQL EXECUTOR] 📣 websocket response payload",
+            {
+                responseRest,
+                responsePrimaryKey,
+            },
+        );
 
         if (
             (responseRest === null || (Array.isArray(responseRest) && responseRest.length === 0))
             && this.config.requestMethod === C6C.POST
         ) {
-            this.config.verbose && console.log("[SQL EXECUTOR] 📣 response rest empty, attempting synthesize", {
-                responseRest,
-            });
+            logWithLevel(
+                LogLevel.DEBUG,
+                logContext,
+                console.log,
+                "[SQL EXECUTOR] 📣 response rest empty, attempting synthesize",
+                {
+                    responseRest,
+                },
+            );
             const insertId = (response as DetermineResponseDataType<G['RequestMethod'], G['RestTableInterface']> & { insertId?: number | string | null })?.insertId;
-            this.config.verbose && console.log("[SQL EXECUTOR] 📣 POST insertId lookup", {
-                insertId,
-            });
+            logWithLevel(
+                LogLevel.DEBUG,
+                logContext,
+                console.log,
+                "[SQL EXECUTOR] 📣 POST insertId lookup",
+                {
+                    insertId,
+                },
+            );
             if (insertId !== undefined && pkShorts.length === 1) {
                 const synthesizedRequest = {
                     ...normalizedRequest,
@@ -330,10 +396,16 @@ export class SqlExecutor<
                 responsePrimaryKey = {
                     [pkShorts[0]]: insertId,
                 };
-                this.config.verbose && console.log("[SQL EXECUTOR] 📣 synthesized response payload", {
-                    synthesized,
-                    responsePrimaryKey,
-                });
+                logWithLevel(
+                    LogLevel.DEBUG,
+                    logContext,
+                    console.log,
+                    "[SQL EXECUTOR] 📣 synthesized response payload",
+                    {
+                        synthesized,
+                        responsePrimaryKey,
+                    },
+                );
             }
         }
 
@@ -349,16 +421,36 @@ export class SqlExecutor<
             },
         };
 
-        this.config.verbose && console.log("[SQL EXECUTOR] 📣 websocket payload ready", payload);
+        logWithLevel(
+            LogLevel.DEBUG,
+            logContext,
+            console.log,
+            "[SQL EXECUTOR] 📣 websocket payload ready",
+            payload,
+        );
 
         try {
-            this.config.verbose && console.log("[SQL EXECUTOR] 📣 websocket broadcast dispatch start");
+            logWithLevel(
+                LogLevel.DEBUG,
+                logContext,
+                console.log,
+                "[SQL EXECUTOR] 📣 websocket broadcast dispatch start",
+            );
             await broadcast(payload);
-            this.config.verbose && console.log("[SQL EXECUTOR] 📣 websocket broadcast dispatch complete");
+            logWithLevel(
+                LogLevel.DEBUG,
+                logContext,
+                console.log,
+                "[SQL EXECUTOR] 📣 websocket broadcast dispatch complete",
+            );
         } catch (error) {
-            if (this.config.verbose) {
-                console.error("[SQL EXECUTOR] websocketBroadcast failed", error);
-            }
+            logWithLevel(
+                LogLevel.ERROR,
+                logContext,
+                console.error,
+                "[SQL EXECUTOR] websocketBroadcast failed",
+                error,
+            );
         }
     }
     async runQuery(): Promise<DetermineResponseDataType<G['RequestMethod'], G['RestTableInterface']>> {
@@ -385,10 +477,23 @@ export class SqlExecutor<
 
         const QueryResult = builder.build(TABLE_NAME);
 
-        this.config.verbose && console.log(`[SQL EXECUTOR] 🧠 Generated ${method.toUpperCase()} SQL:`, QueryResult);
+        const logContext = getLogContext(this.config, this.request);
+        logWithLevel(
+            LogLevel.DEBUG,
+            logContext,
+            console.log,
+            `[SQL EXECUTOR] 🧠 Generated ${method.toUpperCase()} SQL:`,
+            QueryResult,
+        );
 
         const formatted = this.formatSQLWithParams(QueryResult.sql, QueryResult.params);
-        this.config.verbose && console.log(`[SQL EXECUTOR] 🧠 Formatted ${method.toUpperCase()} SQL:`, formatted);
+        logWithLevel(
+            LogLevel.DEBUG,
+            logContext,
+            console.log,
+            `[SQL EXECUTOR] 🧠 Formatted ${method.toUpperCase()} SQL:`,
+            formatted,
+        );
 
         const toUnnamed = namedPlaceholders();
         const [sql, values] = toUnnamed(QueryResult.sql, QueryResult.params);
@@ -404,7 +509,13 @@ export class SqlExecutor<
                     sql: { sql, values }
                 } as DetermineResponseDataType<G['RequestMethod'], G['RestTableInterface']>;
             } else {
-                this.config.verbose && console.log(`[SQL EXECUTOR] ✏️ Rows affected:`, result.affectedRows);
+                logWithLevel(
+                    LogLevel.DEBUG,
+                    logContext,
+                    console.log,
+                    `[SQL EXECUTOR] ✏️ Rows affected:`,
+                    result.affectedRows,
+                );
                 return {
                     affected: result.affectedRows as number,
                     insertId: result.insertId as number,

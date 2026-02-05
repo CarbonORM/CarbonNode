@@ -2,6 +2,8 @@ import { OrmGenerics } from "../../types/ormGenerics";
 import { SqlBuilderResult } from "../utils/sqlUtils";
 import { JoinBuilder } from "../builders/JoinBuilder";
 import { SelectQueryBuilder } from "./SelectQueryBuilder";
+import logSql from "../../utils/logSql";
+import {getLogContext} from "../../utils/logLevel";
 
 export class DeleteQueryBuilder<G extends OrmGenerics> extends JoinBuilder<G> {
     protected createSelectBuilder(request: any) {
@@ -24,6 +26,8 @@ export class DeleteQueryBuilder<G extends OrmGenerics> extends JoinBuilder<G> {
         if (this.request.WHERE) {
             sql += this.buildWhereClause(this.request.WHERE, params);
         }
+
+        logSql("DELETE", sql, getLogContext(this.config, this.request));
 
         return { sql, params };
     }

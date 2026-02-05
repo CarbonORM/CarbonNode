@@ -5,6 +5,7 @@ import {
     iRestReactiveLifecycle,
     RequestQueryBody
 } from "../types/ormInterfaces";
+import {applyLogLevelDefaults, getLogContext, LogLevel, logWithLevel, shouldLog} from "../utils/logLevel";
 
 export abstract class Executor<
     G extends OrmGenerics
@@ -23,6 +24,7 @@ export abstract class Executor<
         >,
         protected useNamedParams: boolean = false,
     ) {
+        applyLogLevelDefaults(this.config, this.request);
     }
 
     abstract execute(): Promise<DetermineResponseDataType<G['RequestMethod'], G['RestTableInterface']>>;
@@ -36,10 +38,11 @@ export abstract class Executor<
         const lifecycleGroup = this.config.restModel.LIFECYCLE_HOOKS[this.config.requestMethod]?.[phase];
 
         if (!lifecycleGroup) return;
+        const logContext = getLogContext(this.config, args.request);
 
         for (const [key, fn] of Object.entries(lifecycleGroup)) {
             if (typeof fn === "function") {
-                if (this.config.verbose || (args.request as any).debug) {
+                if (shouldLog(LogLevel.DEBUG, logContext)) {
                     console.groupCollapsed(`[LIFECYCLE] ${this.config.requestMethod}.${String(phase)}:${key}`);
                     console.log("config:", args.config);
                     console.log("request:", args.request);
@@ -53,7 +56,13 @@ export abstract class Executor<
                     // todo - this
                     await fn(args  as any);
                 } catch (err) {
-                    console.error(`[LIFECYCLE ERROR] ${this.config.requestMethod}.${String(phase)}:${key}`, err);
+                    logWithLevel(
+                        LogLevel.ERROR,
+                        logContext,
+                        console.error,
+                        `[LIFECYCLE ERROR] ${this.config.requestMethod}.${String(phase)}:${key}`,
+                        err,
+                    );
                     throw err;
                 }
             }

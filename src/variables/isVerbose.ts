@@ -1,5 +1,5 @@
-import {getEnvBool} from "./getEnv";
+import {LogLevel, resolveLogLevel} from "../utils/logLevel";
 
-export default function () {
-    return getEnvBool('VERBOSE', false) || getEnvBool('REACT_APP_VERBOSE', false) || getEnvBool('VITE_VERBOSE', false)
+export default function isVerbose() {
+    return resolveLogLevel() >= LogLevel.DEBUG;
 }

@@ -4,6 +4,7 @@ import type {AxiosResponse} from "axios";
 import {toastOptions} from "../variables/toastOptions";
 import type {C6RestfulModel} from "../types/ormInterfaces";
 import {notifyToast} from "./toastRuntime";
+import {LogLevel, logWithLevel} from "./logLevel";
 
 
 
@@ -79,7 +80,9 @@ export function removeInvalidKeys<iRestObject>(request: any, c6Tables: {
 
     });
 
-    isTest() || console.log('intersection', intersection)
+    if (!isTest()) {
+        logWithLevel(LogLevel.DEBUG, undefined, console.log, 'intersection', intersection);
+    }
 
     return intersection
 

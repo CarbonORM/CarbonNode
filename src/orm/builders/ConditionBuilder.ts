@@ -4,6 +4,7 @@ import {DetermineResponseDataType} from "../../types/ormInterfaces";
 import {convertHexIfBinary, SqlBuilderResult} from "../utils/sqlUtils";
 import {AggregateBuilder} from "./AggregateBuilder";
 import {isDerivedTableKey} from "../queryHelpers";
+import {getLogContext, LogLevel, logWithLevel} from "../../utils/logLevel";
 
 export abstract class ConditionBuilder<
     G extends OrmGenerics
@@ -639,7 +640,12 @@ export abstract class ConditionBuilder<
             }
 
             const clause = `(MATCH(${leftInfo.sql}) ${againstClause})`;
-            this.config.verbose && console.log(`[MATCH_AGAINST] ${clause}`);
+            logWithLevel(
+                LogLevel.DEBUG,
+                getLogContext(this.config, this.request),
+                console.log,
+                `[MATCH_AGAINST] ${clause}`,
+            );
             return clause;
         }
 
@@ -914,7 +920,12 @@ export abstract class ConditionBuilder<
             }
         }
 
-        this.config.verbose && console.log(`[WHERE] ${trimmed}`);
+        logWithLevel(
+            LogLevel.DEBUG,
+            getLogContext(this.config, this.request),
+            console.log,
+            `[WHERE] ${trimmed}`,
+        );
         return ` WHERE ${trimmed}`;
     }
 }
