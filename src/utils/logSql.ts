@@ -48,7 +48,7 @@ function methodColor(method: string): string {
 }
 
 export default function logSql(method: string, sql: string, context?: LogContext): void {
-    if (!shouldLog(LogLevel.DEBUG, context)) return;
+    if (!shouldLog(LogLevel.INFO, context)) return;
     const preText = getEnvBool("SSR", false)
         ? `${C.SSR}[SSR]${C.RESET} `
         : `${C.HTTP}[API]${C.RESET} `;

@@ -95,7 +95,8 @@ export const getEnvLogLevel = (): LogLevel | undefined => {
     return undefined;
 };
 
-export const resolveLogLevel = (context?: LogContext): LogLevel => {
+export const
+    resolveLogLevel = (context?: LogContext): LogLevel => {
     const configured = parseLogLevel(context?.logLevel);
     const verbose = context?.verbose;
     const base =
