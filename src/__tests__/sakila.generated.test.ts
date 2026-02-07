@@ -14,10 +14,18 @@ describe('sakila-db generated C6 bindings', () => {
   beforeAll(() => {
     // Provide a mocked MySQL pool so SqlExecutor path is used without a real DB
     const mockConn = {
-      query: vi.fn().mockImplementation(async (_sql: string, _values?: any[]) => {
-        // Return a result set shaped like mysql2/promise: [rows, fields]
-        return [[{ ok: true }], []];
+      query: vi.fn().mockImplementation(async (sql: string, _values?: any[]) => {
+        const statement = sql.trim().toUpperCase();
+        if (statement.startsWith("SELECT")) {
+          // Return a result set shaped like mysql2/promise: [rows, fields]
+          return [[{ ok: true }], []];
+        }
+        // Return a write result for POST/PUT/DELETE shaped like mysql2/promise
+        return [{ affectedRows: 1, insertId: 9999 }, []];
       }),
+      beginTransaction: vi.fn().mockResolvedValue(undefined),
+      commit: vi.fn().mockResolvedValue(undefined),
+      rollback: vi.fn().mockResolvedValue(undefined),
       release: vi.fn()
     };
 
