@@ -1,9 +1,29 @@
-import type {Request, Response, NextFunction} from "express";
+import type {Request, Response, NextFunction, Router} from "express";
 import type {Pool} from "mysql2/promise";
 import {C6C} from "../constants/C6Constants";
 import restRequest from "../api/restRequest";
 import type {iC6Object, iRestMethods, tWebsocketBroadcast} from "../types/ormInterfaces";
 import {LogLevel, logWithLevel} from "../utils/logLevel";
+
+type iExpressHandlerConfig = {
+    C6: iC6Object;
+    mysqlPool: Pool;
+    sqlAllowListPath?: string;
+    websocketBroadcast?: tWebsocketBroadcast;
+};
+
+type iRestExpressRequestConfig = iExpressHandlerConfig & {
+    router: Pick<Router, "all">;
+    routePath?: string;
+};
+
+export function restExpressRequest({
+    router,
+    routePath = "/rest/:table{/:primary}",
+    ...handlerConfig
+}: iRestExpressRequestConfig) {
+    router.all(routePath, ExpressHandler(handlerConfig));
+}
 
 
 // TODO - WE MUST make this a generic - optional, but helpful
@@ -13,12 +33,7 @@ export function ExpressHandler({
     mysqlPool,
     sqlAllowListPath,
     websocketBroadcast,
-}: {
-    C6: iC6Object;
-    mysqlPool: Pool;
-    sqlAllowListPath?: string;
-    websocketBroadcast?: tWebsocketBroadcast;
-}) {
+}: iExpressHandlerConfig) {
 
     return async (req: Request, res: Response, next: NextFunction) => {
         try {
