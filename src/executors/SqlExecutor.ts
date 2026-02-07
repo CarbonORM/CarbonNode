@@ -6,6 +6,9 @@ import { OrmGenerics } from "../types/ormGenerics";
 import { C6Constants as C6C } from "../constants/C6Constants";
 import {
     DetermineResponseDataType,
+    iRestLifecycleResponse,
+    iRestMethods,
+    iRestSqlExecutionContext,
     iRestWebsocketPayload,
 } from "../types/ormInterfaces";
 import namedPlaceholders from 'named-placeholders';
@@ -24,12 +27,20 @@ export class SqlExecutor<
         const { TABLE_NAME } = this.config.restModel;
         const method = this.config.requestMethod;
 
+        await this.runLifecycleHooks<"beforeProcessing">(
+            "beforeProcessing",
+            {
+                config: this.config,
+                request: this.request,
+            },
+        );
+
         // Normalize singular T-shaped requests into complex ORM shape (GET/PUT/DELETE)
         try {
             this.request = normalizeSingularRequest(
-                method as any,
-                this.request as any,
-                this.config.restModel as any,
+                method,
+                this.request,
+                this.config.restModel,
                 undefined
             ) as typeof this.request;
         } catch (e) {
@@ -52,40 +63,55 @@ export class SqlExecutor<
             this.request,
         );
 
+        let response:
+            | DetermineResponseDataType<G['RequestMethod'], G['RestTableInterface']>;
+
         switch (method) {
             case 'GET': {
                 const rest = await this.runQuery();
                 if (this.config.reactBootstrap) {
+                    const getResponse =
+                        rest as unknown as DetermineResponseDataType<'GET', G['RestTableInterface']>;
+                    const restRows = Array.isArray(getResponse.rest)
+                        ? getResponse.rest
+                        : [getResponse.rest];
                     this.config.reactBootstrap.updateRestfulObjectArrays({
-                        dataOrCallback: (rest as any).rest,
+                        dataOrCallback: restRows,
                         stateKey: this.config.restModel.TABLE_NAME,
-                        uniqueObjectId: this.config.restModel.PRIMARY_SHORT as any,
+                        uniqueObjectId:
+                            this.config.restModel.PRIMARY_SHORT as unknown as (keyof G['RestTableInterface'])[],
                     });
                 }
-                return rest as DetermineResponseDataType<G['RequestMethod'], G['RestTableInterface']>;
+                response = rest as DetermineResponseDataType<G['RequestMethod'], G['RestTableInterface']>;
+                break;
             }
 
             case 'POST': {
                 const result = await this.runQuery();
                 await this.broadcastWebsocketIfConfigured(result);
-                return result as DetermineResponseDataType<G['RequestMethod'], G['RestTableInterface']>;
+                response = result as DetermineResponseDataType<G['RequestMethod'], G['RestTableInterface']>;
+                break;
             }
 
             case 'PUT': {
                 const result = await this.runQuery();
                 await this.broadcastWebsocketIfConfigured(result);
-                return result as DetermineResponseDataType<G['RequestMethod'], G['RestTableInterface']>;
+                response = result as DetermineResponseDataType<G['RequestMethod'], G['RestTableInterface']>;
+                break;
             }
 
             case 'DELETE': {
                 const result = await this.runQuery();
                 await this.broadcastWebsocketIfConfigured(result);
-                return result as DetermineResponseDataType<G['RequestMethod'], G['RestTableInterface']>;
+                response = result as DetermineResponseDataType<G['RequestMethod'], G['RestTableInterface']>;
+                break;
             }
 
             default:
                 throw new Error(`Unsupported request method: ${method}`);
         }
+
+        return response;
     }
 
     private async withConnection<T>(cb: (conn: PoolConnection) => Promise<T>): Promise<T> {
@@ -222,7 +248,7 @@ export class SqlExecutor<
         const sources = [request, (where && typeof where === "object" && !Array.isArray(where)) ? where : undefined];
         const columns = this.config.restModel.COLUMNS as Record<string, string>;
         const primaryShorts = this.config.restModel.PRIMARY_SHORT ?? [];
-        const primaryFulls = (this.config.restModel as any).PRIMARY ?? [];
+        const primaryFulls = this.config.restModel.PRIMARY ?? [];
         const pkValues: Record<string, any> = {};
 
         for (const pkShort of primaryShorts) {
@@ -272,7 +298,7 @@ export class SqlExecutor<
 
         for (const pk of pkShorts) {
             if (pk in row) {
-                pkValues[pk] = (row as any)[pk];
+                pkValues[pk] = (row as Record<string, any>)[pk];
                 continue;
             }
 
@@ -281,7 +307,7 @@ export class SqlExecutor<
             );
 
             if (fullKey && fullKey in row) {
-                pkValues[pk] = (row as any)[fullKey];
+                pkValues[pk] = (row as Record<string, any>)[fullKey];
             }
         }
 
@@ -454,39 +480,50 @@ export class SqlExecutor<
         }
     }
     async runQuery(): Promise<DetermineResponseDataType<G['RequestMethod'], G['RestTableInterface']>> {
-        const { TABLE_NAME } = this.config.restModel;
         const method = this.config.requestMethod;
-        let builder: SelectQueryBuilder<G> | UpdateQueryBuilder<G> | DeleteQueryBuilder<G> | PostQueryBuilder<G>;
+        const tableName = this.config.restModel.TABLE_NAME;
+        const logContext = getLogContext(this.config, this.request);
+        const sqlExecution = this.buildSqlExecutionContext(method, tableName, logContext);
 
+        return await this.withConnection(async (conn) =>
+            this.executeQueryWithLifecycle(conn, method, sqlExecution, logContext),
+        );
+    }
+
+    private getQueryBuilder(
+        method: iRestMethods,
+    ): SelectQueryBuilder<G> | UpdateQueryBuilder<G> | DeleteQueryBuilder<G> | PostQueryBuilder<G> {
         switch (method) {
-            case 'GET':
-                builder = new SelectQueryBuilder(this.config, this.request);
-                break;
-            case 'PUT':
-                builder = new UpdateQueryBuilder(this.config, this.request);
-                break;
-            case 'DELETE':
-                builder = new DeleteQueryBuilder(this.config, this.request);
-                break;
-            case 'POST':
-                builder = new PostQueryBuilder(this.config, this.request);
-                break;
+            case C6C.GET:
+                return new SelectQueryBuilder(this.config, this.request);
+            case C6C.PUT:
+                return new UpdateQueryBuilder(this.config, this.request);
+            case C6C.DELETE:
+                return new DeleteQueryBuilder(this.config, this.request);
+            case C6C.POST:
+                return new PostQueryBuilder(this.config, this.request);
             default:
                 throw new Error(`Unsupported query method: ${method}`);
         }
+    }
 
-        const QueryResult = builder.build(TABLE_NAME);
+    private buildSqlExecutionContext(
+        method: iRestMethods,
+        tableName: string,
+        logContext: ReturnType<typeof getLogContext>,
+    ): iRestSqlExecutionContext {
+        const builder = this.getQueryBuilder(method);
+        const queryResult = builder.build(tableName);
 
-        const logContext = getLogContext(this.config, this.request);
         logWithLevel(
             LogLevel.DEBUG,
             logContext,
             console.log,
             `[SQL EXECUTOR] 🧠 Generated ${method.toUpperCase()} SQL:`,
-            QueryResult,
+            queryResult,
         );
 
-        const formatted = this.formatSQLWithParams(QueryResult.sql, QueryResult.params);
+        const formatted = this.formatSQLWithParams(queryResult.sql, queryResult.params);
         logWithLevel(
             LogLevel.DEBUG,
             logContext,
@@ -496,34 +533,138 @@ export class SqlExecutor<
         );
 
         const toUnnamed = namedPlaceholders();
-        const [sql, values] = toUnnamed(QueryResult.sql, QueryResult.params);
+        const [sql, values] = toUnnamed(queryResult.sql, queryResult.params);
+        return { sql, values };
+    }
 
-        await this.validateSqlAllowList(sql);
+    private createResponseFromQueryResult(
+        method: iRestMethods,
+        result: any,
+        sqlExecution: iRestSqlExecutionContext,
+        logContext: ReturnType<typeof getLogContext>,
+    ): DetermineResponseDataType<G['RequestMethod'], G['RestTableInterface']> {
+        if (method === C6C.GET) {
+            return {
+                rest: result.map(this.serialize),
+                sql: { sql: sqlExecution.sql, values: sqlExecution.values },
+            } as DetermineResponseDataType<G['RequestMethod'], G['RestTableInterface']>;
+        }
 
-        return await this.withConnection(async (conn) => {
-            const [result] = await conn.query<any>(sql, values);
+        logWithLevel(
+            LogLevel.DEBUG,
+            logContext,
+            console.log,
+            `[SQL EXECUTOR] ✏️ Rows affected:`,
+            result.affectedRows,
+        );
 
-            if (method === 'GET') {
-                return {
-                    rest: result.map(this.serialize),
-                    sql: { sql, values }
-                } as DetermineResponseDataType<G['RequestMethod'], G['RestTableInterface']>;
-            } else {
+        return {
+            affected: result.affectedRows as number,
+            insertId: result.insertId as number,
+            rest: [],
+            sql: { sql: sqlExecution.sql, values: sqlExecution.values },
+        } as DetermineResponseDataType<G['RequestMethod'], G['RestTableInterface']>;
+    }
+
+    private createLifecycleHookResponse(
+        response: DetermineResponseDataType<G['RequestMethod'], G['RestTableInterface']>,
+    ): iRestLifecycleResponse<G> {
+        const data = Object.assign({ success: true }, response);
+        return { data };
+    }
+
+    private async executeQueryWithLifecycle(
+        conn: PoolConnection,
+        method: iRestMethods,
+        sqlExecution: iRestSqlExecutionContext,
+        logContext: ReturnType<typeof getLogContext>,
+    ): Promise<DetermineResponseDataType<G['RequestMethod'], G['RestTableInterface']>> {
+        const useTransaction = method !== C6C.GET;
+        let committed = false;
+
+        try {
+            if (useTransaction) {
                 logWithLevel(
                     LogLevel.DEBUG,
                     logContext,
                     console.log,
-                    `[SQL EXECUTOR] ✏️ Rows affected:`,
-                    result.affectedRows,
+                    `[SQL EXECUTOR] 🧾 Beginning transaction`,
                 );
-                return {
-                    affected: result.affectedRows as number,
-                    insertId: result.insertId as number,
-                    rest: [], // TODO - remove rest empty array from non-GET responses?
-                    sql: { sql, values }
-                } as DetermineResponseDataType<G['RequestMethod'], G['RestTableInterface']>;
+                await conn.beginTransaction();
             }
-        });
+
+            await this.validateSqlAllowList(sqlExecution.sql);
+
+            await this.runLifecycleHooks<"beforeExecution">(
+                "beforeExecution",
+                {
+                    config: this.config,
+                    request: this.request,
+                    sqlExecution,
+                },
+            );
+            const [result] = await conn.query<any>(sqlExecution.sql, sqlExecution.values);
+
+            const response = this.createResponseFromQueryResult(
+                method,
+                result,
+                sqlExecution,
+                logContext,
+            );
+            const hookResponse = this.createLifecycleHookResponse(response);
+
+            await this.runLifecycleHooks<"afterExecution">(
+                "afterExecution",
+                {
+                    config: this.config,
+                    request: this.request,
+                    response: hookResponse,
+                },
+            );
+
+            if (useTransaction) {
+                await conn.commit();
+                committed = true;
+                logWithLevel(
+                    LogLevel.DEBUG,
+                    logContext,
+                    console.log,
+                    `[SQL EXECUTOR] 🧾 Transaction committed`,
+                );
+            }
+
+            await this.runLifecycleHooks<"afterCommit">(
+                "afterCommit",
+                {
+                    config: this.config,
+                    request: this.request,
+                    response: hookResponse,
+                },
+            );
+
+            return response;
+        } catch (err) {
+            if (useTransaction && !committed) {
+                try {
+                    await conn.rollback();
+                    logWithLevel(
+                        LogLevel.WARN,
+                        logContext,
+                        console.warn,
+                        `[SQL EXECUTOR] 🧾 Transaction rolled back`,
+                    );
+                } catch (rollbackErr) {
+                    logWithLevel(
+                        LogLevel.ERROR,
+                        logContext,
+                        console.error,
+                        `[SQL EXECUTOR] Rollback failed`,
+                        rollbackErr,
+                    );
+                }
+            }
+            throw err;
+        }
     }
 
     private async validateSqlAllowList(sql: string): Promise<void> {

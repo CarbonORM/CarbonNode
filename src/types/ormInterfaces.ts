@@ -172,6 +172,19 @@ export type DetermineResponseDataType<
                     ? iDeleteC6RestResponse<RestTableInterface>
                     : never);
 
+export type iRestSqlExecutionContext = {
+    sql: string;
+    values: any[];
+};
+
+export type iRestLifecycleResponse<G extends OrmGenerics> =
+    AxiosResponse<DetermineResponseDataType<G['RequestMethod'], G['RestTableInterface']>>
+    | {
+        data: {
+            success: boolean;
+        } & DetermineResponseDataType<G['RequestMethod'], G['RestTableInterface']>;
+    };
+
 
 export type iRestWebsocketPayload = {
     REST: {
@@ -254,20 +267,21 @@ export type iRestReactiveLifecycle<G extends OrmGenerics> = {
         [key: string]: (args: {
             config: iRest<G['RestShortTableName'], G['RestTableInterface'], G['PrimaryKey']>;
             request: RequestQueryBody<G['RequestMethod'], G['RestTableInterface'], G['CustomAndRequiredFields'], G['RequestTableOverrides']>;
+            sqlExecution?: iRestSqlExecutionContext;
         }) => void | Promise<void>;
     };
     afterExecution?: {
         [key: string]: (args: {
             config: iRest<G['RestShortTableName'], G['RestTableInterface'], G['PrimaryKey']>;
             request: RequestQueryBody<G['RequestMethod'], G['RestTableInterface'], G['CustomAndRequiredFields'], G['RequestTableOverrides']>;
-            response: AxiosResponse<DetermineResponseDataType<G['RequestMethod'], G['RestTableInterface']>>;
+            response: iRestLifecycleResponse<G>;
         }) => void | Promise<void>;
     };
     afterCommit?: {
         [key: string]: (args: {
             config: iRest<G['RestShortTableName'], G['RestTableInterface'], G['PrimaryKey']>;
             request: RequestQueryBody<G['RequestMethod'], G['RestTableInterface'], G['CustomAndRequiredFields'], G['RequestTableOverrides']>;
-            response: AxiosResponse<DetermineResponseDataType<G['RequestMethod'], G['RestTableInterface']>>;
+            response: iRestLifecycleResponse<G>;
         }) => void | Promise<void>;
     };
 };
