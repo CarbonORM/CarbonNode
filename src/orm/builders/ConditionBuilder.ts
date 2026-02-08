@@ -444,9 +444,51 @@ export abstract class ConditionBuilder<
             return this.addParam(params, contextColumn ?? '', JSON.stringify(normalized));
         }
 
-        const { sql, isReference, isExpression, isSubSelect } = this.serializeOperand(normalized, params, contextColumn);
+        let sql: string;
+        let isReference: boolean;
+        let isExpression: boolean;
+        let isSubSelect: boolean;
+
+        const shouldStringifyObjectFallback = (candidate: any): boolean => {
+            if (
+                typeof candidate !== 'object'
+                || candidate === null
+                || candidate instanceof Date
+                || (typeof Buffer !== 'undefined' && Buffer.isBuffer && Buffer.isBuffer(candidate))
+            ) {
+                return false;
+            }
+
+            const normalizedCandidate = candidate instanceof Map
+                ? Object.fromEntries(candidate)
+                : candidate;
+            const entries = Object.entries(normalizedCandidate as Record<string, any>);
+
+            if (entries.length !== 1) {
+                return true;
+            }
+
+            const [key] = entries[0];
+            if (this.isOperator(key) || this.BOOLEAN_OPERATORS.has(key)) {
+                return false;
+            }
+
+            return true;
+        };
+
+        try {
+            ({ sql, isReference, isExpression, isSubSelect } = this.serializeOperand(normalized, params, contextColumn));
+        } catch (err) {
+            if (shouldStringifyObjectFallback(normalized)) {
+                return this.addParam(params, contextColumn ?? '', JSON.stringify(normalized));
+            }
+            throw err;
+        }
 
         if (!isReference && !isExpression && !isSubSelect && typeof normalized === 'object' && normalized !== null) {
+            if (shouldStringifyObjectFallback(normalized)) {
+                return this.addParam(params, contextColumn ?? '', JSON.stringify(normalized));
+            }
             throw new Error('Unsupported operand type in SQL expression.');
         }
 

@@ -18,10 +18,15 @@ export class PostQueryBuilder<G extends OrmGenerics> extends ConditionBuilder<G>
     build(table: string) {
         this.aliasMap = {};
         const verb = C6C.REPLACE in this.request ? C6C.REPLACE : C6C.INSERT;
-        const rows: Record<string, any>[] = Array.isArray(this.request.dataInsertMultipleRows) &&
-        this.request.dataInsertMultipleRows.length > 0
-            ? this.request.dataInsertMultipleRows
-            : [verb in this.request ? this.request[verb] : this.request];
+        const directRows = Array.isArray(this.request)
+            ? this.request
+            : [];
+        const rows: Record<string, any>[] = directRows.length > 0
+            ? directRows
+            : Array.isArray(this.request.dataInsertMultipleRows) &&
+            this.request.dataInsertMultipleRows.length > 0
+                ? this.request.dataInsertMultipleRows
+                : [verb in this.request ? this.request[verb] : this.request];
         const keys = Object.keys(rows[0] ?? {});
         const params: any[] | Record<string, any> = this.useNamedParams ? {} : [];
         const rowPlaceholders: string[] = [];
@@ -42,9 +47,8 @@ export class PostQueryBuilder<G extends OrmGenerics> extends ConditionBuilder<G>
 
         let sql = `${verb} INTO \`${table}\` (
             ${keys.map(k => `\`${this.trimTablePrefix(table, k)}\``).join(', ')}
-         ) VALUES (
-            ${rowPlaceholders.join(',\n            ')}
-        )`;
+         ) VALUES
+            ${rowPlaceholders.join(',\n            ')}`;
 
         if (C6C.UPDATE in this.request) {
             const updateData = this.request[C6C.UPDATE];

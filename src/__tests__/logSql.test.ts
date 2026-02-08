@@ -67,4 +67,17 @@ describe("colorSql", () => {
         expect(colored).toContain("\x1b[94mUPDATE\x1b[0m");
         expect(colored).toContain("\x1b[94mDUPLICATE\x1b[0m");
     });
+
+    it("collapses repeated multi-row value groups", () => {
+        const sql = `INSERT INTO \`valuation_report_comparables\` (a,b,c) VALUES
+            (?, ?, ?),
+            (?, ?, ?),
+            (?, ?, ?),
+            (?, ?, ?)`;
+        const colored = colorSql(sql);
+        const plain = stripAnsi(colored);
+
+        expect(plain).toContain("(? ×3) ×4");
+        expect(plain).not.toContain("(? ×3),");
+    });
 });

@@ -73,6 +73,23 @@ function collapseBinds(sql: string): string {
     );
 }
 
+/**
+ * ( ? ×9 ), ( ? ×9 ), ( ? ×9 )  ->  ( ? ×9 ) ×3
+ */
+function collapseRepeatedValueRows(sql: string): string {
+    const repeatedRowPattern =
+        /(\((?:\x1b\[[0-9;]*m)?\?\s*×\d+(?:\x1b\[[0-9;]*m)?\)|\(\s*(?:\?\s*,\s*)+\?\s*\))(?:\s*,\s*\1){2,}/g;
+
+    return sql.replace(repeatedRowPattern, (match, row: string) => {
+        const rowMatches = match.match(new RegExp(row.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g"));
+        const count = rowMatches?.length ?? 1;
+        const normalizedRow = row.includes("×")
+            ? row
+            : `(${C.DIM}? ×${(row.match(/\?/g) ?? []).length}${RESET})`;
+        return `${normalizedRow} ${C.DIM}×${count}${RESET}`;
+    });
+}
+
 /* ---------- main formatter ---------- */
 
 export default function colorSql(sql: string): string {
@@ -80,6 +97,7 @@ export default function colorSql(sql: string): string {
 
     /* 1️⃣ collapse bind noise */
     s = collapseBinds(s);
+    s = collapseRepeatedValueRows(s);
 
     /* 2️⃣ table.column coloring (core visual grouping) */
     s = s.replace(

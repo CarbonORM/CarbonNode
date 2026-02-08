@@ -115,7 +115,29 @@ describe('SQL Builders', () => {
 
     expect(sql).toContain('INSERT INTO `actor`');
     expect(sql).toContain('`first_name`, `last_name`');
-    expect(sql).toContain('VALUES (');
+    expect(sql).toContain(') VALUES');
+    expect(sql).toContain('),');
+    expect(params).toEqual(['ALICE', 'ONE', 'BOB', 'TWO']);
+  });
+
+  it('builds multi-row INSERT from direct array request syntax', () => {
+    const config = buildTestConfig();
+    const qb = new PostQueryBuilder(config as any, [
+      {
+        'actor.first_name': 'ALICE',
+        'actor.last_name': 'ONE',
+      },
+      {
+        'actor.first_name': 'BOB',
+        'actor.last_name': 'TWO',
+      },
+    ] as any, false);
+
+    const { sql, params } = qb.build('actor');
+
+    expect(sql).toContain('INSERT INTO `actor`');
+    expect(sql).toContain('`first_name`, `last_name`');
+    expect(sql).toContain(') VALUES');
     expect(sql).toContain('),');
     expect(params).toEqual(['ALICE', 'ONE', 'BOB', 'TWO']);
   });
