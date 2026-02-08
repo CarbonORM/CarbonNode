@@ -52,6 +52,13 @@ export function ExpressHandler<
             const method: iRestMethods = treatAsGet ? 'GET' : incomingMethod;
             const payload: any = treatAsGet ? {...(req.body as any)} : (method === 'GET' ? req.query : req.body);
 
+            // Query strings are text; coerce known boolean controls.
+            if (typeof payload?.cacheResults === "string") {
+                const normalized = payload.cacheResults.toLowerCase();
+                if (normalized === "false") payload.cacheResults = false;
+                if (normalized === "true") payload.cacheResults = true;
+            }
+
             // Remove transport-only METHOD flag so it never leaks into ORM parsing
             if (treatAsGet && 'METHOD' in payload) {
                 try {

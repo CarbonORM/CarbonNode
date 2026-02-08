@@ -11,7 +11,11 @@ export default function <
     restfulObject: RequestQueryBody<RequestMethod, RestTableInterface, CustomAndRequiredFields, RequestTableOverrides>,
     tableName: string | string[],
     C6: iC6Object,
-    regexErrorHandler: (message: string) => void = alert
+    regexErrorHandler: (message: string) => void = (message: string) => {
+        if (typeof globalThis !== "undefined" && typeof (globalThis as any).alert === "function") {
+            (globalThis as any).alert(message);
+        }
+    }
 ) {
     const payload: Record<string, any> = {};
     const tableNames = Array.isArray(tableName) ? tableName : [tableName];
@@ -43,7 +47,8 @@ export default function <
                 C6Constants.DELETE,
                 C6Constants.WHERE,
                 C6Constants.JOIN,
-                C6Constants.PAGINATION
+                C6Constants.PAGINATION,
+                "cacheResults",
             ].includes(value)) {
                 const val = restfulObject[value];
                 if (Array.isArray(val)) {
@@ -52,6 +57,8 @@ export default function <
                     payload[value] = Object.keys(val)
                         .sort()
                         .reduce((acc, key) => ({ ...acc, [key]: val[key] }), {});
+                } else {
+                    payload[value] = val;
                 }
                 continue;
             }
