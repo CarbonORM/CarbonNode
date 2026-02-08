@@ -1,4 +1,4 @@
-import type {AxiosInstance, AxiosPromise, AxiosResponse} from "axios";
+import type {AxiosInstance, AxiosResponse} from "axios";
 import type {Pool} from "mysql2/promise";
 import {eFetchDependencies} from "./dynamicFetching";
 import {Modify} from "./modifyTypes";
@@ -101,10 +101,22 @@ export type RequestQueryBody<
     ? iAPI<RequestGetPutDeleteBody<Modify<T, Overrides> & Custom>>
     : iAPI<RequestPostBody<Modify<T, Overrides> & Custom>>;
 
+export interface iCacheRequestConfig {
+    method?: string;
+    url?: string;
+    headers?: any;
+}
+
+export interface iCacheResponse<ResponseDataType = any> {
+    data: ResponseDataType;
+    config?: iCacheRequestConfig;
+    [key: string]: any;
+}
+
 export interface iCacheAPI<ResponseDataType = any> {
     requestArgumentsSerialized: string;
-    request: AxiosPromise<ResponseDataType>;
-    response?: AxiosResponse & {
+    request: Promise<iCacheResponse<ResponseDataType>>;
+    response?: iCacheResponse<ResponseDataType> & {
         __carbonTiming?: {
             start: number;
             end: number;

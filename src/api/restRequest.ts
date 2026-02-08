@@ -34,6 +34,7 @@ export default function restRequest<
         const config = typeof configX === "function" ? configX() : configX;
 
         applyLogLevelDefaults(config, request);
+
         const logContext = getLogContext(config, request);
 
         if (!config.mysqlPool && !config.axios) {

@@ -6,6 +6,7 @@ import { OrmGenerics } from "../types/ormGenerics";
 import { C6Constants as C6C } from "../constants/C6Constants";
 import {
     DetermineResponseDataType,
+    iCacheResponse,
     iRestLifecycleResponse,
     iRestMethods,
     iRestSqlExecutionContext,
@@ -15,7 +16,9 @@ import namedPlaceholders from 'named-placeholders';
 import type { PoolConnection } from 'mysql2/promise';
 import { Buffer } from 'buffer';
 import { Executor } from "./Executor";
+import {checkCache, setCache} from "../utils/cacheManager";
 import { normalizeSingularRequest } from "../utils/normalizeSingularRequest";
+import {sortAndSerializeQueryObject} from "../utils/sortAndSerializeQueryObject";
 import { loadSqlAllowList, normalizeSql } from "../utils/sqlAllowList";
 import { getLogContext, LogLevel, logWithLevel } from "../utils/logLevel";
 
@@ -483,11 +486,55 @@ export class SqlExecutor<
         const method = this.config.requestMethod;
         const tableName = this.config.restModel.TABLE_NAME;
         const logContext = getLogContext(this.config, this.request);
-        const sqlExecution = this.buildSqlExecutionContext(method, tableName, logContext);
+        const cacheResults = method === C6C.GET
+            && (this.request as { cacheResults?: boolean })?.cacheResults !== false;
 
-        return await this.withConnection(async (conn) =>
+        const cacheRequestData = cacheResults
+            ? JSON.parse(JSON.stringify(this.request ?? {}))
+            : undefined;
+
+        const requestArgumentsSerialized = cacheResults
+            ? sortAndSerializeQueryObject(tableName, cacheRequestData ?? {})
+            : undefined;
+
+        if (cacheResults) {
+            const cachedRequest = checkCache<DetermineResponseDataType<G['RequestMethod'], G['RestTableInterface']>>(
+                method,
+                tableName,
+                cacheRequestData,
+            );
+            if (cachedRequest) {
+                return (await cachedRequest).data;
+            }
+        }
+
+        const sqlExecution = this.buildSqlExecutionContext(method, tableName, logContext);
+        const queryPromise = this.withConnection(async (conn) =>
             this.executeQueryWithLifecycle(conn, method, sqlExecution, logContext),
         );
+
+        if (!cacheResults || !cacheRequestData || !requestArgumentsSerialized) {
+            return await queryPromise;
+        }
+
+        const cacheRequest = queryPromise.then((data) =>
+            this.createCacheResponseEnvelope(method, tableName, data),
+        );
+
+        setCache(method, tableName, cacheRequestData, {
+            requestArgumentsSerialized,
+            request: cacheRequest,
+        });
+
+        const cacheResponse = await cacheRequest;
+        setCache(method, tableName, cacheRequestData, {
+            requestArgumentsSerialized,
+            request: cacheRequest,
+            response: cacheResponse,
+            final: true,
+        });
+
+        return cacheResponse.data;
     }
 
     private getQueryBuilder(
@@ -571,6 +618,20 @@ export class SqlExecutor<
     ): iRestLifecycleResponse<G> {
         const data = Object.assign({ success: true }, response);
         return { data };
+    }
+
+    private createCacheResponseEnvelope(
+        method: iRestMethods,
+        tableName: string,
+        data: DetermineResponseDataType<G['RequestMethod'], G['RestTableInterface']>,
+    ): iCacheResponse<DetermineResponseDataType<G['RequestMethod'], G['RestTableInterface']>> {
+        return {
+            data,
+            config: {
+                method: method.toLowerCase(),
+                url: `/rest/${tableName}`,
+            },
+        };
     }
 
     private async executeQueryWithLifecycle(

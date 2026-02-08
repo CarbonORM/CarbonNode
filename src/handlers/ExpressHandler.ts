@@ -1,42 +1,45 @@
 import type {Request, Response, NextFunction, Router} from "express";
-import type {Pool} from "mysql2/promise";
 import {C6C} from "../constants/C6Constants";
 import restRequest from "../api/restRequest";
-import type {iC6Object, iRestMethods, tWebsocketBroadcast} from "../types/ormInterfaces";
+import {iRest, iRestMethods} from "../types/ormInterfaces";
 import {LogLevel, logWithLevel} from "../utils/logLevel";
+import {OrmGenerics} from "../types/ormGenerics";
 
-type iExpressHandlerConfig = {
-    C6: iC6Object;
-    mysqlPool: Pool;
-    sqlAllowListPath?: string;
-    websocketBroadcast?: tWebsocketBroadcast;
-};
 
-type iRestExpressRequestConfig = iExpressHandlerConfig & {
-    router: Pick<Router, "all">;
-    routePath?: string;
-};
+export function restExpressRequest<G extends OrmGenerics>(
+    routerConfig: {
+        router: Pick<Router, "all">;
+        routePath?: string;
+    } &
+        Omit<
+            iRest<G['RestShortTableName'], G['RestTableInterface']>,
+            "requestMethod" | "restModel"
+        >
+) {
+    const {router, routePath = "/rest/:table{/:primary}", ...handlerConfig} = routerConfig;
 
-export function restExpressRequest({
-    router,
-    routePath = "/rest/:table{/:primary}",
-    ...handlerConfig
-}: iRestExpressRequestConfig) {
-    router.all(routePath, ExpressHandler(handlerConfig));
+    router.all(routePath, ExpressHandler<G>(handlerConfig));
 }
-
 
 // TODO - WE MUST make this a generic - optional, but helpful
 // note sure how it would help anyone actually...
-export function ExpressHandler({
-    C6,
-    mysqlPool,
-    sqlAllowListPath,
-    websocketBroadcast,
-}: iExpressHandlerConfig) {
+export function ExpressHandler<
+    G extends OrmGenerics
+>(configX: (() => Omit<
+    iRest<G['RestShortTableName'], G['RestTableInterface']>,
+    "requestMethod" | "restModel"
+>) | Omit<
+    iRest<G['RestShortTableName'], G['RestTableInterface']>,
+    "requestMethod" | "restModel"
+>) {
 
     return async (req: Request, res: Response, next: NextFunction) => {
         try {
+            const config = typeof configX === "function" ? configX() : configX;
+            const {
+                C6
+            } = config;
+
             const incomingMethod = req.method.toUpperCase() as iRestMethods;
             const table = req.params.table;
             let primary = req.params.primary;
@@ -47,11 +50,14 @@ export function ExpressHandler({
             const treatAsGet = incomingMethod === 'POST' && methodOverride === 'GET';
 
             const method: iRestMethods = treatAsGet ? 'GET' : incomingMethod;
-            const payload: any = treatAsGet ? { ...(req.body as any) } : (method === 'GET' ? req.query : req.body);
+            const payload: any = treatAsGet ? {...(req.body as any)} : (method === 'GET' ? req.query : req.body);
 
             // Remove transport-only METHOD flag so it never leaks into ORM parsing
             if (treatAsGet && 'METHOD' in payload) {
-                try { delete (payload as any).METHOD } catch { /* noop */ }
+                try {
+                    delete (payload as any).METHOD
+                } catch { /* noop */
+                }
             }
 
             // Warn for unsupported overrides but continue normally
@@ -121,10 +127,7 @@ export function ExpressHandler({
             }
 
             const response = await restRequest({
-                C6,
-                mysqlPool,
-                sqlAllowListPath,
-                websocketBroadcast,
+                ...config,
                 requestMethod: method,
                 restModel: C6.TABLES[table]
             })(payload);

@@ -257,7 +257,7 @@ export class HttpExecutor<
             // literally impossible for query to be undefined or null here but the editor is too busy licking windows to understand that
             let querySerialized: string = sortAndSerializeQueryObject(tables, cacheRequestData ?? {});
 
-            let cachedRequest: AxiosPromise<ResponseDataType> | false = false;
+            let cachedRequest: Promise<{ data: ResponseDataType }> | false = false;
 
             if (cacheResults) {
                 cachedRequest = checkCache<ResponseDataType>(requestMethod, tableName, cacheRequestData);

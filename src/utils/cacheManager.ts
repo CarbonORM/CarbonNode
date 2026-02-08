@@ -1,5 +1,4 @@
-import type {AxiosPromise} from "axios";
-import type {iCacheAPI} from "../types/ormInterfaces";
+import type {iCacheAPI, iCacheResponse} from "../types/ormInterfaces";
 import {LogLevel, logWithLevel, shouldLog} from "./logLevel";
 
 // -----------------------------------------------------------------------------
@@ -61,13 +60,13 @@ export function checkCache<ResponseDataType = any>(
     method: string,
     tableName: string | string[],
     requestData: any,
-): AxiosPromise<ResponseDataType> | false {
+): Promise<iCacheResponse<ResponseDataType>> | false {
     const key = makeCacheKey(method, tableName, requestData);
     const cached = apiRequestCache.get(key);
 
     if (!cached) return false;
 
-    if (shouldLog(LogLevel.DEBUG, undefined)) {
+    if (shouldLog(LogLevel.INFO, undefined)) {
         console.groupCollapsed(
             `%c API cache hit for ${method} ${tableName}`,
             "color:#0c0",

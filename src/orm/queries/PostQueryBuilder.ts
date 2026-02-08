@@ -18,24 +18,32 @@ export class PostQueryBuilder<G extends OrmGenerics> extends ConditionBuilder<G>
     build(table: string) {
         this.aliasMap = {};
         const verb = C6C.REPLACE in this.request ? C6C.REPLACE : C6C.INSERT;
-        const body = verb in this.request ? this.request[verb] : this.request;
-        const keys = Object.keys(body);
+        const rows: Record<string, any>[] = Array.isArray(this.request.dataInsertMultipleRows) &&
+        this.request.dataInsertMultipleRows.length > 0
+            ? this.request.dataInsertMultipleRows
+            : [verb in this.request ? this.request[verb] : this.request];
+        const keys = Object.keys(rows[0] ?? {});
         const params: any[] | Record<string, any> = this.useNamedParams ? {} : [];
-        const placeholders: string[] = []
+        const rowPlaceholders: string[] = [];
 
+        for (const row of rows) {
+            const placeholders: string[] = [];
 
-        for (const key of keys) {
-            const value = body[key];
-            const trimmed = this.trimTablePrefix(table, key);
-            const qualified = `${table}.${trimmed}`;
-            const placeholder = this.serializeUpdateValue(value, params, qualified);
-            placeholders.push(placeholder);
+            for (const key of keys) {
+                const value = row[key] ?? null;
+                const trimmed = this.trimTablePrefix(table, key);
+                const qualified = `${table}.${trimmed}`;
+                const placeholder = this.serializeUpdateValue(value, params, qualified);
+                placeholders.push(placeholder);
+            }
+
+            rowPlaceholders.push(`(${placeholders.join(', ')})`);
         }
 
         let sql = `${verb} INTO \`${table}\` (
             ${keys.map(k => `\`${this.trimTablePrefix(table, k)}\``).join(', ')}
          ) VALUES (
-            ${placeholders.join(', ')}
+            ${rowPlaceholders.join(',\n            ')}
         )`;
 
         if (C6C.UPDATE in this.request) {
