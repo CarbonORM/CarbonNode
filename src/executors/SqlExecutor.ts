@@ -487,6 +487,7 @@ export class SqlExecutor<
         const tableName = this.config.restModel.TABLE_NAME;
         const logContext = getLogContext(this.config, this.request);
         const cacheResults = method === C6C.GET
+            && !this.config.sqlAllowListPath
             && (this.request as { cacheResults?: boolean })?.cacheResults !== false;
 
         const cacheRequestData = cacheResults

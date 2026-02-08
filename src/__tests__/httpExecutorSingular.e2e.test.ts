@@ -2,12 +2,32 @@ import mysql from "mysql2/promise";
 import axios from "axios";
 import { AddressInfo } from "net";
 import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
-import { Actor, C6, GLOBAL_REST_PARAMETERS } from "./sakila-db/C6.js";
+import { restOrm } from "@carbonorm/carbonnode";
+import { Actor, C6 } from "./sakila-db/C6.js";
 import { C6C } from "../constants/C6Constants";
 import createTestServer from "./fixtures/createTestServer";
 
 let pool: mysql.Pool;
 let server: any;
+let restURL: string;
+let axiosClient: ReturnType<typeof axios.create>;
+const actorHttp = restOrm<any>(() => ({
+  C6,
+  restModel: C6.TABLES.actor,
+  restURL,
+  axios: axiosClient,
+  verbose: false,
+}));
+
+const actorRequest = async (
+  method: "GET" | "POST" | "PUT" | "DELETE",
+  request: any
+) => {
+  if (method === "GET") return actorHttp.Get(request as any);
+  if (method === "POST") return actorHttp.Post(request as any);
+  if (method === "PUT") return actorHttp.Put(request as any);
+  return actorHttp.Delete(request as any);
+};
 
 beforeAll(async () => {
   pool = mysql.createPool({
@@ -22,17 +42,20 @@ beforeAll(async () => {
   await new Promise(resolve => server.on("listening", resolve));
   const { port } = server.address() as AddressInfo;
 
-  GLOBAL_REST_PARAMETERS.restURL = `http://127.0.0.1:${port}/rest/`;
-  const axiosClient = axios.create();
+  restURL = `http://127.0.0.1:${port}/rest/`;
+  axiosClient = axios.create();
   axiosClient.interceptors.response.use(
     response => response,
-    error => Promise.reject(new Error(error?.message ?? "Request failed")),
+    error => {
+      const serverError = error?.response?.data?.error;
+      const message =
+        serverError?.message
+        ?? (typeof serverError === "string" ? serverError : undefined)
+        ?? error?.message
+        ?? "Request failed";
+      return Promise.reject(new Error(message));
+    },
   );
-  GLOBAL_REST_PARAMETERS.axios = axiosClient;
-  GLOBAL_REST_PARAMETERS.verbose = false;
-  // ensure HTTP executor is used
-  // @ts-ignore
-  delete GLOBAL_REST_PARAMETERS.mysqlPool;
 });
 
 afterAll(async () => {
@@ -44,59 +67,73 @@ describe("HttpExecutor singular e2e", () => {
   it("handles CRUD with singular objects", async () => {
     const first_name = `Test${Date.now()}`;
     const last_name = `User${Date.now()}`;
+    let step = "POST";
 
-    // POST
-    await Actor.Post({ first_name, last_name } as any);
+    try {
+      // POST
+      await actorRequest("POST", { first_name, last_name } as any);
 
-    // Fetch inserted id using complex query
-    let data = await Actor.Get({
-      [C6C.WHERE]: { [Actor.FIRST_NAME]: first_name, [Actor.LAST_NAME]: last_name },
-      [C6C.PAGINATION]: { [C6C.LIMIT]: 1 },
-    });
+      step = "GET-complex";
+      // Fetch inserted id using complex query
+      let data = await actorRequest("GET", {
+        [C6C.WHERE]: { [Actor.FIRST_NAME]: first_name, [Actor.LAST_NAME]: last_name },
+        [C6C.PAGINATION]: { [C6C.LIMIT]: 1 },
+      });
 
-    expect(data.rest).toHaveLength(1);
-    const testId = data.rest[0].actor_id;
+      expect(data.rest).toHaveLength(1);
+      const testId = data.rest[0].actor_id;
 
-    // GET singular
-    data = await Actor.Get({ actor_id: testId } as any);
-    expect(data.rest).toHaveLength(1);
-    expect(data.rest[0].actor_id).toBe(testId);
+      step = "GET-singular";
+      // GET singular
+      data = await actorRequest("GET", { actor_id: testId } as any);
+      expect(data.rest).toHaveLength(1);
+      expect(data.rest[0].actor_id).toBe(testId);
 
-    // PUT singular
-    await Actor.Put({ actor_id: testId, first_name: "Updated" } as any);
-    data = await Actor.Get({ actor_id: testId, cacheResults: false } as any);
-    expect(data.rest).toHaveLength(1);
-    expect(data.rest[0].first_name).toBe("Updated");
+      step = "PUT-singular";
+      // PUT singular
+      await actorRequest("PUT", { actor_id: testId, first_name: "Updated" } as any);
+      data = await actorRequest("GET", { actor_id: testId, cacheResults: false } as any);
+      expect(data.rest).toHaveLength(1);
+      expect(data.rest[0].first_name).toBe("Updated");
 
-    // PUT using fully qualified keys
-    const updateStub = vi.fn();
-    GLOBAL_REST_PARAMETERS.reactBootstrap = {
-      updateRestfulObjectArrays: updateStub,
-      deleteRestfulObjectArrays: vi.fn(),
-    } as any;
-    await Actor.Put({
-      [Actor.ACTOR_ID]: testId,
-      [Actor.FIRST_NAME]: "UpdatedFQ",
-    } as any);
-    expect(updateStub).toHaveBeenCalled();
-    const args = updateStub.mock.calls[0][0];
-    expect(args.dataOrCallback[0]).toHaveProperty("first_name", "UpdatedFQ");
-    expect(args.dataOrCallback[0]).toHaveProperty("actor_id", testId);
-    expect(args.dataOrCallback[0]).not.toHaveProperty(Actor.FIRST_NAME);
-    GLOBAL_REST_PARAMETERS.reactBootstrap = undefined as any;
-    data = await Actor.Get({ actor_id: testId, cacheResults: false } as any);
-    expect(data.rest).toHaveLength(1);
-    expect(data.rest[0].first_name).toBe("UpdatedFQ");
+      step = "PUT-fq-react";
+      // PUT using fully qualified keys
+      const updateStub = vi.fn();
+      const reactBootstrap = {
+        updateRestfulObjectArrays: updateStub,
+        deleteRestfulObjectArrays: vi.fn(),
+      } as any;
+      const actorHttpWithReact = restOrm<any>(() => ({
+        C6,
+        restModel: C6.TABLES.actor,
+        restURL,
+        axios: axiosClient,
+        verbose: false,
+        reactBootstrap,
+      }));
+      await actorHttpWithReact.Put({
+        [Actor.ACTOR_ID]: testId,
+        [Actor.FIRST_NAME]: "UpdatedFQ",
+      } as any);
+      expect(updateStub).toHaveBeenCalled();
+      const args = updateStub.mock.calls[0][0];
+      expect(args.dataOrCallback[0]).toHaveProperty("first_name", "UpdatedFQ");
+      expect(args.dataOrCallback[0]).toHaveProperty("actor_id", testId);
+      expect(args.dataOrCallback[0]).not.toHaveProperty(Actor.FIRST_NAME);
 
-    // DELETE singular
-    await Actor.Delete({ actor_id: testId } as any);
-    data = await Actor.Get({ actor_id: testId, cacheResults: false } as any);
-    expect(Array.isArray(data.rest)).toBe(true);
-    expect(data.rest.length).toBe(0);
+      step = "DELETE-singular";
+      // DELETE singular
+      await actorRequest("DELETE", { actor_id: testId } as any);
+      data = await actorRequest("GET", { actor_id: testId, cacheResults: false } as any);
+      expect(Array.isArray(data.rest)).toBe(true);
+      expect(data.rest.length).toBe(0);
+    } catch (error: any) {
+      throw new Error(`Failed at step ${step}: ${String(error?.message ?? error)}`);
+    }
   });
 
   it("exposes next when pagination continues", async () => {
-    const data = await Actor.Get({
+    const data = await actorRequest("GET", {
       [C6C.PAGINATION]: { [C6C.LIMIT]: 2 },
     } as any);
 
@@ -111,7 +148,7 @@ describe("HttpExecutor singular e2e", () => {
   });
 
   it("exposes limit 1 does not expose next", async () => {
-    const data = await Actor.Get({
+    const data = await actorRequest("GET", {
       [C6C.PAGINATION]: { [C6C.LIMIT]: 1 },
     } as any);
 

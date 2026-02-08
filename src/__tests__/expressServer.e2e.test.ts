@@ -2,12 +2,49 @@ import mysql from "mysql2/promise";
 import axios from "axios";
 import { AddressInfo } from "net";
 import {describe, it, expect, beforeAll, afterAll} from "vitest";
-import {Actor, C6, Film_Actor, GLOBAL_REST_PARAMETERS} from "./sakila-db/C6.js";
+import { restOrm } from "@carbonorm/carbonnode";
+import {Actor, C6, Film_Actor} from "./sakila-db/C6.js";
 import {C6C} from "../constants/C6Constants";
 import createTestServer from "./fixtures/createTestServer";
 
 let pool: mysql.Pool;
 let server: any;
+let restURL: string;
+let axiosClient: ReturnType<typeof axios.create>;
+const actorHttp = restOrm<any>(() => ({
+    C6,
+    restModel: C6.TABLES.actor,
+    restURL,
+    axios: axiosClient,
+    verbose: false,
+}));
+const filmActorHttp = restOrm<any>(() => ({
+    C6,
+    restModel: C6.TABLES.film_actor,
+    restURL,
+    axios: axiosClient,
+    verbose: false,
+}));
+
+const actorRequest = async (
+    method: "GET" | "POST" | "PUT" | "DELETE",
+    request: any
+) => {
+    if (method === "GET") return actorHttp.Get(request as any);
+    if (method === "POST") return actorHttp.Post(request as any);
+    if (method === "PUT") return actorHttp.Put(request as any);
+    return actorHttp.Delete(request as any);
+};
+
+const filmActorRequest = async (
+    method: "GET" | "POST" | "PUT" | "DELETE",
+    request: any
+) => {
+    if (method === "GET") return filmActorHttp.Get(request as any);
+    if (method === "POST") return filmActorHttp.Post(request as any);
+    if (method === "PUT") return filmActorHttp.Put(request as any);
+    return filmActorHttp.Delete(request as any);
+};
 
 beforeAll(async () => {
     pool = mysql.createPool({
@@ -22,17 +59,12 @@ beforeAll(async () => {
     await new Promise(resolve => server.on('listening', resolve));
     const {port} = server.address() as AddressInfo;
 
-    GLOBAL_REST_PARAMETERS.restURL = `http://127.0.0.1:${port}/rest/`;
-    const axiosClient = axios.create();
+    restURL = `http://127.0.0.1:${port}/rest/`;
+    axiosClient = axios.create();
     axiosClient.interceptors.response.use(
         response => response,
         error => Promise.reject(new Error(error?.message ?? 'Request failed')),
     );
-    GLOBAL_REST_PARAMETERS.axios = axiosClient;
-    GLOBAL_REST_PARAMETERS.verbose = false;
-    // ensure HTTP executor is used
-    // @ts-ignore
-    delete GLOBAL_REST_PARAMETERS.mysqlPool;
 });
 
 afterAll(async () => {
@@ -42,7 +74,7 @@ afterAll(async () => {
 
 describe("ExpressHandler e2e", () => {
     it("handles GET requests", async () => {
-        const data = await Actor.Get({
+        const data = await actorRequest("GET", {
             [C6C.PAGINATION]: {
                 [C6C.LIMIT]: 1
             },
@@ -53,7 +85,7 @@ describe("ExpressHandler e2e", () => {
 
 
     it("handles empty get requests", async () => {
-        const data = await Actor.Get({});
+        const data = await actorRequest("GET", {});
         expect(Array.isArray(data?.rest)).toBe(true);
         expect(data?.rest?.length).toBeGreaterThan(0);
     });
@@ -62,12 +94,12 @@ describe("ExpressHandler e2e", () => {
         const first_name = `Test${Date.now()}`;
         const last_name = `User${Date.now()}`;
 
-        await Actor.Post({
+        await actorRequest("POST", {
             first_name,
             last_name,
         } as any);
 
-        let data = await Actor.Get({
+        let data = await actorRequest("GET", {
             [C6C.WHERE]: { [Actor.FIRST_NAME]: first_name, [Actor.LAST_NAME]: last_name },
             [C6C.PAGINATION]: { [C6C.LIMIT]: 1 },
         } as any);
@@ -75,22 +107,22 @@ describe("ExpressHandler e2e", () => {
         expect(data?.rest).toHaveLength(1);
         const testId = data?.rest[0].actor_id;
 
-        await Actor.Put({
+        await actorRequest("PUT", {
             [C6C.WHERE]: { [Actor.ACTOR_ID]: testId },
             [C6C.UPDATE]: { first_name: "Updated" },
         } as any);
 
-        data = await Actor.Get({
+        data = await actorRequest("GET", {
             [C6C.WHERE]: { [Actor.ACTOR_ID]: testId },
         } as any);
         expect(data?.rest).toHaveLength(1);
         expect(data?.rest[0].first_name).toBe("Updated");
 
-        await Actor.Delete({
+        await actorRequest("DELETE", {
             [C6C.WHERE]: { [Actor.ACTOR_ID]: testId },
             [C6C.DELETE]: true,
         } as any);
-        data = await Actor.Get({
+        data = await actorRequest("GET", {
             [C6C.WHERE]: { [Actor.ACTOR_ID]: testId },
             cacheResults: false,
         } as any);
@@ -102,14 +134,14 @@ describe("ExpressHandler e2e", () => {
         const first_name = `Json${Date.now()}`;
         const last_name = `User${Date.now()}`;
 
-        await Actor.Post({
+        await actorRequest("POST", {
             first_name,
             last_name,
         } as any);
 
         const payload = { greeting: "hello", flags: [1, true] };
 
-        let data = await Actor.Get({
+        let data = await actorRequest("GET", {
             [C6C.WHERE]: { [Actor.FIRST_NAME]: first_name, [Actor.LAST_NAME]: last_name },
             [C6C.PAGINATION]: { [C6C.LIMIT]: 1 },
         } as any);
@@ -117,12 +149,12 @@ describe("ExpressHandler e2e", () => {
         const actorId = data?.rest?.[0]?.actor_id;
         expect(actorId).toBeTruthy();
 
-        await Actor.Put({
+        await actorRequest("PUT", {
             [C6C.WHERE]: { [Actor.ACTOR_ID]: actorId },
             [C6C.UPDATE]: { first_name: payload },
         } as any);
 
-        data = await Actor.Get({
+        data = await actorRequest("GET", {
             [C6C.WHERE]: { [Actor.ACTOR_ID]: actorId },
         } as any);
 
@@ -133,12 +165,12 @@ describe("ExpressHandler e2e", () => {
         const first_name = `Invalid${Date.now()}`;
         const last_name = `User${Date.now()}`;
 
-        await Actor.Post({
+        await actorRequest("POST", {
             first_name,
             last_name,
         } as any);
 
-        const data = await Actor.Get({
+        const data = await actorRequest("GET", {
             [C6C.WHERE]: { [Actor.FIRST_NAME]: first_name, [Actor.LAST_NAME]: last_name },
             [C6C.PAGINATION]: { [C6C.LIMIT]: 1 },
         } as any);
@@ -148,14 +180,14 @@ describe("ExpressHandler e2e", () => {
 
         const operatorLike = { [C6C.GREATER_THAN]: "oops" } as any;
 
-        const prevRestUrl = GLOBAL_REST_PARAMETERS.restURL;
-        const prevAxios = GLOBAL_REST_PARAMETERS.axios;
-        GLOBAL_REST_PARAMETERS.mysqlPool = pool as any;
-        delete (GLOBAL_REST_PARAMETERS as any).restURL;
-        delete (GLOBAL_REST_PARAMETERS as any).axios;
-
         try {
-            await Actor.Put({
+            const actorSql = restOrm<any>(() => ({
+                C6,
+                restModel: C6.TABLES.actor,
+                mysqlPool: pool,
+                verbose: false,
+            }));
+            await actorSql.Put({
                 [C6C.WHERE]: { [Actor.ACTOR_ID]: actorId },
                 [C6C.UPDATE]: { first_name: operatorLike },
             } as any);
@@ -163,16 +195,10 @@ describe("ExpressHandler e2e", () => {
         } catch (error: any) {
             const message = String(error?.message ?? error);
             expect(message).toMatch(/operand/i);
-        } finally {
-            GLOBAL_REST_PARAMETERS.restURL = prevRestUrl;
-            GLOBAL_REST_PARAMETERS.axios = prevAxios;
-            // @ts-ignore
-            delete GLOBAL_REST_PARAMETERS.mysqlPool;
         }
     });
 
     it("respects METHOD=GET override on POST", async () => {
-        const {restURL} = GLOBAL_REST_PARAMETERS;
         const table = Actor.TABLE_NAME;
 
         const response = await axios.post(`${restURL}${table}?METHOD=GET`, {
@@ -185,7 +211,6 @@ describe("ExpressHandler e2e", () => {
     });
 
     it("ignores unsupported METHOD overrides", async () => {
-        const {restURL} = GLOBAL_REST_PARAMETERS;
         const table = Actor.TABLE_NAME;
 
         const first_name = `Override${Date.now()}`;
@@ -201,10 +226,9 @@ describe("ExpressHandler e2e", () => {
     });
 
     it("allows composite keys when a URL primary is present", async () => {
-        const {restURL} = GLOBAL_REST_PARAMETERS;
         const table = Film_Actor.TABLE_NAME;
 
-        const seed = await Film_Actor.Get({
+        const seed = await filmActorRequest("GET", {
             [C6C.PAGINATION]: { [C6C.LIMIT]: 1 },
         } as any);
 

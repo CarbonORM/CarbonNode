@@ -1,4 +1,4 @@
-import type {Request, Response, NextFunction, Router} from "express";
+import type {Request, Response, Router} from "express";
 import {C6C} from "../constants/C6Constants";
 import restRequest from "../api/restRequest";
 import {iRest, iRestMethods} from "../types/ormInterfaces";
@@ -33,7 +33,7 @@ export function ExpressHandler<
     "requestMethod" | "restModel"
 >) {
 
-    return async (req: Request, res: Response, next: NextFunction) => {
+    return async (req: Request, res: Response) => {
         try {
             const config = typeof configX === "function" ? configX() : configX;
             const {
@@ -135,8 +135,9 @@ export function ExpressHandler<
             res.status(200).json({success: true, ...response});
 
         } catch (err) {
-            res.status(500).json({success: false, error: err});
-            next(err);
+            const message = err instanceof Error ? err.message : String(err);
+            logWithLevel(LogLevel.ERROR, undefined, console.error, message);
+            res.status(500).json({success: false, error: message});
         }
     };
 }

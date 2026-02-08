@@ -15,16 +15,12 @@ export function createTestServer({
     const app = express();
     app.set('query parser', 'extended');
     app.use(express.json());
-    restExpressRequest(
-        {
-            router: app,
-        },
-        {
-            C6,
-            mysqlPool,
-            sqlAllowListPath,
-        },
-    );
+    restExpressRequest({
+        router: app,
+        C6,
+        mysqlPool,
+        sqlAllowListPath,
+    });
     return app;
 }
 
