@@ -2,10 +2,9 @@
 
 
 - You have access to a local MySQL instance and test db.
-- New features must have proper test coverage.
-- Attempt to add coverage to code that is near areas touched too.
+- Add tests for new features and behavior changes.
+- When practical, improve coverage in nearby touched code.
 - Run `npm test` before each commit. The command MUST pass.
-- Check the `.junie/guidelines.md` for more instructions.
 - Use https://semver.org/ to determine how a version bump should be applied in `package.json`
 
 ### Boot

@@ -420,8 +420,13 @@ export class HttpExecutor<
 
                             case POST:
                                 if (dataInsertMultipleRows !== undefined) {
+                                    const convertedRows = dataInsertMultipleRows.map(convert);
+                                    const convertedQuery = convert(query);
                                     return [
-                                        dataInsertMultipleRows.map(convert),
+                                        {
+                                            ...convertedQuery,
+                                            dataInsertMultipleRows: convertedRows,
+                                        },
                                         baseConfig
                                     ];
                                 }
