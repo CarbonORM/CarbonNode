@@ -5,7 +5,6 @@ import { PostQueryBuilder } from '../orm/queries/PostQueryBuilder';
 import { UpdateQueryBuilder } from '../orm/queries/UpdateQueryBuilder';
 import { DeleteQueryBuilder } from '../orm/queries/DeleteQueryBuilder';
 import { buildTestConfig, buildBinaryTestConfig, buildBinaryTestConfigFqn } from './fixtures/c6.fixture';
-import { version } from '../../package.json';
 
 describe('SQL Builders', () => {
   it('builds SELECT with JOIN, WHERE, GROUP BY, HAVING and default LIMIT', () => {
@@ -44,11 +43,11 @@ describe('SQL Builders', () => {
     expect(params).toEqual(['%A%', 10, 1]);
   });
 
-  it('logs SELECT statements with package version', () => {
+  it('logs SELECT aggregate expressions at DEBUG level', () => {
     const config = buildTestConfig();
     const logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
     const qb = new SelectQueryBuilder(config as any, {
-      SELECT: ['actor.first_name'],
+      SELECT: [[C6C.COUNT, 'actor.actor_id', C6C.AS, 'cnt']],
     } as any, false);
 
     qb.build('actor');
@@ -59,7 +58,7 @@ describe('SQL Builders', () => {
     const selectLine = logLines.find((line) => line.includes('[SELECT]'));
 
     expect(selectLine).toBeDefined();
-    expect(selectLine).toContain(`[${version}]`);
+    expect(selectLine).toContain('COUNT(actor.actor_id) AS cnt');
     logSpy.mockRestore();
   });
 

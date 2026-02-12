@@ -119,6 +119,7 @@ describe("SQL allowlist", () => {
       await expect(
         Actor.Get({
           [C6.PAGINATION]: {[C6.LIMIT]: 1},
+          cacheResults: false,
         } as any)
       ).rejects.toThrow("SQL statement is not permitted");
     } finally {

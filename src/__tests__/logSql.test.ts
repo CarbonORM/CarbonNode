@@ -37,13 +37,18 @@ describe("logSql", () => {
         process.env[LOG_LEVEL_KEY] = "DEBUG";
         const spy = vi.spyOn(console, "log").mockImplementation(() => {});
 
-        logSql("SELECT", "SELECT * FROM `users`");
+        logSql({
+            method: "SELECT",
+            sql: "SELECT * FROM `users`",
+            cacheStatus: "miss",
+            allowListStatus: "not verified",
+        });
 
         expect(spy).toHaveBeenCalledTimes(1);
         const message = stripAnsi(String(spy.mock.calls[0][0]));
         expect(message).toContain(`[${version}]`);
         expect(message).toContain("[CACHE MISS]");
-        expect(message).toContain("[ALLOWLIST NOT VERIFIED]");
+        expect(message).toContain("[NOT VERIFIED]");
         expect(message).toContain("[API]");
         expect(message).toContain("[SELECT]");
         // noinspection SqlResolve - resolve not intended for this test
@@ -55,7 +60,12 @@ describe("logSql", () => {
         process.env[LOG_LEVEL_KEY] = "DEBUG";
         const spy = vi.spyOn(console, "log").mockImplementation(() => {});
 
-        logSql("DELETE", "DELETE `users` FROM `users`");
+        logSql({
+            method: "DELETE",
+            sql: "DELETE `users` FROM `users`",
+            cacheStatus: "miss",
+            allowListStatus: "not verified",
+        });
 
         const message = stripAnsi(String(spy.mock.calls[0][0]));
         expect(message).toContain("[CACHE MISS]");
@@ -70,7 +80,9 @@ describe("logSql", () => {
         const spy = vi.spyOn(console, "log").mockImplementation(() => {});
 
         // noinspection SqlResolve - resolve not intended for this test
-        logSql("SELECT", "SELECT * FROM `users`", undefined, {
+        logSql({
+            method: "SELECT",
+            sql: "SELECT * FROM `users`",
             cacheStatus: "ignored",
             allowListStatus: "allowed",
         });
@@ -80,14 +92,16 @@ describe("logSql", () => {
         expect(message).toContain("[VERIFIED]");
     });
 
-    it("keeps legacy boolean cache-hit signature", () => {
+    it("supports cache-hit indicators", () => {
         process.env[SSR_ENV_KEY] = "false";
         process.env[LOG_LEVEL_KEY] = "DEBUG";
         const spy = vi.spyOn(console, "log").mockImplementation(() => {});
 
-        logSql("SELECT", "SELECT * FROM `users`", undefined, {
+        logSql({
+            method: "SELECT",
+            sql: "SELECT * FROM `users`",
             cacheStatus: "hit",
-            allowListStatus: 'allowed',
+            allowListStatus: "allowed",
         });
 
         const message = stripAnsi(String(spy.mock.calls[0][0]));

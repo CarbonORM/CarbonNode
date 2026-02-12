@@ -13,7 +13,7 @@ export type LogSqlContextOptions = {
     allowListStatus: SqlAllowListStatus;
     method: string,
     sql: string,
-    context: LogContext,
+    context?: LogContext,
 };
 
 const C = {
@@ -87,13 +87,9 @@ const allowListLabel = (status: SqlAllowListStatus): string => {
 export default function logSql(
     options: LogSqlContextOptions,
 ): void {
-    const {
-        method,
-        sql,
-        context,
-    } = options;
+    const method = options.method.toUpperCase();
 
-    if (!shouldLog(LogLevel.INFO, context)) return;
+    if (!shouldLog(LogLevel.INFO, options.context)) return;
     const preText = getEnvBool("SSR", false)
         ? `${C.SSR}[SSR]${C.RESET} `
         : `${C.HTTP}[API]${C.RESET} `;
@@ -103,6 +99,6 @@ export default function logSql(
     const cacheText = cacheLabel(options.cacheStatus);
     const allowListText = allowListLabel(options.allowListStatus);
     console.log(
-        `${versionColor}[${version}]${C.RESET} ${cacheText} ${allowListText} ${preText}${labelColor}[${method}]${C.RESET} ${colorSql(sql)}`,
+        `${versionColor}[${version}]${C.RESET} ${cacheText} ${allowListText} ${preText}${labelColor}[${method}]${C.RESET} ${colorSql(options.sql)}`,
     );
 }
