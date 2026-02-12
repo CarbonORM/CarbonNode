@@ -16,7 +16,7 @@ import namedPlaceholders from 'named-placeholders';
 import type { PoolConnection } from 'mysql2/promise';
 import { Buffer } from 'buffer';
 import { Executor } from "./Executor";
-import {checkCache, setCache} from "../utils/cacheManager";
+import {checkCache, evictCacheEntry, setCache} from "../utils/cacheManager";
 import logSql, {
     SqlAllowListStatus,
 } from "../utils/logSql";
@@ -558,6 +558,11 @@ export class SqlExecutor<
             ? sortAndSerializeQueryObject(tableName, cacheRequestData ?? {})
             : undefined;
 
+        const evictFromCache =
+            method === C6C.GET && cacheResults && cacheRequestData
+                ? () => evictCacheEntry(method, tableName, cacheRequestData)
+                : undefined;
+
         if (cacheResults) {
             const cachedRequest = checkCache<DetermineResponseDataType<G['RequestMethod'], G['RestTableInterface']>>(
                 method,
@@ -566,7 +571,14 @@ export class SqlExecutor<
                 logContext
             );
             if (cachedRequest) {
-                return (await cachedRequest).data;
+                const cachedData = (await cachedRequest).data;
+                if (evictFromCache
+                    && cachedData
+                    && typeof cachedData === "object"
+                    && Array.isArray((cachedData as DetermineResponseDataType<'GET', G['RestTableInterface']>).rest)) {
+                    (cachedData as DetermineResponseDataType<'GET', G['RestTableInterface']>).evictFromCache = evictFromCache;
+                }
+                return cachedData;
             }
         }
 
@@ -586,9 +598,15 @@ export class SqlExecutor<
             return await queryPromise;
         }
 
-        const cacheRequest = queryPromise.then((data) =>
-            this.createCacheResponseEnvelope(method, tableName, data),
-        );
+        const cacheRequest = queryPromise.then((data) => {
+            if (evictFromCache
+                && data
+                && typeof data === "object"
+                && Array.isArray((data as DetermineResponseDataType<'GET', G['RestTableInterface']>).rest)) {
+                (data as DetermineResponseDataType<'GET', G['RestTableInterface']>).evictFromCache = evictFromCache;
+            }
+            return this.createCacheResponseEnvelope(method, tableName, data);
+        });
 
         setCache(method, tableName, cacheRequestData, {
             requestArgumentsSerialized,

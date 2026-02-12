@@ -13,7 +13,7 @@ import {
     PUT, RequestQueryBody
 } from "../types/ormInterfaces";
 import {removeInvalidKeys, removePrefixIfExists, TestRestfulResponse} from "../utils/apiHelpers";
-import {checkCache, setCache, userCustomClearCache} from "../utils/cacheManager";
+import {checkCache, evictCacheEntry, setCache, userCustomClearCache} from "../utils/cacheManager";
 import {sortAndSerializeQueryObject} from "../utils/sortAndSerializeQueryObject";
 import {notifyToast} from "../utils/toastRuntime";
 import {Executor} from "./Executor";
@@ -254,6 +254,11 @@ export class HttpExecutor<
                 G['RequestTableOverrides']
             >;
 
+            const evictFromCache =
+                requestMethod === GET && cacheResults
+                    ? () => evictCacheEntry(requestMethod, tableName, cacheRequestData)
+                    : undefined;
+
             // literally impossible for query to be undefined or null here but the editor is too busy licking windows to understand that
             let querySerialized: string = sortAndSerializeQueryObject(tables, cacheRequestData ?? {});
 
@@ -264,7 +269,14 @@ export class HttpExecutor<
             }
 
             if (cachedRequest) {
-                return (await cachedRequest).data;
+                const cachedData = (await cachedRequest).data;
+                if (evictFromCache
+                    && cachedData
+                    && typeof cachedData === "object"
+                    && Array.isArray((cachedData as C6RestResponse<'GET', G['RestTableInterface']>).rest)) {
+                    (cachedData as C6RestResponse<'GET', G['RestTableInterface']>).evictFromCache = evictFromCache;
+                }
+                return cachedData;
             }
 
             if (cacheResults) {
@@ -544,7 +556,7 @@ export class HttpExecutor<
                             callback();
                         }
 
-                        if (C6.GET === requestMethod && this.isRestResponse(response)) {
+                        if (requestMethod === GET && this.isRestResponse(response)) {
 
                             const responseData =
                                 response.data as DetermineResponseDataType<'GET', G['RestTableInterface']>;
@@ -560,6 +572,10 @@ export class HttpExecutor<
                                 >;
                             } else {
                                 responseData.next = undefined;    // short page => done
+                            }
+
+                            if (cachingConfirmed && evictFromCache) {
+                                responseData.evictFromCache = evictFromCache;
                             }
 
                             if (cachingConfirmed) {

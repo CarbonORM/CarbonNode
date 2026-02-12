@@ -140,7 +140,10 @@ export type C6RestResponse<
     session?: any;
     sql?: any;
 } & (Method extends 'GET'
-    ? { next?: () => Promise<DetermineResponseDataType<'GET', RestData, Overrides>> }
+    ? {
+        next?: () => Promise<DetermineResponseDataType<'GET', RestData, Overrides>>,
+        evictFromCache?: () => boolean
+    }
     : {
         affected: number,
         insertId?: number | string,

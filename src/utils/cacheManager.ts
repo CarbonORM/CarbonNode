@@ -98,3 +98,12 @@ export function setCache<ResponseDataType = any>(
     const key = makeCacheKey(method, tableName, requestData);
     apiRequestCache.set(key, cacheEntry);
 }
+
+export function evictCacheEntry(
+    method: string,
+    tableName: string | string[],
+    requestData: any,
+): boolean {
+    const key = makeCacheKey(method, tableName, requestData);
+    return apiRequestCache.delete(key);
+}
