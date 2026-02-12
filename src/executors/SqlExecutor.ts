@@ -17,14 +17,75 @@ import type { PoolConnection } from 'mysql2/promise';
 import { Buffer } from 'buffer';
 import { Executor } from "./Executor";
 import {checkCache, setCache} from "../utils/cacheManager";
+import logSql, {
+    SqlAllowListStatus,
+} from "../utils/logSql";
 import { normalizeSingularRequest } from "../utils/normalizeSingularRequest";
 import {sortAndSerializeQueryObject} from "../utils/sortAndSerializeQueryObject";
 import { loadSqlAllowList, normalizeSql } from "../utils/sqlAllowList";
 import { getLogContext, LogLevel, logWithLevel } from "../utils/logLevel";
 
+const SQL_ALLOWLIST_BLOCKED_CODE = "SQL_ALLOWLIST_BLOCKED";
+
+export type SqlAllowListBlockedError = Error & {
+    code: typeof SQL_ALLOWLIST_BLOCKED_CODE;
+    tableName?: string;
+    method?: string;
+    normalizedSql: string;
+    allowListPath: string;
+    sqlAllowList: {
+        sql: string;
+        table: string | null;
+        method: string | null;
+        allowListPath: string;
+        canAdd: boolean;
+    };
+};
+
+const createSqlAllowListBlockedError = (args: {
+    tableName?: string;
+    method?: string;
+    normalizedSql: string;
+    allowListPath: string;
+}): SqlAllowListBlockedError => {
+    const error = new Error(
+        `SQL statement is not permitted by allowlist (${args.allowListPath}).`,
+    ) as SqlAllowListBlockedError;
+
+    error.name = "SqlAllowListBlockedError";
+    error.code = SQL_ALLOWLIST_BLOCKED_CODE;
+    error.tableName = args.tableName;
+    error.method = args.method;
+    error.normalizedSql = args.normalizedSql;
+    error.allowListPath = args.allowListPath;
+    error.sqlAllowList = {
+        sql: args.normalizedSql,
+        table: args.tableName ?? null,
+        method: args.method ?? null,
+        allowListPath: args.allowListPath,
+        canAdd: true,
+    };
+
+    return error;
+};
+
 export class SqlExecutor<
     G extends OrmGenerics
 > extends Executor<G> {
+    private resolveSqlLogMethod(method: iRestMethods, sql: string): string {
+        const token = sql.trim().split(/\s+/, 1)[0]?.toUpperCase();
+        if (token) return token;
+        switch (method) {
+            case C6C.GET:
+                return "SELECT";
+            case C6C.POST:
+                return "INSERT";
+            case C6C.PUT:
+                return "UPDATE";
+            default:
+                return "DELETE";
+        }
+    }
 
     async execute(): Promise<DetermineResponseDataType<G['RequestMethod'], G['RestTableInterface']>> {
         const { TABLE_NAME } = this.config.restModel;
@@ -487,8 +548,7 @@ export class SqlExecutor<
         const tableName = this.config.restModel.TABLE_NAME;
         const logContext = getLogContext(this.config, this.request);
         const cacheResults = method === C6C.GET
-            && !this.config.sqlAllowListPath
-            && (this.request as { cacheResults?: boolean })?.cacheResults !== false;
+            && (this.request.cacheResults ?? true);
 
         const cacheRequestData = cacheResults
             ? JSON.parse(JSON.stringify(this.request ?? {}))
@@ -503,6 +563,7 @@ export class SqlExecutor<
                 method,
                 tableName,
                 cacheRequestData,
+                logContext
             );
             if (cachedRequest) {
                 return (await cachedRequest).data;
@@ -510,8 +571,15 @@ export class SqlExecutor<
         }
 
         const sqlExecution = this.buildSqlExecutionContext(method, tableName, logContext);
+        const sqlMethod = this.resolveSqlLogMethod(method, sqlExecution.sql);
         const queryPromise = this.withConnection(async (conn) =>
-            this.executeQueryWithLifecycle(conn, method, sqlExecution, logContext),
+            this.executeQueryWithLifecycle(
+                conn,
+                method,
+                sqlExecution,
+                logContext,
+                sqlMethod
+            ),
         );
 
         if (!cacheResults || !cacheRequestData || !requestArgumentsSerialized) {
@@ -640,6 +708,7 @@ export class SqlExecutor<
         method: iRestMethods,
         sqlExecution: iRestSqlExecutionContext,
         logContext: ReturnType<typeof getLogContext>,
+        sqlMethod: string
     ): Promise<DetermineResponseDataType<G['RequestMethod'], G['RestTableInterface']>> {
         const useTransaction = method !== C6C.GET;
         let committed = false;
@@ -655,7 +724,21 @@ export class SqlExecutor<
                 await conn.beginTransaction();
             }
 
-            await this.validateSqlAllowList(sqlExecution.sql);
+            let allowListStatus: SqlAllowListStatus = "not verified";
+            try {
+                allowListStatus = await this.validateSqlAllowList(sqlExecution.sql);
+            } catch (error) {
+                logSql(sqlMethod, sqlExecution.sql, logContext, {
+                    cacheStatus: this.request.cacheResults === false ? "ignored" : "miss",
+                    allowListStatus: "denied",
+                });
+                throw error;
+            }
+
+            logSql(sqlMethod, sqlExecution.sql, logContext, {
+                cacheStatus: this.request.cacheResults === false ? "ignored" : "miss",
+                allowListStatus,
+            });
 
             await this.runLifecycleHooks<"beforeExecution">(
                 "beforeExecution",
@@ -729,17 +812,29 @@ export class SqlExecutor<
         }
     }
 
-    private async validateSqlAllowList(sql: string): Promise<void> {
+    private async validateSqlAllowList(sql: string): Promise<SqlAllowListStatus> {
         const allowListPath = this.config.sqlAllowListPath;
         if (!allowListPath) {
-            return;
+            return "not verified";
         }
 
         const allowList = await loadSqlAllowList(allowListPath);
         const normalized = normalizeSql(sql);
         if (!allowList.has(normalized)) {
-            throw new Error(`SQL statement is not permitted by allowlist (${allowListPath}).`);
+            throw createSqlAllowListBlockedError({
+                tableName:
+                    typeof this.config.restModel?.TABLE_NAME === "string"
+                        ? this.config.restModel.TABLE_NAME
+                        : undefined,
+                method:
+                    typeof this.config.requestMethod === "string"
+                        ? this.config.requestMethod
+                        : undefined,
+                normalizedSql: normalized,
+                allowListPath,
+            });
         }
+        return "allowed";
     }
 
 

@@ -1,8 +1,6 @@
 import {C6C} from "../../constants/C6Constants";
 import {ConditionBuilder} from "../builders/ConditionBuilder";
 import {OrmGenerics} from "../../types/ormGenerics";
-import logSql from "../../utils/logSql";
-import {getLogContext} from "../../utils/logLevel";
 
 export class PostQueryBuilder<G extends OrmGenerics> extends ConditionBuilder<G>{
 
@@ -60,8 +58,6 @@ export class PostQueryBuilder<G extends OrmGenerics> extends ConditionBuilder<G>
             const updateClause = updateData.map(k => `\`${k}\` = VALUES(\`${k}\`)`).join(', ');
             sql += ` ON DUPLICATE KEY UPDATE ${updateClause}`;
         }
-
-        logSql(verb, sql, getLogContext(this.config, this.request));
 
         return {sql, params};
     }

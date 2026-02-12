@@ -1,8 +1,6 @@
 import {OrmGenerics} from "../../types/ormGenerics";
 import {PaginationBuilder} from "../builders/PaginationBuilder";
 import {SqlBuilderResult} from "../utils/sqlUtils";
-import logSql from "../../utils/logSql";
-import {getLogContext} from "../../utils/logLevel";
 
 export class SelectQueryBuilder<G extends OrmGenerics> extends PaginationBuilder<G>{
 
@@ -57,8 +55,6 @@ export class SelectQueryBuilder<G extends OrmGenerics> extends PaginationBuilder
         } else if (!isSubSelect) {
             sql += ` LIMIT 100`;
         }
-
-        logSql("SELECT", sql, getLogContext(this.config, this.request));
 
         return { sql, params };
     }

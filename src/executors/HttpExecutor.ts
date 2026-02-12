@@ -260,7 +260,7 @@ export class HttpExecutor<
             let cachedRequest: Promise<{ data: ResponseDataType }> | false = false;
 
             if (cacheResults) {
-                cachedRequest = checkCache<ResponseDataType>(requestMethod, tableName, cacheRequestData);
+                cachedRequest = checkCache<ResponseDataType>(requestMethod, tableName, cacheRequestData, logContext);
             }
 
             if (cachedRequest) {

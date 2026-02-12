@@ -125,4 +125,103 @@ describe("SQL allowlist", () => {
       restoreGlobals(originalGlobals);
     }
   });
+
+  it("normalizes multi-row VALUES with variable row counts", () => {
+    const oneRow = `
+      INSERT INTO \`valuation_report_comparables\` (\`report_id\`, \`unit_id\`, \`subject_unit_id\`)
+      VALUES (?, ?, ?)
+      ON DUPLICATE KEY UPDATE \`subject_unit_id\` = VALUES(\`subject_unit_id\`)
+    `;
+    const manyRows = `
+      INSERT INTO \`valuation_report_comparables\` (\`report_id\`, \`unit_id\`, \`subject_unit_id\`)
+      VALUES (?, ?, ?), (?, ?, ?), (?, ?, ?), (?, ?, ?)
+      ON DUPLICATE KEY UPDATE \`subject_unit_id\` = VALUES(\`subject_unit_id\`)
+    `;
+
+    expect(normalizeSql(oneRow)).toContain("VALUES (? ×3) ×*");
+    expect(normalizeSql(manyRows)).toContain("VALUES (? ×3) ×*");
+    expect(normalizeSql(oneRow)).toBe(normalizeSql(manyRows));
+  });
+
+  it("normalizes IN bind list cardinality", () => {
+    const smallIn = "SELECT * FROM `geometries` WHERE ( geometries.geometry_id IN (?, ?, ?) ) LIMIT 100";
+    const largeIn = "SELECT * FROM `geometries` WHERE ( geometries.geometry_id IN (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ) LIMIT 250";
+
+    const normalizedSmall = normalizeSql(smallIn);
+    const normalizedLarge = normalizeSql(largeIn);
+
+    expect(normalizedSmall).toContain("IN (? ×*)");
+    expect(normalizedLarge).toContain("IN (? ×*)");
+    expect(normalizedSmall).toContain("LIMIT ?");
+    expect(normalizedLarge).toContain("LIMIT ?");
+    expect(normalizedSmall).toBe(normalizedLarge);
+  });
+
+  it("normalizes LIMIT and OFFSET numeric literals", () => {
+    expect(normalizeSql("SELECT * FROM `actor` LIMIT 100")).toBe(
+      normalizeSql("SELECT * FROM `actor` LIMIT 25"),
+    );
+    expect(normalizeSql("SELECT * FROM `actor` LIMIT 10, 50")).toBe(
+      "SELECT * FROM `actor` LIMIT ?, ?",
+    );
+    expect(normalizeSql("SELECT * FROM `actor` LIMIT 50 OFFSET 100")).toBe(
+      "SELECT * FROM `actor` LIMIT ? OFFSET ?",
+    );
+  });
+
+  it("normalizes variable ST_GEOMFROMTEXT POINT and POLYGON literals", () => {
+    const q1 = `
+      SELECT * FROM \`property_units\`
+      WHERE MBRCONTAINS(
+        ST_GEOMFROMTEXT('POLYGON((39.1 -105.1, 39.2 -105.1, 39.2 -105.0, 39.1 -105.0, 39.1 -105.1))', 4326),
+        property_units.location
+      )
+      ORDER BY ST_DISTANCE_SPHERE(
+        property_units.location,
+        ST_GEOMFROMTEXT('POINT(39.15 -105.05)', 4326)
+      )
+      LIMIT 100
+    `;
+    const q2 = `
+      SELECT * FROM \`property_units\`
+      WHERE MBRCONTAINS(
+        ST_GEOMFROMTEXT('POLYGON((39.3 -105.3, 39.7 -105.3, 39.7 -104.8, 39.3 -104.8, 39.3 -105.3))', 4326),
+        property_units.location
+      )
+      ORDER BY ST_DISTANCE_SPHERE(
+        property_units.location,
+        ST_GEOMFROMTEXT('POINT(39.5321821 -105.0035613)', 4326)
+      )
+      LIMIT 250
+    `;
+
+    const normalized1 = normalizeSql(q1);
+    const normalized2 = normalizeSql(q2);
+
+    expect(normalized1).toContain("ST_GEOMFROMTEXT('POLYGON((?))', ?)");
+    expect(normalized1).toContain("ST_GEOMFROMTEXT('POINT(? ?)', ?)");
+    expect(normalized1).toContain("ST_DISTANCE_SPHERE(");
+    expect(normalized1).toContain("LIMIT ?");
+    expect(normalized1).toBe(normalized2);
+  });
+
+  it("normalizes geo function casing and FORCE INDEX spacing", () => {
+    const a =
+      "SELECT * FROM `property_units` FORCE INDEX (`idx_county_id`,`idx_property_units_location`) WHERE ST_Distance_Sphere(property_units.location, ST_GeomFromText('POINT(39.5 -105.0)', 4326)) <= 50 LIMIT 100";
+    const b =
+      "SELECT * FROM `property_units` FORCE INDEX (`idx_county_id`, `idx_property_units_location`) WHERE st_distance_sphere(property_units.location, st_geomfromtext('POINT(39.7 -104.9)', 4326)) <= 25 LIMIT 25";
+
+    const normalizedA = normalizeSql(a);
+    const normalizedB = normalizeSql(b);
+
+    expect(normalizedA).toContain("FORCE INDEX (`idx_county_id`, `idx_property_units_location`)");
+    expect(normalizedA).toContain("ST_DISTANCE_SPHERE");
+    expect(normalizedA).toContain("ST_GEOMFROMTEXT('POINT(? ?)', ?)");
+    expect(normalizedA).toContain("LIMIT ?");
+    expect(normalizedB).toContain("FORCE INDEX (`idx_county_id`, `idx_property_units_location`)");
+    expect(normalizedB).toContain("ST_DISTANCE_SPHERE");
+    expect(normalizedB).toContain("ST_GEOMFROMTEXT('POINT(? ?)', ?)");
+    expect(normalizedB).toContain("LIMIT ?");
+  });
+
 });

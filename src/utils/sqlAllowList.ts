@@ -1,9 +1,95 @@
 import isNode from "../variables/isNode";
 
-const allowListCache = new Map<string, Set<string>>();
+type AllowListCacheEntry = {
+    allowList: Set<string>;
+    mtimeMs: number;
+    size: number;
+};
 
-export const normalizeSql = (sql: string): string =>
-    sql.replace(/\s+/g, " ").trim();
+const allowListCache = new Map<string, AllowListCacheEntry>();
+
+const ANSI_ESCAPE_REGEX = /\x1b\[[0-9;]*m/g;
+const COLLAPSED_BIND_ROW_REGEX = /\(\?\s*×\d+\)/g;
+
+function collapseBindGroups(sql: string): string {
+    let normalized = sql.replace(
+        /\(\s*(\?(?:\s*,\s*\?)*)\s*\)/g,
+        (_match, binds: string) => {
+            const bindCount = (binds.match(/\?/g) ?? []).length;
+            return `(? ×${bindCount})`;
+        },
+    );
+
+    normalized = normalized.replace(
+        /(\(\?\s*×\d+\))(?:\s*,\s*\1)+/g,
+        (_match, row) => `${row} ×*`,
+    );
+
+    normalized = normalized.replace(
+        /\b(VALUES|VALUE)\s+(\(\?\s*×\d+\))(?:\s*×\d+|\s*×\*)?/gi,
+        (_match, keyword: string, row: string) => `${keyword} ${row} ×*`,
+    );
+
+    normalized = normalized.replace(
+        /\bIN\s*\(\?\s*×\d+\)/gi,
+        "IN (? ×*)",
+    );
+
+    normalized = normalized.replace(
+        /\(\?\s*×\d+\)\s*×\d+/g,
+        (match) => {
+            const row = match.match(COLLAPSED_BIND_ROW_REGEX)?.[0];
+            return row ? `${row} ×*` : match;
+        },
+    );
+
+    return normalized;
+}
+
+function normalizeLimitOffset(sql: string): string {
+    return sql
+        .replace(/\bLIMIT\s+\d+\s*,\s*\d+\b/gi, "LIMIT ?, ?")
+        .replace(/\bLIMIT\s+\d+\s+OFFSET\s+\d+\b/gi, "LIMIT ? OFFSET ?")
+        .replace(/\bLIMIT\s+\d+\b/gi, "LIMIT ?")
+        .replace(/\bOFFSET\s+\d+\b/gi, "OFFSET ?");
+}
+
+function normalizeGeomFromTextLiterals(sql: string): string {
+    let normalized = sql.replace(
+        /ST_GEOMFROMTEXT\(\s*'POINT\([^']*\)'\s*,\s*(?:\d+|\?)\s*\)/gi,
+        "ST_GEOMFROMTEXT('POINT(? ?)', ?)",
+    );
+
+    normalized = normalized.replace(
+        /ST_GEOMFROMTEXT\(\s*'POLYGON\(\([^']*\)\)'\s*,\s*(?:\d+|\?)\s*\)/gi,
+        "ST_GEOMFROMTEXT('POLYGON((?))', ?)",
+    );
+
+    return normalized;
+}
+
+function normalizeGeoFunctionNames(sql: string): string {
+    return sql
+        .replace(/\bST_DISTANCE_SPHERE\b/gi, "ST_DISTANCE_SPHERE")
+        .replace(/\bST_GEOMFROMTEXT\b/gi, "ST_GEOMFROMTEXT")
+        .replace(/\bMBRCONTAINS\b/gi, "MBRCONTAINS");
+}
+
+function normalizeTokenPunctuationSpacing(sql: string): string {
+    return sql.replace(/`,\s*`/g, "`, `");
+}
+
+export const normalizeSql = (sql: string): string => {
+    let normalized = sql.replace(ANSI_ESCAPE_REGEX, " ");
+    normalized = normalized.replace(/\s+/g, " ").trim();
+    normalized = normalizeGeoFunctionNames(normalized);
+    normalized = normalizeTokenPunctuationSpacing(normalized);
+    normalized = collapseBindGroups(normalized);
+    normalized = normalizeLimitOffset(normalized);
+    normalized = normalizeGeomFromTextLiterals(normalized);
+    normalized = normalized.replace(/;\s*$/, "");
+    return normalized.replace(/\s+/g, " ").trim();
+};
 
 const parseAllowList = (raw: string, sourcePath: string): string[] => {
     let parsed: unknown;
@@ -30,15 +116,27 @@ const parseAllowList = (raw: string, sourcePath: string): string[] => {
 };
 
 export const loadSqlAllowList = async (allowListPath: string): Promise<Set<string>> => {
-    if (allowListCache.has(allowListPath)) {
-        return allowListCache.get(allowListPath)!;
-    }
-
     if (!isNode()) {
         throw new Error("SQL allowlist validation requires a Node runtime.");
     }
 
-    const {readFile} = await import("node:fs/promises");
+    const {readFile, stat} = await import("node:fs/promises");
+
+    let fileStat: { mtimeMs: number; size: number };
+    try {
+        fileStat = await stat(allowListPath);
+    } catch (error) {
+        throw new Error(`SQL allowlist file not found at ${allowListPath}.`);
+    }
+
+    const cached = allowListCache.get(allowListPath);
+    if (
+        cached &&
+        cached.mtimeMs === fileStat.mtimeMs &&
+        cached.size === fileStat.size
+    ) {
+        return cached.allowList;
+    }
 
     let raw: string;
     try {
@@ -49,7 +147,11 @@ export const loadSqlAllowList = async (allowListPath: string): Promise<Set<strin
 
     const sqlEntries = parseAllowList(raw, allowListPath);
     const allowList = new Set(sqlEntries);
-    allowListCache.set(allowListPath, allowList);
+    allowListCache.set(allowListPath, {
+        allowList,
+        mtimeMs: fileStat.mtimeMs,
+        size: fileStat.size,
+    });
     return allowList;
 };
 

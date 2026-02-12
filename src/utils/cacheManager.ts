@@ -1,5 +1,6 @@
 import type {iCacheAPI, iCacheResponse} from "../types/ormInterfaces";
-import {LogLevel, logWithLevel, shouldLog} from "./logLevel";
+import {LogContext, LogLevel, logWithLevel, shouldLog} from "./logLevel";
+import logSql from "./logSql";
 
 // -----------------------------------------------------------------------------
 // Cache Storage
@@ -60,19 +61,23 @@ export function checkCache<ResponseDataType = any>(
     method: string,
     tableName: string | string[],
     requestData: any,
+    logContext: LogContext | undefined,
 ): Promise<iCacheResponse<ResponseDataType>> | false {
     const key = makeCacheKey(method, tableName, requestData);
     const cached = apiRequestCache.get(key);
 
-    if (!cached) return false;
+    if (!cached) {
+        console.log('apiRequestCache.size', apiRequestCache.size)
+        return false;
+    }
 
-    if (shouldLog(LogLevel.INFO, undefined)) {
-        console.groupCollapsed(
-            `%c API cache hit for ${method} ${tableName}`,
-            "color:#0c0",
-        );
-        console.log("Request Data:", requestData);
-        console.groupEnd();
+    if (shouldLog(LogLevel.INFO, logContext)) {
+        const sql = cached.response?.data?.sql?.sql ?? "";
+        const sqlMethod = sql.trim().split(/\s+/, 1)[0]?.toUpperCase() || method;
+        logSql(sqlMethod, sql, logContext, {
+            cacheStatus: "hit",
+            allowListStatus: "not verified",
+        });
     }
 
     return cached.request;

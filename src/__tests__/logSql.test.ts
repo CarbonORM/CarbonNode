@@ -1,3 +1,5 @@
+// noinspection SqlResolve
+
 import { describe, it, expect, vi, afterEach } from "vitest";
 import logSql from "../utils/logSql";
 import colorSql from "../utils/colorSql";
@@ -40,8 +42,11 @@ describe("logSql", () => {
         expect(spy).toHaveBeenCalledTimes(1);
         const message = stripAnsi(String(spy.mock.calls[0][0]));
         expect(message).toContain(`[${version}]`);
+        expect(message).toContain("[CACHE MISS]");
+        expect(message).toContain("[ALLOWLIST NOT VERIFIED]");
         expect(message).toContain("[API]");
         expect(message).toContain("[SELECT]");
+        // noinspection SqlResolve - resolve not intended for this test
         expect(message).toContain("SELECT * FROM `users`");
     });
 
@@ -53,8 +58,40 @@ describe("logSql", () => {
         logSql("DELETE", "DELETE `users` FROM `users`");
 
         const message = stripAnsi(String(spy.mock.calls[0][0]));
+        expect(message).toContain("[CACHE MISS]");
+        expect(message).toContain("[NOT VERIFIED]");
         expect(message).toContain("[SSR]");
         expect(message).toContain("[DELETE]");
+    });
+
+    it("supports explicit cache and allowlist indicators", () => {
+        process.env[SSR_ENV_KEY] = "false";
+        process.env[LOG_LEVEL_KEY] = "DEBUG";
+        const spy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+        // noinspection SqlResolve - resolve not intended for this test
+        logSql("SELECT", "SELECT * FROM `users`", undefined, {
+            cacheStatus: "ignored",
+            allowListStatus: "allowed",
+        });
+
+        const message = stripAnsi(String(spy.mock.calls[0][0]));
+        expect(message).toContain("[CACHE IGNORED]");
+        expect(message).toContain("[VERIFIED]");
+    });
+
+    it("keeps legacy boolean cache-hit signature", () => {
+        process.env[SSR_ENV_KEY] = "false";
+        process.env[LOG_LEVEL_KEY] = "DEBUG";
+        const spy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+        logSql("SELECT", "SELECT * FROM `users`", undefined, {
+            cacheStatus: "hit",
+            allowListStatus: 'allowed',
+        });
+
+        const message = stripAnsi(String(spy.mock.calls[0][0]));
+        expect(message).toContain("[CACHE HIT]");
     });
 });
 
@@ -69,6 +106,7 @@ describe("colorSql", () => {
     });
 
     it("collapses repeated multi-row value groups", () => {
+        // noinspection SqlResolve - resolve not intended for this test
         const sql = `INSERT INTO \`valuation_report_comparables\` (a,b,c) VALUES
             (?, ?, ?),
             (?, ?, ?),
