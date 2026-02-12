@@ -61,7 +61,7 @@ export function checkCache<ResponseDataType = any>(
     method: string,
     tableName: string | string[],
     requestData: any,
-    logContext: LogContext | undefined,
+    logContext: LogContext,
 ): Promise<iCacheResponse<ResponseDataType>> | false {
     const key = makeCacheKey(method, tableName, requestData);
     const cached = apiRequestCache.get(key);
@@ -74,9 +74,12 @@ export function checkCache<ResponseDataType = any>(
     if (shouldLog(LogLevel.INFO, logContext)) {
         const sql = cached.response?.data?.sql?.sql ?? "";
         const sqlMethod = sql.trim().split(/\s+/, 1)[0]?.toUpperCase() || method;
-        logSql(sqlMethod, sql, logContext, {
-            cacheStatus: "hit",
+        logSql({
             allowListStatus: "not verified",
+            cacheStatus: "hit",
+            context: logContext,
+            method: sqlMethod,
+            sql
         });
     }
 

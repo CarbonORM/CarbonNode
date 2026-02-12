@@ -728,14 +728,20 @@ export class SqlExecutor<
             try {
                 allowListStatus = await this.validateSqlAllowList(sqlExecution.sql);
             } catch (error) {
-                logSql(sqlMethod, sqlExecution.sql, logContext, {
+                logSql({
+                    method: sqlMethod,
+                    sql: sqlExecution.sql,
+                    context: logContext,
                     cacheStatus: this.request.cacheResults === false ? "ignored" : "miss",
                     allowListStatus: "denied",
                 });
                 throw error;
             }
 
-            logSql(sqlMethod, sqlExecution.sql, logContext, {
+            logSql({
+                method: sqlMethod,
+                sql: sqlExecution.sql,
+                context: logContext,
                 cacheStatus: this.request.cacheResults === false ? "ignored" : "miss",
                 allowListStatus,
             });

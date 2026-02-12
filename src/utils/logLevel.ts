@@ -135,10 +135,9 @@ export const applyLogLevelDefaults = (
 };
 
 export const getLogContext = (
-    config?: { logLevel?: number | null; verbose?: boolean | null },
-    request?: { debug?: boolean } | null,
-): LogContext | undefined => {
-    if (!config && !request) return undefined;
+    config: { logLevel?: number | null; verbose?: boolean | null },
+    request: { debug?: boolean } | null,
+): LogContext => {
     return {
         logLevel: config?.logLevel ?? undefined,
         verbose: config?.verbose ?? undefined,
