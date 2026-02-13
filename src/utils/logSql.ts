@@ -6,7 +6,7 @@ import type { LogContext } from "./logLevel";
 import { LogLevel, shouldLog } from "./logLevel";
 
 export type SqlAllowListStatus = "allowed" | "denied" | "not verified";
-export type SqlCacheStatus = "hit" | "miss" | "ignored";
+export type SqlCacheStatus = "hit" | "miss" | "ignored" | "evicted";
 
 export type LogSqlContextOptions = {
     cacheStatus: SqlCacheStatus;
@@ -66,6 +66,8 @@ const cacheLabel = (cacheStatus: SqlCacheStatus): string => {
     switch (cacheStatus) {
         case "hit":
             return `${C.METHOD_COLORS.SELECT}[CACHE HIT]${C.RESET}`;
+        case "evicted":
+            return `${C.WARN}[CACHE EVICTED]${C.RESET}`;
         case "ignored":
             return `${C.WARN}[CACHE IGNORED]${C.RESET}`;
         default:

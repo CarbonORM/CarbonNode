@@ -1,9 +1,10 @@
 import type { AxiosPromise } from "axios";
-import { describe, it, expect, beforeEach } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   apiRequestCache,
   checkCache,
   clearCache,
+  evictCacheEntry,
   setCache,
 } from "../utils/cacheManager";
 import { checkAllRequestsComplete } from "../utils/testHelpers";
@@ -62,5 +63,30 @@ describe("cacheManager with map storage", () => {
     expect(checkAllRequestsComplete()).toBe(true);
 
     (global as any).document = originalDocument;
+  });
+
+  it("logs SQL details when evicting a cached entry", () => {
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    const mockRequest = Promise.resolve({ data: { rest: [] } }) as AxiosPromise;
+
+    setCache("GET", "table", requestData, {
+      requestArgumentsSerialized: "serialized",
+      request: mockRequest,
+      response: {
+        data: {
+          sql: {
+            sql: "SELECT * FROM table WHERE id = 1",
+          },
+        },
+      } as any,
+      final: true,
+    });
+
+    expect(evictCacheEntry("GET", "table", requestData, { verbose: true })).toBe(true);
+    expect(logSpy).toHaveBeenCalledTimes(1);
+    expect(String(logSpy.mock.calls[0]?.[0] ?? "")).toContain("[CACHE EVICTED]");
+    expect(String(logSpy.mock.calls[0]?.[0] ?? "")).toContain("[SELECT]");
+
+    logSpy.mockRestore();
   });
 });

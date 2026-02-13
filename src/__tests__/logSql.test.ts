@@ -107,6 +107,22 @@ describe("logSql", () => {
         const message = stripAnsi(String(spy.mock.calls[0][0]));
         expect(message).toContain("[CACHE HIT]");
     });
+
+    it("supports cache-evicted indicators", () => {
+        process.env[SSR_ENV_KEY] = "false";
+        process.env[LOG_LEVEL_KEY] = "DEBUG";
+        const spy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+        logSql({
+            method: "SELECT",
+            sql: "SELECT * FROM `users`",
+            cacheStatus: "evicted",
+            allowListStatus: "allowed",
+        });
+
+        const message = stripAnsi(String(spy.mock.calls[0][0]));
+        expect(message).toContain("[CACHE EVICTED]");
+    });
 });
 
 describe("colorSql", () => {

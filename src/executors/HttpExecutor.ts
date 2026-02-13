@@ -256,7 +256,7 @@ export class HttpExecutor<
 
             const evictFromCache =
                 requestMethod === GET && cacheResults
-                    ? () => evictCacheEntry(requestMethod, tableName, cacheRequestData)
+                    ? () => evictCacheEntry(requestMethod, tableName, cacheRequestData, logContext)
                     : undefined;
 
             // literally impossible for query to be undefined or null here but the editor is too busy licking windows to understand that

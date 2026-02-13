@@ -560,7 +560,7 @@ export class SqlExecutor<
 
         const evictFromCache =
             method === C6C.GET && cacheResults && cacheRequestData
-                ? () => evictCacheEntry(method, tableName, cacheRequestData)
+                ? () => evictCacheEntry(method, tableName, cacheRequestData, logContext)
                 : undefined;
 
         if (cacheResults) {

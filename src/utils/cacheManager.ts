@@ -67,7 +67,6 @@ export function checkCache<ResponseDataType = any>(
     const cached = apiRequestCache.get(key);
 
     if (!cached) {
-        console.log('apiRequestCache.size', apiRequestCache.size)
         return false;
     }
 
@@ -103,7 +102,23 @@ export function evictCacheEntry(
     method: string,
     tableName: string | string[],
     requestData: any,
+    logContext?: LogContext,
 ): boolean {
     const key = makeCacheKey(method, tableName, requestData);
-    return apiRequestCache.delete(key);
+    const cached = apiRequestCache.get(key);
+    const deleted = apiRequestCache.delete(key);
+
+    if (deleted && shouldLog(LogLevel.INFO, logContext)) {
+        const sql = cached?.response?.data?.sql?.sql ?? "";
+        const sqlMethod = sql.trim().split(/\s+/, 1)[0]?.toUpperCase() || method;
+        logSql({
+            allowListStatus: "not verified",
+            cacheStatus: "evicted",
+            context: logContext,
+            method: sqlMethod,
+            sql,
+        });
+    }
+
+    return deleted;
 }
