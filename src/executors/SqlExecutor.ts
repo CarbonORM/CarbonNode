@@ -15,7 +15,6 @@ import {
 import namedPlaceholders from 'named-placeholders';
 import type { PoolConnection } from 'mysql2/promise';
 import { Buffer } from 'buffer';
-import { randomUUID } from 'crypto';
 import { Executor } from "./Executor";
 import {checkCache, evictCacheEntry, setCache} from "../utils/cacheManager";
 import logSql, {
@@ -27,6 +26,43 @@ import { loadSqlAllowList, normalizeSql } from "../utils/sqlAllowList";
 import { getLogContext, LogLevel, logWithLevel } from "../utils/logLevel";
 
 const SQL_ALLOWLIST_BLOCKED_CODE = "SQL_ALLOWLIST_BLOCKED";
+
+const fillRandomBytes = (bytes: Uint8Array): void => {
+    const cryptoRef = (globalThis as { crypto?: Crypto }).crypto;
+    if (!cryptoRef || typeof cryptoRef.getRandomValues !== "function") {
+        throw new Error("Secure random source unavailable: crypto.getRandomValues is required for UUID generation.");
+    }
+    cryptoRef.getRandomValues(bytes);
+};
+
+const generateUuidV7 = (): string => {
+    const bytes = new Uint8Array(16);
+    const random = new Uint8Array(10);
+    fillRandomBytes(random);
+
+    const timestampMs = Date.now();
+    bytes[0] = Math.floor(timestampMs / 1099511627776) & 0xff; // 2^40
+    bytes[1] = Math.floor(timestampMs / 4294967296) & 0xff; // 2^32
+    bytes[2] = Math.floor(timestampMs / 16777216) & 0xff; // 2^24
+    bytes[3] = Math.floor(timestampMs / 65536) & 0xff; // 2^16
+    bytes[4] = Math.floor(timestampMs / 256) & 0xff; // 2^8
+    bytes[5] = timestampMs & 0xff;
+
+    // RFC 9562 UUIDv7 layout
+    bytes[6] = 0x70 | (random[0] & 0x0f); // version 7 + rand_a high bits
+    bytes[7] = random[1]; // rand_a low bits
+    bytes[8] = 0x80 | (random[2] & 0x3f); // variant + rand_b high bits
+    bytes[9] = random[3];
+    bytes[10] = random[4];
+    bytes[11] = random[5];
+    bytes[12] = random[6];
+    bytes[13] = random[7];
+    bytes[14] = random[8];
+    bytes[15] = random[9];
+
+    const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+    return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+};
 
 export type SqlAllowListBlockedError = Error & {
     code: typeof SQL_ALLOWLIST_BLOCKED_CODE;
@@ -132,7 +168,7 @@ export class SqlExecutor<
     private generatePrimaryUuidValue(columnDef: Record<string, any>): string {
         const mysqlType = String(columnDef.MYSQL_TYPE ?? "").toLowerCase();
         const maxLength = String(columnDef.MAX_LENGTH ?? "").trim();
-        const uuid = randomUUID();
+        const uuid = generateUuidV7();
 
         // BINARY(16) and CHAR/VARCHAR(32) commonly persist UUIDs as 32-hex.
         if (mysqlType.includes("binary") || maxLength === "32") {
@@ -703,6 +739,9 @@ export class SqlExecutor<
         const logContext = getLogContext(this.config, this.request);
         const cacheResults = method === C6C.GET
             && (this.request.cacheResults ?? true);
+        const cacheAllowListStatus: SqlAllowListStatus = this.config.sqlAllowListPath
+            ? "allowed"
+            : "not verified";
 
         const cacheRequestData = cacheResults
             ? JSON.parse(JSON.stringify(this.request ?? {}))
@@ -714,7 +753,13 @@ export class SqlExecutor<
 
         const evictFromCache =
             method === C6C.GET && cacheResults && cacheRequestData
-                ? () => evictCacheEntry(method, tableName, cacheRequestData, logContext)
+                ? () => evictCacheEntry(
+                    method,
+                    tableName,
+                    cacheRequestData,
+                    logContext,
+                    cacheAllowListStatus,
+                )
                 : undefined;
 
         if (cacheResults) {
@@ -722,7 +767,8 @@ export class SqlExecutor<
                 method,
                 tableName,
                 cacheRequestData,
-                logContext
+                logContext,
+                cacheAllowListStatus,
             );
             if (cachedRequest) {
                 const cachedData = (await cachedRequest).data;
@@ -765,12 +811,14 @@ export class SqlExecutor<
         setCache(method, tableName, cacheRequestData, {
             requestArgumentsSerialized,
             request: cacheRequest,
+            allowListStatus: cacheAllowListStatus,
         });
 
         const cacheResponse = await cacheRequest;
         setCache(method, tableName, cacheRequestData, {
             requestArgumentsSerialized,
             request: cacheRequest,
+            allowListStatus: cacheAllowListStatus,
             response: cacheResponse,
             final: true,
         });

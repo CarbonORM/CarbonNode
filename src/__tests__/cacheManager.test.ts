@@ -79,13 +79,41 @@ describe("cacheManager with map storage", () => {
           },
         },
       } as any,
+      allowListStatus: "allowed",
       final: true,
     });
 
     expect(evictCacheEntry("GET", "table", requestData, { verbose: true })).toBe(true);
     expect(logSpy).toHaveBeenCalledTimes(1);
     expect(String(logSpy.mock.calls[0]?.[0] ?? "")).toContain("[CACHE EVICTED]");
+    expect(String(logSpy.mock.calls[0]?.[0] ?? "")).toContain("[VERIFIED]");
     expect(String(logSpy.mock.calls[0]?.[0] ?? "")).toContain("[SELECT]");
+
+    logSpy.mockRestore();
+  });
+
+  it("logs verified for cache hits when allowlist is provided", () => {
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    const mockRequest = Promise.resolve({ data: { rest: [] } }) as AxiosPromise;
+
+    setCache("GET", "table", requestData, {
+      requestArgumentsSerialized: "serialized",
+      request: mockRequest,
+      response: {
+        data: {
+          sql: {
+            sql: "SELECT * FROM table WHERE id = 1",
+          },
+        },
+      } as any,
+      final: true,
+    });
+
+    const cached = checkCache("GET", "table", requestData, { verbose: true }, "allowed");
+    expect(cached).toBe(mockRequest);
+    expect(logSpy).toHaveBeenCalledTimes(1);
+    expect(String(logSpy.mock.calls[0]?.[0] ?? "")).toContain("[CACHE HIT]");
+    expect(String(logSpy.mock.calls[0]?.[0] ?? "")).toContain("[VERIFIED]");
 
     logSpy.mockRestore();
   });

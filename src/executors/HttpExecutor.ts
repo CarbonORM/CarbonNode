@@ -14,6 +14,7 @@ import {
 } from "../types/ormInterfaces";
 import {removeInvalidKeys, removePrefixIfExists, TestRestfulResponse} from "../utils/apiHelpers";
 import {checkCache, evictCacheEntry, setCache, userCustomClearCache} from "../utils/cacheManager";
+import type { SqlAllowListStatus } from "../utils/logSql";
 import {sortAndSerializeQueryObject} from "../utils/sortAndSerializeQueryObject";
 import {notifyToast} from "../utils/toastRuntime";
 import {Executor} from "./Executor";
@@ -260,10 +261,19 @@ export class HttpExecutor<
                 G['CustomAndRequiredFields'],
                 G['RequestTableOverrides']
             >;
+            const cacheAllowListStatus: SqlAllowListStatus = this.config.sqlAllowListPath
+                ? "allowed"
+                : "not verified";
 
             const evictFromCache =
                 requestMethod === GET && cacheResults
-                    ? () => evictCacheEntry(requestMethod, tableName, cacheRequestData, logContext)
+                    ? () => evictCacheEntry(
+                        requestMethod,
+                        tableName,
+                        cacheRequestData,
+                        logContext,
+                        cacheAllowListStatus,
+                    )
                     : undefined;
 
             // literally impossible for query to be undefined or null here but the editor is too busy licking windows to understand that
@@ -272,7 +282,13 @@ export class HttpExecutor<
             let cachedRequest: Promise<{ data: ResponseDataType }> | false = false;
 
             if (cacheResults) {
-                cachedRequest = checkCache<ResponseDataType>(requestMethod, tableName, cacheRequestData, logContext);
+                cachedRequest = checkCache<ResponseDataType>(
+                    requestMethod,
+                    tableName,
+                    cacheRequestData,
+                    logContext,
+                    cacheAllowListStatus,
+                );
             }
 
             if (cachedRequest) {
@@ -471,6 +487,7 @@ export class HttpExecutor<
                     setCache<ResponseDataType>(requestMethod, tableName, cacheRequestData, {
                         requestArgumentsSerialized: querySerialized,
                         request: axiosActiveRequest,
+                        allowListStatus: cacheAllowListStatus,
                     });
                 }
 
@@ -487,6 +504,7 @@ export class HttpExecutor<
                                 setCache<ResponseDataType>(requestMethod, tableName, cacheRequestData, {
                                     requestArgumentsSerialized: querySerialized,
                                     request: axiosActiveRequest,
+                                    allowListStatus: cacheAllowListStatus,
                                     response,
                                     final: true,
                                 });
@@ -510,6 +528,7 @@ export class HttpExecutor<
                             setCache<ResponseDataType>(requestMethod, tableName, cacheRequestData, {
                                 requestArgumentsSerialized: querySerialized,
                                 request: axiosActiveRequest,
+                                allowListStatus: cacheAllowListStatus,
                                 response,
                             });
                         }
@@ -589,6 +608,7 @@ export class HttpExecutor<
                                 setCache<ResponseDataType>(requestMethod, tableName, cacheRequestData, {
                                     requestArgumentsSerialized: querySerialized,
                                     request: axiosActiveRequest,
+                                    allowListStatus: cacheAllowListStatus,
                                     response,
                                     final: !hasNext,
                                 });
@@ -877,6 +897,7 @@ export class HttpExecutor<
                             setCache<ResponseDataType>(requestMethod, tableName, cacheRequestData, {
                                 requestArgumentsSerialized: querySerialized,
                                 request: axiosActiveRequest,
+                                allowListStatus: cacheAllowListStatus,
                                 response,
                                 final: true,
                             });

@@ -104,6 +104,14 @@ function buildWriteConn(affectedRows = 1, insertId = 0) {
   };
 }
 
+function expectUuidV7Hex(value: unknown) {
+  expect(typeof value).toBe("string");
+  const hex = String(value).toUpperCase();
+  expect(hex).toMatch(/^[0-9A-F]{32}$/);
+  expect(hex[12]).toBe("7");
+  expect(hex[16]).toMatch(/[89AB]/);
+}
+
 describe("SqlExecutor POST UUID synthesis", () => {
   it("generates missing UUID primary keys for POST and populates rest payload", async () => {
     const conn = buildWriteConn(1, 0);
@@ -122,7 +130,7 @@ describe("SqlExecutor POST UUID synthesis", () => {
       title: "Board One",
       created_by: "user-1",
     });
-    expect(result.rest[0].dashboard_id).toMatch(/^[0-9A-F]{32}$/);
+    expectUuidV7Hex(result.rest[0].dashboard_id);
 
     const [sql, values] = conn.query.mock.calls[0];
     expect(sql).toContain("INSERT INTO `report_dashboards`");
@@ -146,8 +154,8 @@ describe("SqlExecutor POST UUID synthesis", () => {
 
     expect(Array.isArray(result.rest)).toBe(true);
     expect(result.rest).toHaveLength(2);
-    expect(result.rest[0].dashboard_id).toMatch(/^[0-9A-F]{32}$/);
-    expect(result.rest[1].dashboard_id).toMatch(/^[0-9A-F]{32}$/);
+    expectUuidV7Hex(result.rest[0].dashboard_id);
+    expectUuidV7Hex(result.rest[1].dashboard_id);
     expect(result.rest[0].dashboard_id).not.toBe(result.rest[1].dashboard_id);
 
     const [, values] = conn.query.mock.calls[0];

@@ -116,6 +116,7 @@ export interface iCacheResponse<ResponseDataType = any> {
 export interface iCacheAPI<ResponseDataType = any> {
     requestArgumentsSerialized: string;
     request: Promise<iCacheResponse<ResponseDataType>>;
+    allowListStatus?: "allowed" | "denied" | "not verified";
     response?: iCacheResponse<ResponseDataType> & {
         __carbonTiming?: {
             start: number;

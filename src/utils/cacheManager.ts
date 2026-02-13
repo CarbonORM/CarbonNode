@@ -1,6 +1,6 @@
 import type {iCacheAPI, iCacheResponse} from "../types/ormInterfaces";
 import {LogContext, LogLevel, logWithLevel, shouldLog} from "./logLevel";
-import logSql from "./logSql";
+import logSql, { SqlAllowListStatus } from "./logSql";
 
 // -----------------------------------------------------------------------------
 // Cache Storage
@@ -61,7 +61,8 @@ export function checkCache<ResponseDataType = any>(
     method: string,
     tableName: string | string[],
     requestData: any,
-    logContext: LogContext,
+    logContext?: LogContext,
+    allowListStatus?: SqlAllowListStatus,
 ): Promise<iCacheResponse<ResponseDataType>> | false {
     const key = makeCacheKey(method, tableName, requestData);
     const cached = apiRequestCache.get(key);
@@ -74,7 +75,7 @@ export function checkCache<ResponseDataType = any>(
         const sql = cached.response?.data?.sql?.sql ?? "";
         const sqlMethod = sql.trim().split(/\s+/, 1)[0]?.toUpperCase() || method;
         logSql({
-            allowListStatus: "not verified",
+            allowListStatus: cached.allowListStatus ?? allowListStatus ?? "not verified",
             cacheStatus: "hit",
             context: logContext,
             method: sqlMethod,
@@ -103,6 +104,7 @@ export function evictCacheEntry(
     tableName: string | string[],
     requestData: any,
     logContext?: LogContext,
+    allowListStatus?: SqlAllowListStatus,
 ): boolean {
     const key = makeCacheKey(method, tableName, requestData);
     const cached = apiRequestCache.get(key);
@@ -112,7 +114,7 @@ export function evictCacheEntry(
         const sql = cached?.response?.data?.sql?.sql ?? "";
         const sqlMethod = sql.trim().split(/\s+/, 1)[0]?.toUpperCase() || method;
         logSql({
-            allowListStatus: "not verified",
+            allowListStatus: cached?.allowListStatus ?? allowListStatus ?? "not verified",
             cacheStatus: "evicted",
             context: logContext,
             method: sqlMethod,
