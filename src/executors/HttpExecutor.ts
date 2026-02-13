@@ -81,11 +81,18 @@ export class HttpExecutor<
     ) {
         type RT = G['RestTableInterface'];
         type PK = G['PrimaryKey'];
+        const responseRestRaw = (response.data as any)?.rest;
+        const responseRows: Record<string, any>[] = Array.isArray(responseRestRaw)
+            ? responseRestRaw
+            : (responseRestRaw ? [responseRestRaw] : []);
 
         if (this.config.restModel.PRIMARY_SHORT.length === 1) {
             const pk = this.config.restModel.PRIMARY_SHORT[0] as PK;
             try {
-                (request as unknown as Record<PK, RT[PK]>)[pk] = (response.data as any)?.created as RT[PK];
+                const created = (response.data as any)?.created ?? responseRows[0]?.[pk as string];
+                if (created !== undefined) {
+                    (request as unknown as Record<PK, RT[PK]>)[pk] = created as RT[PK];
+                }
             } catch {/* best-effort */}
         } else if (isLocal()) {
             logWithLevel(
@@ -103,13 +110,13 @@ export class HttpExecutor<
                     const normalizedRow = this.stripTableNameFromKeys<RT>(row as Partial<RT>);
                     return removeInvalidKeys<RT>({
                         ...normalizedRow,
-                        ...(index === 0 ? (response?.data as any)?.rest : {}),
+                        ...(responseRows[index] ?? {}),
                     }, this.config.C6.TABLES)
                 })
                 : [
                     removeInvalidKeys<RT>({
                         ...this.stripTableNameFromKeys<RT>(request as unknown as Partial<RT>),
-                        ...(response?.data as any)?.rest,
+                        ...(responseRows[0] ?? {}),
                     }, this.config.C6.TABLES)
                 ],
             stateKey: this.config.restModel.TABLE_NAME,

@@ -15,6 +15,7 @@ import {
 import namedPlaceholders from 'named-placeholders';
 import type { PoolConnection } from 'mysql2/promise';
 import { Buffer } from 'buffer';
+import { randomUUID } from 'crypto';
 import { Executor } from "./Executor";
 import {checkCache, evictCacheEntry, setCache} from "../utils/cacheManager";
 import logSql, {
@@ -72,6 +73,157 @@ const createSqlAllowListBlockedError = (args: {
 export class SqlExecutor<
     G extends OrmGenerics
 > extends Executor<G> {
+    private getPostRequestRows(): Record<string, any>[] {
+        const request = this.request as any;
+        if (!request) return [];
+
+        if (Array.isArray(request)) {
+            return request as Record<string, any>[];
+        }
+
+        if (
+            Array.isArray(request.dataInsertMultipleRows)
+            && request.dataInsertMultipleRows.length > 0
+        ) {
+            return request.dataInsertMultipleRows as Record<string, any>[];
+        }
+
+        const verb = C6C.REPLACE in request ? C6C.REPLACE : C6C.INSERT;
+        if (verb in request && request[verb] && typeof request[verb] === "object") {
+            return [request[verb] as Record<string, any>];
+        }
+
+        if (typeof request === "object") {
+            return [request as Record<string, any>];
+        }
+
+        return [];
+    }
+
+    private getTypeValidationForColumn(shortKey: string, fullKey: string): Record<string, any> | undefined {
+        const validation = (this.config.restModel as any)?.TYPE_VALIDATION;
+        if (!validation || typeof validation !== "object") return undefined;
+        return validation[shortKey] ?? validation[fullKey];
+    }
+
+    private isUuidLikePrimaryColumn(columnDef: Record<string, any> | undefined): boolean {
+        if (!columnDef || typeof columnDef !== "object") return false;
+        if (columnDef.AUTO_INCREMENT === true) return false;
+
+        const mysqlType = String(columnDef.MYSQL_TYPE ?? "").toLowerCase();
+        const maxLength = String(columnDef.MAX_LENGTH ?? "").trim();
+
+        if (mysqlType.includes("uuid")) return true;
+
+        const isBinary16 = mysqlType.includes("binary")
+            && (maxLength === "16" || /\b16\b/.test(mysqlType) || mysqlType === "binary");
+        const isUuidString = (mysqlType.includes("char") || mysqlType.includes("varchar"))
+            && (maxLength === "32" || maxLength === "36");
+
+        return isBinary16 || isUuidString;
+    }
+
+    private hasDefinedValue(value: unknown): boolean {
+        if (value === undefined || value === null) return false;
+        if (typeof value === "string" && value.trim() === "") return false;
+        return true;
+    }
+
+    private generatePrimaryUuidValue(columnDef: Record<string, any>): string {
+        const mysqlType = String(columnDef.MYSQL_TYPE ?? "").toLowerCase();
+        const maxLength = String(columnDef.MAX_LENGTH ?? "").trim();
+        const uuid = randomUUID();
+
+        // BINARY(16) and CHAR/VARCHAR(32) commonly persist UUIDs as 32-hex.
+        if (mysqlType.includes("binary") || maxLength === "32") {
+            return uuid.replace(/-/g, "").toUpperCase();
+        }
+
+        return uuid;
+    }
+
+    private assignMissingPostPrimaryUuids(): void {
+        if (this.config.requestMethod !== C6C.POST) return;
+
+        const rows = this.getPostRequestRows();
+        if (rows.length === 0) return;
+
+        const columns = this.config.restModel.COLUMNS as Record<string, string>;
+        const tableName = this.config.restModel.TABLE_NAME as string;
+        const primaryShorts = this.config.restModel.PRIMARY_SHORT ?? [];
+
+        const primaryColumns = primaryShorts
+            .map((shortKey) => {
+                const fullKey = Object.keys(columns).find((key) => columns[key] === shortKey)
+                    ?? `${tableName}.${shortKey}`;
+                const columnDef = this.getTypeValidationForColumn(shortKey, fullKey);
+                return { shortKey, fullKey, columnDef };
+            })
+            .filter(({ columnDef }) => this.isUuidLikePrimaryColumn(columnDef));
+
+        if (primaryColumns.length === 0) return;
+
+        for (const row of rows) {
+            if (!row || typeof row !== "object") continue;
+
+            const useQualifiedKeyByDefault = Object.keys(row).some((key) => key.includes("."));
+
+            for (const primaryColumn of primaryColumns) {
+                const existing = row[primaryColumn.shortKey] ?? row[primaryColumn.fullKey];
+                if (this.hasDefinedValue(existing)) continue;
+
+                const generated = this.generatePrimaryUuidValue(primaryColumn.columnDef!);
+                if (Object.prototype.hasOwnProperty.call(row, primaryColumn.shortKey)) {
+                    row[primaryColumn.shortKey] = generated;
+                    continue;
+                }
+                if (Object.prototype.hasOwnProperty.call(row, primaryColumn.fullKey)) {
+                    row[primaryColumn.fullKey] = generated;
+                    continue;
+                }
+
+                row[useQualifiedKeyByDefault ? primaryColumn.fullKey : primaryColumn.shortKey] = generated;
+            }
+        }
+    }
+
+    private buildPostResponseRows(insertId?: number | string): Record<string, unknown>[] {
+        const rows = this.getPostRequestRows();
+        if (rows.length === 0) return [];
+
+        const columns = this.config.restModel.COLUMNS as Record<string, string>;
+        const validColumns = new Set(Object.values(columns));
+        const pkShorts = this.config.restModel.PRIMARY_SHORT ?? [];
+        const now = new Date().toISOString();
+
+        return rows.map((row, index) => {
+            const normalized = this.normalizeRequestPayload(row ?? {});
+
+            if (validColumns.has("changed_at") && normalized.changed_at === undefined) {
+                normalized.changed_at = now;
+            }
+            if (validColumns.has("created_at") && normalized.created_at === undefined) {
+                normalized.created_at = now;
+            }
+            if (validColumns.has("updated_at") && normalized.updated_at === undefined) {
+                normalized.updated_at = now;
+            }
+
+            // When DB generated PK is numeric/autoincrement, expose it for the single-row insert.
+            if (
+                index === 0
+                && insertId !== undefined
+                && insertId !== null
+                && pkShorts.length === 1
+                && !this.hasDefinedValue(normalized[pkShorts[0]])
+            ) {
+                normalized[pkShorts[0]] = insertId;
+            }
+
+            return normalized;
+        });
+    }
+
     private resolveSqlLogMethod(method: iRestMethods, sql: string): string {
         const token = sql.trim().split(/\s+/, 1)[0]?.toUpperCase();
         if (token) return token;
@@ -111,6 +263,8 @@ export class SqlExecutor<
             // Surface normalization errors early
             throw e;
         }
+
+        this.assignMissingPostPrimaryUuids();
 
         const logContext = getLogContext(this.config, this.request);
         logWithLevel(
@@ -695,7 +849,9 @@ export class SqlExecutor<
         return {
             affected: result.affectedRows as number,
             insertId: result.insertId as number,
-            rest: [],
+            rest: method === C6C.POST
+                ? this.buildPostResponseRows(result.insertId as number | string | undefined)
+                : [],
             sql: { sql: sqlExecution.sql, values: sqlExecution.values },
         } as DetermineResponseDataType<G['RequestMethod'], G['RestTableInterface']>;
     }
