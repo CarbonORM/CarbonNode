@@ -2,7 +2,7 @@ import type {AxiosInstance, AxiosResponse} from "axios";
 import type {Pool} from "mysql2/promise";
 import {eFetchDependencies} from "./dynamicFetching";
 import {Modify} from "./modifyTypes";
-import {JoinType, OrderDirection, SQLComparisonOperator, SQLFunction} from "./mysqlTypes";
+import {JoinType, OrderTerm, SQLComparisonOperator, SQLExpression} from "./mysqlTypes";
 import type {CarbonReact, iStateAdapter} from "@carbonorm/carbonreact";
 import type {OrmGenerics} from "./ormGenerics";
 import {restOrm} from "../api/restOrm";
@@ -49,9 +49,7 @@ export type SubSelect<T extends { [key: string]: any } = any> = {
 
 export type SelectField<T extends { [key: string]: any } = any> =
     | keyof T
-    | [keyof T, 'AS', string]
-    | [SQLFunction, keyof T]
-    | [SQLFunction, keyof T, string]
+    | SQLExpression
     | SubSelect<T>;
 
 export type WhereClause<T = any> = Partial<T> | LogicalGroup<T> | ComparisonClause<T>;
@@ -62,10 +60,10 @@ export type JoinTableCondition<T = any> = Partial<T> | WhereClause<T>[] | Compar
 export type JoinClause<T = any> = { [table: string]: JoinTableCondition<T>; };
 export type Join<T = any> = { [K in JoinType]?: JoinClause<T>; };
 
-export type Pagination<T = any> = {
+export type Pagination = {
     PAGE?: number;
     LIMIT?: number | null;
-    ORDER?: Partial<Record<keyof T, OrderDirection>>;
+    ORDER?: OrderTerm[];
 };
 
 export type RequestGetPutDeleteBody<T extends { [key: string]: any } = any> = T | {
@@ -74,7 +72,7 @@ export type RequestGetPutDeleteBody<T extends { [key: string]: any } = any> = T 
     DELETE?: boolean;
     WHERE?: WhereClause<T>;
     JOIN?: Join<T>;
-    PAGINATION?: Pagination<T>;
+    PAGINATION?: Pagination;
 };
 
 export type RequestPostBody<T extends { [key: string]: any } = any> = T | {
@@ -85,6 +83,7 @@ export type RequestPostBody<T extends { [key: string]: any } = any> = T | {
 export type iAPI<T extends { [key: string]: any }> = T & {
     dataInsertMultipleRows?: T[];
     cacheResults?: boolean;
+    skipReactBootstrap?: boolean;
     fetchDependencies?: number | eFetchDependencies | Awaited<iGetC6RestResponse<any>>[];
     debug?: boolean;
     success?: string | ((r: AxiosResponse) => string | void);

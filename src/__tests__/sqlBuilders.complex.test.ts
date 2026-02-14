@@ -38,7 +38,7 @@ describe('SQL Builders - Complex SELECTs', () => {
       SELECT: ['actor.actor_id', 'actor.first_name'],
       WHERE: {
         // AND root with one direct condition
-        'actor.first_name': [C6C.LIKE, 'A%'],
+        'actor.first_name': [C6C.LIKE, [C6C.LIT, 'A%']],
         // OR group #1
         0: {
           'actor.actor_id': [C6C.IN, [1, 2, 3]]
@@ -52,7 +52,7 @@ describe('SQL Builders - Complex SELECTs', () => {
           'actor.last_name': [C6C.IS, null]
         },
         // AND with NOT IN
-        'actor.last_name': [C6C.NOT_IN, ['SMITH', 'DOE']]
+        'actor.last_name': [C6C.NOT_IN, [[C6C.LIT, 'SMITH'], [C6C.LIT, 'DOE']]]
       }
     } as any, false);
 
@@ -108,10 +108,10 @@ describe('SQL Builders - Complex SELECTs', () => {
       SELECT: ['actor.actor_id', 'actor.first_name'],
       WHERE: { 'actor.actor_id': [C6C.GREATER_THAN, 10] },
       PAGINATION: {
-        [C6C.ORDER]: {
-          'actor.last_name': 'ASC',
-          'actor.first_name': 'DESC'
-        },
+        [C6C.ORDER]: [
+          ['actor.last_name', 'ASC'],
+          ['actor.first_name', 'DESC'],
+        ],
         [C6C.LIMIT]: 10,
         [C6C.PAGE]: 3
       }
@@ -128,7 +128,7 @@ describe('SQL Builders - Complex SELECTs', () => {
     const config = buildTestConfig();
 
     const qb = new SelectQueryBuilder(config as any, {
-      SELECT: [[C6C.DISTINCT, 'actor.first_name'], [C6C.COUNT, 'actor.actor_id', C6C.AS, 'cnt']],
+      SELECT: [[C6C.DISTINCT, 'actor.first_name'], [C6C.AS, [C6C.COUNT, 'actor.actor_id'], 'cnt']],
       GROUP_BY: 'actor.first_name',
       HAVING: { 'cnt': [C6C.GREATER_THAN, 1] }
     } as any, false);
@@ -148,7 +148,7 @@ describe('SQL Builders - Complex SELECTs', () => {
     const qb = new SelectQueryBuilder(config as any, {
       SELECT: ['actor.actor_id'],
       WHERE: {
-        'actor.first_name': [C6C.MATCH_AGAINST, ['alpha beta', 'BOOLEAN']]
+        'actor.first_name': [C6C.MATCH_AGAINST, [[C6C.LIT, 'alpha beta'], 'BOOLEAN']]
       }
     } as any, false);
 
@@ -225,19 +225,21 @@ describe('SQL Builders - Complex SELECTs', () => {
       [C6C.WHERE]: {
         [Property_Units.UNIT_ID]: [C6C.NOT_EQUAL, unitIdParam],
         [Parcel_Sales.SALE_PRICE]: [C6C.NOT_EQUAL, 0],
-        [Parcel_Sales.SALE_TYPE]: { [C6C.IN]: ALLOWED_SALE_TYPES },
+        [Parcel_Sales.SALE_TYPE]: { [C6C.IN]: ALLOWED_SALE_TYPES.map((saleType) => [C6C.LIT, saleType]) },
         0: parsedDateRanges.map(({ start, end }) => ({
-          [Parcel_Sales.SALE_DATE]: [C6C.BETWEEN, [start, end]],
+          [Parcel_Sales.SALE_DATE]: [C6C.BETWEEN, [[C6C.LIT, start], [C6C.LIT, end]]],
         })),
       },
       [C6C.PAGINATION]: {
         [C6C.LIMIT]: 200,
-        [C6C.ORDER]: {
-          [C6C.ST_DISTANCE_SPHERE]: [
+        [C6C.ORDER]: [[
+          [
+            C6C.ST_DISTANCE_SPHERE,
             Property_Units.LOCATION,
             F(Property_Units.LOCATION, 'pu_target'),
           ],
-        },
+          C6C.ASC,
+        ]],
       },
     } as any, false);
 
@@ -250,7 +252,7 @@ describe('SQL Builders - Complex SELECTs', () => {
     expect(sql).toMatch(/INNER JOIN \(\s+SELECT property_units\.location/);
     expect(sql).toContain('WHERE (property_units.unit_id) <> ?');
     expect(sql).toContain('AND (parcel_sales.sale_price) <> ?');
-    expect(sql).toContain('ORDER BY ST_Distance_Sphere(property_units.location, pu_target.location)');
+    expect(sql).toContain('ORDER BY ST_DISTANCE_SPHERE(property_units.location, pu_target.location) ASC');
     expect(sql.trim().endsWith('LIMIT 200')).toBe(true);
 
     expect(params).toEqual([
@@ -314,17 +316,15 @@ describe('SQL Builders - Complex SELECTs', () => {
       [C6C.SELECT]: [Property_Units.UNIT_ID],
       [C6C.PAGINATION]: {
         [C6C.LIMIT]: 200,
-        [C6C.ORDER]: {
-          [C6C.ST_DISTANCE_SPHERE]: [
-            Property_Units.LOCATION,
-            [C6C.ST_POINT, ['-104.8967729', '39.3976764']],
-          ],
-        },
+        [C6C.ORDER]: [[
+          [C6C.ST_DISTANCE_SPHERE, Property_Units.LOCATION, [C6C.ST_POINT, -104.8967729, 39.3976764]],
+          C6C.ASC,
+        ]],
       },
     } as any, false);
 
     const { sql } = qb.build(Property_Units.TABLE_NAME);
-    expect(sql).toContain('ORDER BY ST_Distance_Sphere(property_units.location, ST_POINT(-104.8967729, 39.3976764))');
+    expect(sql).toContain('ORDER BY ST_DISTANCE_SPHERE(property_units.location, ST_POINT(-104.8967729, 39.3976764)) ASC');
   });
 
   it('orders by distance to ST_SRID(ST_Point(lng, lat), 4326)', () => {
@@ -334,17 +334,15 @@ describe('SQL Builders - Complex SELECTs', () => {
       [C6C.SELECT]: [Property_Units.UNIT_ID],
       [C6C.PAGINATION]: {
         [C6C.LIMIT]: 50,
-        [C6C.ORDER]: {
-          [C6C.ST_DISTANCE_SPHERE]: [
-            Property_Units.LOCATION,
-            [C6C.ST_SRID, [C6C.ST_POINT, [10, 20]], 4326],
-          ],
-        },
+        [C6C.ORDER]: [[
+          [C6C.ST_DISTANCE_SPHERE, Property_Units.LOCATION, [C6C.ST_SRID, [C6C.ST_POINT, 10, 20], 4326]],
+          C6C.ASC,
+        ]],
       },
     } as any, false);
 
     const { sql } = qb.build(Property_Units.TABLE_NAME);
-    expect(sql).toContain('ORDER BY ST_Distance_Sphere(property_units.location, ST_SRID(ST_POINT(10, 20), 4326))');
+    expect(sql).toContain('ORDER BY ST_DISTANCE_SPHERE(property_units.location, ST_SRID(ST_POINT(10, 20), 4326)) ASC');
   });
 
   it('orders by distance using placeholders via PARAM inside nested ST_Point', () => {
@@ -354,17 +352,15 @@ describe('SQL Builders - Complex SELECTs', () => {
       [C6C.SELECT]: [Property_Units.UNIT_ID],
       [C6C.PAGINATION]: {
         [C6C.LIMIT]: 25,
-        [C6C.ORDER]: {
-          [C6C.ST_DISTANCE_SPHERE]: [
-            Property_Units.LOCATION,
-            [C6C.ST_SRID, [C6C.ST_POINT, [[C6C.PARAM, 10], [C6C.PARAM, 20]]], 4326],
-          ],
-        },
+        [C6C.ORDER]: [[
+          [C6C.ST_DISTANCE_SPHERE, Property_Units.LOCATION, [C6C.ST_SRID, [C6C.ST_POINT, [C6C.PARAM, 10], [C6C.PARAM, 20]], 4326]],
+          C6C.ASC,
+        ]],
       },
     } as any, false);
 
     const { sql, params } = qb.build(Property_Units.TABLE_NAME);
-    expect(sql).toContain('ORDER BY ST_Distance_Sphere(property_units.location, ST_SRID(ST_POINT(?, ?), 4326))');
+    expect(sql).toContain('ORDER BY ST_DISTANCE_SPHERE(property_units.location, ST_SRID(ST_POINT(?, ?), 4326)) ASC');
     expect(params.slice(-2)).toEqual([10, 20]);
   });
 
@@ -375,12 +371,10 @@ describe('SQL Builders - Complex SELECTs', () => {
       [C6C.SELECT]: [Property_Units.UNIT_ID],
       [C6C.PAGINATION]: {
         [C6C.LIMIT]: 25,
-        [C6C.ORDER]: {
-          [C6C.ST_DISTANCE_SPHERE]: [
-            Property_Units.LOCATION,
-            [C6C.ST_SRID, [C6C.ST_POINT, [[C6C.PARAM, 10], [C6C.PARAM, 20]]], 4326],
-          ],
-        },
+        [C6C.ORDER]: [[
+          [C6C.ST_DISTANCE_SPHERE, Property_Units.LOCATION, [C6C.ST_SRID, [C6C.ST_POINT, [C6C.PARAM, 10], [C6C.PARAM, 20]], 4326]],
+          C6C.ASC,
+        ]],
       },
     } as any, true);
 
@@ -396,17 +390,15 @@ describe('SQL Builders - Complex SELECTs', () => {
       [C6C.SELECT]: [Property_Units.UNIT_ID],
       [C6C.PAGINATION]: {
         [C6C.LIMIT]: 10,
-        [C6C.ORDER]: {
-          [C6C.ST_DISTANCE_SPHERE]: [
-            Property_Units.LOCATION,
-            [C6C.ST_GEOMFROMTEXT, [[C6C.PARAM, 'POINT(-104.8967729 39.3976764)'], 4326]],
-          ],
-        },
+        [C6C.ORDER]: [[
+          [C6C.ST_DISTANCE_SPHERE, Property_Units.LOCATION, [C6C.ST_GEOMFROMTEXT, [C6C.PARAM, 'POINT(-104.8967729 39.3976764)'], 4326]],
+          C6C.ASC,
+        ]],
       },
     } as any, false);
 
     const { sql, params } = qb.build(Property_Units.TABLE_NAME);
-    expect(sql).toContain('ORDER BY ST_Distance_Sphere(property_units.location, ST_GEOMFROMTEXT(?, 4326))');
+    expect(sql).toContain('ORDER BY ST_DISTANCE_SPHERE(property_units.location, ST_GEOMFROMTEXT(?, 4326)) ASC');
     expect(params.slice(-1)[0]).toBe('POINT(-104.8967729 39.3976764)');
   });
 
@@ -417,20 +409,16 @@ describe('SQL Builders - Complex SELECTs', () => {
       [C6C.SELECT]: [Property_Units.UNIT_ID],
       [C6C.PAGINATION]: {
         [C6C.LIMIT]: 10,
-        [C6C.ORDER]: {
-          [C6C.ST_DISTANCE_SPHERE]: [
-            Property_Units.LOCATION,
-            [C6C.ST_GEOMFROMTEXT, ['POINT(-104.8967729 39.3976764)', 4326]],
-          ],
-        },
+        [C6C.ORDER]: [[
+          [C6C.ST_DISTANCE_SPHERE, Property_Units.LOCATION, [C6C.ST_GEOMFROMTEXT, [C6C.LIT, 'POINT(-104.8967729 39.3976764)'], 4326]],
+          C6C.ASC,
+        ]],
       },
     } as any, false);
 
     const { sql, params } = qb.build(Property_Units.TABLE_NAME);
-    expect(sql).toContain(
-      "ORDER BY ST_Distance_Sphere(property_units.location, ST_GEOMFROMTEXT('POINT(-104.8967729 39.3976764)', 4326))",
-    );
-    expect(params).not.toContain('POINT(-104.8967729 39.3976764)');
+    expect(sql).toContain('ORDER BY ST_DISTANCE_SPHERE(property_units.location, ST_GEOMFROMTEXT(?, 4326))');
+    expect(params).toContain('POINT(-104.8967729 39.3976764)');
   });
 
   it('leaves normal table joins unaffected', () => {
@@ -455,16 +443,14 @@ describe('SQL Builders - Complex SELECTs', () => {
     const qb = new SelectQueryBuilder(config as any, {
       [C6C.SELECT]: [
         Property_Units.UNIT_ID,
-        [
+        [C6C.AS, [
           C6C.SUBSELECT,
           {
             [C6C.SELECT]: [[C6C.COUNT, Parcel_Sales.PARCEL_ID]],
             [C6C.FROM]: Parcel_Sales.TABLE_NAME,
             [C6C.WHERE]: { [Parcel_Sales.SALE_PRICE]: [C6C.GREATER_THAN, 0] },
           },
-          C6C.AS,
-          'sale_count',
-        ],
+        ], 'sale_count'],
       ],
       [C6C.WHERE]: {
         [Property_Units.UNIT_ID]: [
@@ -491,7 +477,7 @@ describe('SQL Builders - Complex SELECTs', () => {
   it('serializes spatial filtering with FORCE INDEX and correlated EXISTS subqueries', () => {
     const config = buildParcelConfig();
     const polygon = 'POLYGON((39.5185659 -105.0142915, 39.5401859 -105.0142915, 39.5401859 -104.9862115, 39.5185659 -104.9862115, 39.5185659 -105.0142915))';
-    const point = [C6C.ST_GEOMFROMTEXT, ['POINT(39.5293759 -105.0002515)', 4326]];
+    const point = [C6C.ST_GEOMFROMTEXT, [C6C.LIT, 'POINT(39.5293759 -105.0002515)'], 4326];
     const unitId = Buffer.from('11F0615D24861BE1ADD40AFFCF6A1F27', 'hex');
     const countyId = Buffer.from('11F012CFF561A29DBB0E0AFFF25F1747', 'hex');
 
@@ -504,7 +490,7 @@ describe('SQL Builders - Complex SELECTs', () => {
         [Property_Units.UNIT_ID]: [C6C.NOT_EQUAL, unitId],
         [Property_Units.COUNTY_ID]: countyId,
         [C6C.MBRCONTAINS]: [
-          [C6C.ST_GEOMFROMTEXT, [polygon, 4326]],
+          [C6C.ST_GEOMFROMTEXT, [C6C.LIT, polygon], 4326],
           Property_Units.LOCATION,
         ],
         [C6C.LESS_THAN_OR_EQUAL_TO]: [
@@ -532,7 +518,7 @@ describe('SQL Builders - Complex SELECTs', () => {
                 [C6C.SELECT]: [Parcel_Sales.PARCEL_ID],
                 [C6C.FROM]: Parcel_Sales.TABLE_NAME,
                 [C6C.WHERE]: {
-                  [Parcel_Sales.SALE_DATE]: [C6C.BETWEEN, ['2023-01-01', '2024-06-30']],
+                  [Parcel_Sales.SALE_DATE]: [C6C.BETWEEN, [[C6C.LIT, '2023-01-01'], [C6C.LIT, '2024-06-30']]],
                   [Parcel_Sales.SALE_PRICE]: [C6C.NOT_EQUAL, 0],
                 },
               },
@@ -542,26 +528,28 @@ describe('SQL Builders - Complex SELECTs', () => {
       },
       [C6C.PAGINATION]: {
         [C6C.LIMIT]: 100,
-        [C6C.ORDER]: {
-          [C6C.ST_DISTANCE_SPHERE]: [Property_Units.LOCATION, point],
-        },
+        [C6C.ORDER]: [
+          [[C6C.ST_DISTANCE_SPHERE, Property_Units.LOCATION, point], C6C.ASC],
+        ],
       },
     } as any, false);
 
     const { sql, params } = qb.build(Property_Units.TABLE_NAME);
 
     expect(sql).toContain('FORCE INDEX (`idx_county_id`, `idx_property_units_location`)');
-    expect(sql).toMatch(/MBRCONTAINS\(ST_GEOMFROMTEXT\('POLYGON\(\(39\.5185659 -105\.0142915, 39\.5401859 -105\.0142915, 39\.5401859 -104\.9862115, 39\.5185659 -104\.9862115, 39\.5185659 -105\.0142915\)\)', 4326\), property_units\.location\)/);
-    expect(sql).toMatch(/ST_DISTANCE_SPHERE\(property_units\.location, ST_GEOMFROMTEXT\('POINT\(39\.5293759 -105\.0002515\)', 4326\)\) <= \?/);
+    expect(sql).toMatch(/MBRCONTAINS\(ST_GEOMFROMTEXT\(\?, 4326\), property_units\.location\)/);
+    expect(sql).toMatch(/ST_DISTANCE_SPHERE\(property_units\.location, ST_GEOMFROMTEXT\(\?, 4326\)\) <= \?/);
     expect(sql).toMatch(/\(parcel_building_details\.parcel_id\) = property_units\.parcel_id/);
     expect(sql).toMatch(/\(parcel_sales\.parcel_id\) = property_units\.parcel_id/);
-    expect(sql).toMatch(/ORDER BY ST[_]Distance[_]Sphere\(property_units\.location, ST_GEOMFROMTEXT\('POINT\(39\.5293759 -105\.0002515\)', 4326\)\)/i);
+    expect(sql).toMatch(/ORDER BY ST[_]DISTANCE[_]SPHERE\(property_units\.location, ST_GEOMFROMTEXT\(\?, 4326\)\) ASC/i);
 
-    expect(params).toHaveLength(10);
+    expect(params).toHaveLength(13);
     expect(params[0]).toEqual(unitId);
     expect(params[1]).toEqual(countyId);
+    expect(params[2]).toEqual(polygon);
+    expect(params[3]).toEqual('POINT(39.5293759 -105.0002515)');
     expect(params).toContain(1200);
-    expect(params.slice(3, 7)).toEqual([1988, 2008, 1876.5, 3127.5]);
-    expect(params.slice(7)).toEqual(['2023-01-01', '2024-06-30', 0]);
+    expect(params.slice(5, 9)).toEqual([1988, 2008, 1876.5, 3127.5]);
+    expect(params.slice(9)).toEqual(['2023-01-01', '2024-06-30', 0, 'POINT(39.5293759 -105.0002515)']);
   });
 });

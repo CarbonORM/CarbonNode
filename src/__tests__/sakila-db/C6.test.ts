@@ -101,7 +101,7 @@ function buildScalarValue(meta: any, columnName: string, seedRow: any) {
         'geometrycollection',
     ];
     if (geometryTypes.some((type) => mysqlType.includes(type))) {
-        return "ST_GeomFromText('POINT(0 0)')";
+        return [C6.ST_GEOMFROMTEXT, [C6.LIT, 'POINT(0 0)']];
     }
 
     if (mysqlType === 'json') return {};
@@ -236,7 +236,7 @@ function buildUpdatedValue(meta: any, columnName: string, currentValue: any) {
 
     if (mysqlType === 'year') return new Date().getFullYear();
     if (geometryTypes.some((type) => mysqlType.includes(type))) {
-        return "ST_GeomFromText('POINT(1 1)')";
+        return [C6.ST_GEOMFROMTEXT, [C6.LIT, 'POINT(1 1)']];
     }
     if (mysqlType === 'json') return { updated: true };
 
@@ -525,7 +525,7 @@ describe('sakila-db generated C6 bindings', () => {
                     restBinding.Get({
                         [C6.PAGINATION]: {
                             [C6.LIMIT]: 1,
-                            [C6.ORDER]: { [primaryFull]: 'DESC' },
+                            [C6.ORDER]: [[primaryFull, C6.DESC]],
                         },
                         cacheResults: false,
                     } as any)
@@ -550,7 +550,7 @@ describe('sakila-db generated C6 bindings', () => {
                         restBinding.Get({
                             [C6.PAGINATION]: {
                                 [C6.LIMIT]: 1,
-                                [C6.ORDER]: { [primaryFull]: 'DESC' },
+                                [C6.ORDER]: [[primaryFull, C6.DESC]],
                             },
                             cacheResults: false,
                         } as any)

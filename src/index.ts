@@ -19,6 +19,7 @@ export * from "./handlers/ExpressHandler";
 export * from "./orm/queryHelpers";
 export * from "./orm/builders/AggregateBuilder";
 export * from "./orm/builders/ConditionBuilder";
+export * from "./orm/builders/ExpressionSerializer";
 export * from "./orm/builders/JoinBuilder";
 export * from "./orm/builders/PaginationBuilder";
 export * from "./orm/queries/DeleteQueryBuilder";

@@ -264,7 +264,7 @@ const actors = await Actor.Get({
         Actor.LAST_NAME,
     ],
     [C6.WHERE]: {
-        [Actor.LAST_NAME]: { like: "%PITT%" },
+        [Actor.LAST_NAME]: [C6.LIKE, [C6.LIT, "%PITT%"]],
     },
     [C6.PAGINATION]: { [C6.LIMIT]: 10 },
 });
@@ -285,6 +285,51 @@ await Actor.Put({
 await Actor.Delete({
     [Actor.ACTOR_ID]: 42,
 });
+```
+
+### SQL Expression Grammar
+
+CarbonNode 6.1.0 uses one tuple-based grammar for SQL expressions.
+
+| Purpose | Canonical syntax |
+| --- | --- |
+| Known function | `[C6.FUNCTION_NAME, ...args]` |
+| Custom function | `[C6.CALL, 'FUNCTION_NAME', ...args]` |
+| Alias | `[C6.AS, expression, 'alias']` |
+| DISTINCT modifier | `[C6.DISTINCT, expression]` |
+| String / scalar literal binding | `[C6.LIT, value]` |
+| ORDER term | `[expression, 'ASC' | 'DESC']` |
+
+Rules:
+
+- Bare strings are treated as references only (for example `actor.first_name` or a SELECT alias).
+- Non-reference strings must be wrapped with `[C6.LIT, ...]`.
+- Legacy positional alias tuples are removed. Use `[C6.AS, expression, alias]`.
+- Object-rooted function expressions are removed. Use tuple syntax.
+
+Migration examples:
+
+```typescript
+// Before (removed)
+[C6.COUNT, Actor.ACTOR_ID, C6.AS, "cnt"]
+
+// After
+[C6.AS, [C6.COUNT, Actor.ACTOR_ID], "cnt"]
+
+// Before (removed)
+[C6.ST_GEOMFROMTEXT, ["POINT(-104.89 39.39)", 4326]]
+
+// After
+[C6.ST_GEOMFROMTEXT, [C6.LIT, "POINT(-104.89 39.39)"], 4326]
+
+// ORDER BY example
+[C6.PAGINATION]: {
+  [C6.ORDER]: [
+    [[C6.ST_DISTANCE_SPHERE, Property_Units.LOCATION, targetPoint], "ASC"],
+    [Actor.LAST_NAME, "DESC"],
+  ],
+  [C6.LIMIT]: 25,
+}
 ```
 
 Example response payloads (HTTP executor):

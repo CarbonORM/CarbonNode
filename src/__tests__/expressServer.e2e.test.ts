@@ -3,7 +3,7 @@ import axios from "axios";
 import { AddressInfo } from "net";
 import {describe, it, expect, beforeAll, afterAll} from "vitest";
 import { restOrm } from "@carbonorm/carbonnode";
-import {Actor, C6, Film_Actor} from "./sakila-db/C6.js";
+import {Actor, C6, Film_Actor, TABLES} from "./sakila-db/C6";
 import {C6C} from "../constants/C6Constants";
 import createTestServer from "./fixtures/createTestServer";
 
@@ -13,14 +13,14 @@ let restURL: string;
 let axiosClient: ReturnType<typeof axios.create>;
 const actorHttp = restOrm<any>(() => ({
     C6,
-    restModel: C6.TABLES.actor,
+    restModel: TABLES.actor,
     restURL,
     axios: axiosClient,
     verbose: false,
 }));
 const filmActorHttp = restOrm<any>(() => ({
     C6,
-    restModel: C6.TABLES.film_actor,
+    restModel: TABLES.film_actor,
     restURL,
     axios: axiosClient,
     verbose: false,
@@ -100,30 +100,33 @@ describe("ExpressHandler e2e", () => {
         } as any);
 
         let data = await actorRequest("GET", {
-            [C6C.WHERE]: { [Actor.FIRST_NAME]: first_name, [Actor.LAST_NAME]: last_name },
+            [C6C.WHERE]: {
+                [Actor.FIRST_NAME]: [C6C.EQUAL, [C6C.LIT, first_name]],
+                [Actor.LAST_NAME]: [C6C.EQUAL, [C6C.LIT, last_name]],
+            },
             [C6C.PAGINATION]: { [C6C.LIMIT]: 1 },
         } as any);
 
         expect(data?.rest).toHaveLength(1);
-        const testId = data?.rest[0].actor_id;
+        const testId = Number(data?.rest[0].actor_id);
 
         await actorRequest("PUT", {
-            [C6C.WHERE]: { [Actor.ACTOR_ID]: testId },
+            [C6C.WHERE]: { [Actor.ACTOR_ID]: [C6C.EQUAL, [C6C.LIT, Number(testId)]] },
             [C6C.UPDATE]: { first_name: "Updated" },
         } as any);
 
         data = await actorRequest("GET", {
-            [C6C.WHERE]: { [Actor.ACTOR_ID]: testId },
+            [C6C.WHERE]: { [Actor.ACTOR_ID]: [C6C.EQUAL, [C6C.LIT, Number(testId)]] },
         } as any);
         expect(data?.rest).toHaveLength(1);
         expect(data?.rest[0].first_name).toBe("Updated");
 
         await actorRequest("DELETE", {
-            [C6C.WHERE]: { [Actor.ACTOR_ID]: testId },
+            [C6C.WHERE]: { [Actor.ACTOR_ID]: [C6C.EQUAL, [C6C.LIT, Number(testId)]] },
             [C6C.DELETE]: true,
         } as any);
         data = await actorRequest("GET", {
-            [C6C.WHERE]: { [Actor.ACTOR_ID]: testId },
+            [C6C.WHERE]: { [Actor.ACTOR_ID]: [C6C.EQUAL, [C6C.LIT, Number(testId)]] },
             cacheResults: false,
         } as any);
         expect(Array.isArray(data?.rest)).toBe(true);
@@ -142,20 +145,23 @@ describe("ExpressHandler e2e", () => {
         const payload = { greeting: "hello", flags: [1, true] };
 
         let data = await actorRequest("GET", {
-            [C6C.WHERE]: { [Actor.FIRST_NAME]: first_name, [Actor.LAST_NAME]: last_name },
+            [C6C.WHERE]: {
+                [Actor.FIRST_NAME]: [C6C.EQUAL, [C6C.LIT, first_name]],
+                [Actor.LAST_NAME]: [C6C.EQUAL, [C6C.LIT, last_name]],
+            },
             [C6C.PAGINATION]: { [C6C.LIMIT]: 1 },
         } as any);
 
-        const actorId = data?.rest?.[0]?.actor_id;
+        const actorId = Number(data?.rest?.[0]?.actor_id);
         expect(actorId).toBeTruthy();
 
         await actorRequest("PUT", {
-            [C6C.WHERE]: { [Actor.ACTOR_ID]: actorId },
+            [C6C.WHERE]: { [Actor.ACTOR_ID]: [C6C.EQUAL, [C6C.LIT, Number(actorId)]] },
             [C6C.UPDATE]: { first_name: payload },
         } as any);
 
         data = await actorRequest("GET", {
-            [C6C.WHERE]: { [Actor.ACTOR_ID]: actorId },
+            [C6C.WHERE]: { [Actor.ACTOR_ID]: [C6C.EQUAL, [C6C.LIT, Number(actorId)]] },
         } as any);
 
         expect(data?.rest?.[0]?.first_name).toBe(JSON.stringify(payload));
@@ -171,11 +177,14 @@ describe("ExpressHandler e2e", () => {
         } as any);
 
         const data = await actorRequest("GET", {
-            [C6C.WHERE]: { [Actor.FIRST_NAME]: first_name, [Actor.LAST_NAME]: last_name },
+            [C6C.WHERE]: {
+                [Actor.FIRST_NAME]: [C6C.EQUAL, [C6C.LIT, first_name]],
+                [Actor.LAST_NAME]: [C6C.EQUAL, [C6C.LIT, last_name]],
+            },
             [C6C.PAGINATION]: { [C6C.LIMIT]: 1 },
         } as any);
 
-        const actorId = data?.rest?.[0]?.actor_id;
+        const actorId = Number(data?.rest?.[0]?.actor_id);
         expect(actorId).toBeTruthy();
 
         const operatorLike = { [C6C.GREATER_THAN]: "oops" } as any;
@@ -183,12 +192,12 @@ describe("ExpressHandler e2e", () => {
         try {
             const actorSql = restOrm<any>(() => ({
                 C6,
-                restModel: C6.TABLES.actor,
+                restModel: TABLES.actor,
                 mysqlPool: pool,
                 verbose: false,
             }));
             await actorSql.Put({
-                [C6C.WHERE]: { [Actor.ACTOR_ID]: actorId },
+                [C6C.WHERE]: { [Actor.ACTOR_ID]: [C6C.EQUAL, [C6C.LIT, Number(actorId)]] },
                 [C6C.UPDATE]: { first_name: operatorLike },
             } as any);
             throw new Error('Expected PUT to reject for operator-like payload.');

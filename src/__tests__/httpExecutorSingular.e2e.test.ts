@@ -2,8 +2,8 @@ import mysql from "mysql2/promise";
 import axios from "axios";
 import { AddressInfo } from "net";
 import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
-import { restOrm } from "@carbonorm/carbonnode";
-import { Actor, C6 } from "./sakila-db/C6.js";
+import {iGetC6RestResponse, restOrm } from "@carbonorm/carbonnode";
+import {Actor, C6, iActor, TABLES} from "./sakila-db/C6";
 import { C6C } from "../constants/C6Constants";
 import createTestServer from "./fixtures/createTestServer";
 
@@ -13,7 +13,7 @@ let restURL: string;
 let axiosClient: ReturnType<typeof axios.create>;
 const actorHttp = restOrm<any>(() => ({
   C6,
-  restModel: C6.TABLES.actor,
+  restModel: TABLES.actor,
   restURL,
   axios: axiosClient,
   verbose: false,
@@ -76,23 +76,26 @@ describe("HttpExecutor singular e2e", () => {
       step = "GET-complex";
       // Fetch inserted id using complex query
       let data = await actorRequest("GET", {
-        [C6C.WHERE]: { [Actor.FIRST_NAME]: first_name, [Actor.LAST_NAME]: last_name },
+        [C6C.WHERE]: {
+          [Actor.FIRST_NAME]: [C6C.EQUAL, [C6C.LIT, first_name]],
+          [Actor.LAST_NAME]: [C6C.EQUAL, [C6C.LIT, last_name]],
+        },
         [C6C.PAGINATION]: { [C6C.LIMIT]: 1 },
       });
 
       expect(data.rest).toHaveLength(1);
-      const testId = data.rest[0].actor_id;
+      const testId = Number(data.rest[0].actor_id);
 
       step = "GET-singular";
       // GET singular
-      data = await actorRequest("GET", { actor_id: testId } as any);
+      data = await actorRequest("GET", { actor_id: Number(testId) } as any);
       expect(data.rest).toHaveLength(1);
       expect(data.rest[0].actor_id).toBe(testId);
 
       step = "PUT-singular";
       // PUT singular
-      await actorRequest("PUT", { actor_id: testId, first_name: "Updated" } as any);
-      data = await actorRequest("GET", { actor_id: testId, cacheResults: false } as any);
+      await actorRequest("PUT", { actor_id: Number(testId), first_name: "Updated" } as any);
+      data = await actorRequest("GET", { actor_id: Number(testId), cacheResults: false } as any);
       expect(data.rest).toHaveLength(1);
       expect(data.rest[0].first_name).toBe("Updated");
 
@@ -105,7 +108,7 @@ describe("HttpExecutor singular e2e", () => {
       } as any;
       const actorHttpWithReact = restOrm<any>(() => ({
         C6,
-        restModel: C6.TABLES.actor,
+        restModel: TABLES.actor,
         restURL,
         axios: axiosClient,
         verbose: false,
@@ -123,8 +126,8 @@ describe("HttpExecutor singular e2e", () => {
 
       step = "DELETE-singular";
       // DELETE singular
-      await actorRequest("DELETE", { actor_id: testId } as any);
-      data = await actorRequest("GET", { actor_id: testId, cacheResults: false } as any);
+      await actorRequest("DELETE", { actor_id: Number(testId) } as any);
+      data = await actorRequest("GET", { actor_id: Number(testId), cacheResults: false } as any);
       expect(Array.isArray(data.rest)).toBe(true);
       expect(data.rest.length).toBe(0);
     } catch (error: any) {
@@ -133,9 +136,9 @@ describe("HttpExecutor singular e2e", () => {
   });
 
   it("exposes next when pagination continues", async () => {
-    const data = await actorRequest("GET", {
+    const data: iGetC6RestResponse<iActor, {}> = await actorRequest("GET", {
       [C6C.PAGINATION]: { [C6C.LIMIT]: 2 },
-    } as any);
+    });
 
     expect(Array.isArray(data.rest)).toBe(true);
     expect(data.rest).toHaveLength(2);
@@ -148,7 +151,7 @@ describe("HttpExecutor singular e2e", () => {
   });
 
   it("exposes limit 1 does not expose next", async () => {
-    const data = await actorRequest("GET", {
+    const data: iGetC6RestResponse<iActor, {}>  = await actorRequest("GET", {
       [C6C.PAGINATION]: { [C6C.LIMIT]: 1 },
     } as any);
 
@@ -156,5 +159,41 @@ describe("HttpExecutor singular e2e", () => {
     expect(data.rest).toHaveLength(1);
     expect(typeof data.next).toBe("undefined");
 
+  });
+
+  it("skips reactBootstrap state sync when skipReactBootstrap is true", async () => {
+    const updateStub = vi.fn();
+    const reactBootstrap = {
+      updateRestfulObjectArrays: updateStub,
+      deleteRestfulObjectArrays: vi.fn(),
+    } as any;
+
+    const actorHttpWithReact = restOrm<any>(() => ({
+      C6,
+      restModel: TABLES.actor,
+      restURL,
+      axios: axiosClient,
+      verbose: false,
+      reactBootstrap,
+    }));
+
+    const skipped = await actorHttpWithReact.Get({
+      [C6C.PAGINATION]: { [C6C.LIMIT]: 1 },
+      skipReactBootstrap: true,
+      cacheResults: false,
+    } as any);
+
+    expect(Array.isArray(skipped.rest)).toBe(true);
+    expect(skipped.rest).toHaveLength(1);
+    expect(updateStub).not.toHaveBeenCalled();
+
+    const normal = await actorHttpWithReact.Get({
+      [C6C.PAGINATION]: { [C6C.LIMIT]: 1 },
+      cacheResults: false,
+    } as any);
+
+    expect(Array.isArray(normal.rest)).toBe(true);
+    expect(normal.rest).toHaveLength(1);
+    expect(updateStub).toHaveBeenCalledTimes(1);
   });
 });

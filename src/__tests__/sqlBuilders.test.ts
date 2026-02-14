@@ -4,6 +4,7 @@ import { SelectQueryBuilder } from '../orm/queries/SelectQueryBuilder';
 import { PostQueryBuilder } from '../orm/queries/PostQueryBuilder';
 import { UpdateQueryBuilder } from '../orm/queries/UpdateQueryBuilder';
 import { DeleteQueryBuilder } from '../orm/queries/DeleteQueryBuilder';
+import { alias, call, distinct, fn, lit, order } from '../orm/queryHelpers';
 import { buildTestConfig, buildBinaryTestConfig, buildBinaryTestConfigFqn } from './fixtures/c6.fixture';
 
 describe('SQL Builders', () => {
@@ -11,7 +12,7 @@ describe('SQL Builders', () => {
     const config = buildTestConfig();
     // named params disabled -> positional params array
     const qb = new SelectQueryBuilder(config as any, {
-      SELECT: ['actor.first_name', [C6C.COUNT, 'actor.actor_id', C6C.AS, 'cnt']],
+      SELECT: ['actor.first_name', [C6C.AS, [C6C.COUNT, 'actor.actor_id'], 'cnt']],
       JOIN: {
         [C6C.INNER]: {
           'film_actor fa': {
@@ -20,7 +21,7 @@ describe('SQL Builders', () => {
         }
       },
       WHERE: {
-        'actor.first_name': [C6C.LIKE, '%A%'],
+        'actor.first_name': [C6C.LIKE, [C6C.LIT, '%A%']],
         0: {
           'actor.actor_id': [C6C.GREATER_THAN, 10],
         }
@@ -47,7 +48,7 @@ describe('SQL Builders', () => {
     const config = buildTestConfig();
     const logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
     const qb = new SelectQueryBuilder(config as any, {
-      SELECT: [[C6C.COUNT, 'actor.actor_id', C6C.AS, 'cnt']],
+      SELECT: [[C6C.AS, [C6C.COUNT, 'actor.actor_id'], 'cnt']],
     } as any, false);
 
     qb.build('actor');
@@ -60,6 +61,39 @@ describe('SQL Builders', () => {
     expect(selectLine).toBeDefined();
     expect(selectLine).toContain('COUNT(actor.actor_id) AS cnt');
     logSpy.mockRestore();
+  });
+
+  it('supports custom functions through C6C.CALL and binds string literals', () => {
+    const config = buildTestConfig();
+    const qb = new SelectQueryBuilder(config as any, {
+      SELECT: [[C6C.AS, [C6C.CALL, 'COALESCE', [C6C.LIT, 'fallback'], 'actor.first_name'], 'resolved_name']],
+    } as any, false);
+
+    const { sql, params } = qb.build('actor');
+    expect(sql).toContain('COALESCE(?, actor.first_name) AS resolved_name');
+    expect(params).toEqual(['fallback']);
+  });
+
+  it('supports helper builders for fn/call/as/distinct/lit/order', () => {
+    const config = buildTestConfig();
+    const qb = new SelectQueryBuilder(config as any, {
+      SELECT: [
+        alias(distinct('actor.first_name'), 'distinct_name'),
+        alias(fn(C6C.COUNT, 'actor.actor_id'), 'cnt'),
+        call('COALESCE', lit('N/A'), 'actor.last_name'),
+      ],
+      PAGINATION: {
+        [C6C.ORDER]: [order(fn(C6C.COUNT, 'actor.actor_id'), 'DESC')],
+        [C6C.LIMIT]: 5,
+      },
+    } as any, false);
+
+    const { sql, params } = qb.build('actor');
+    expect(sql).toContain('DISTINCT actor.first_name AS distinct_name');
+    expect(sql).toContain('COUNT(actor.actor_id) AS cnt');
+    expect(sql).toContain('COALESCE(?, actor.last_name)');
+    expect(sql).toContain('ORDER BY COUNT(actor.actor_id) DESC');
+    expect(params).toEqual(['N/A']);
   });
 
   it('builds INSERT with ON DUPLICATE KEY UPDATE', () => {
@@ -192,6 +226,36 @@ describe('SQL Builders', () => {
     expect(params).toEqual(['ALICE', 5]);
   });
 
+  it('supports expression tuples in UPDATE values', () => {
+    const config = buildTestConfig();
+    const qb = new UpdateQueryBuilder(config as any, {
+      [C6C.UPDATE]: {
+        'actor.first_name': [C6C.CONCAT, [C6C.LIT, 'Mr. '], 'actor.last_name'],
+      },
+      WHERE: {
+        'actor.actor_id': [C6C.EQUAL, 7],
+      },
+    } as any, false);
+
+    const { sql, params } = qb.build('actor');
+    expect(sql).toContain('`first_name` = CONCAT(?, actor.last_name)');
+    expect(params).toEqual(['Mr. ', 7]);
+  });
+
+  it('supports expression tuples in INSERT values', () => {
+    const config = buildTestConfig();
+    const qb = new PostQueryBuilder(config as any, {
+      [C6C.INSERT]: {
+        'actor.first_name': [C6C.CONCAT, [C6C.LIT, 'HEL'], [C6C.LIT, 'LO']],
+        'actor.last_name': 'SMITH',
+      },
+    } as any, false);
+
+    const { sql, params } = qb.build('actor');
+    expect(sql).toContain('CONCAT(?, ?)');
+    expect(params).toEqual(['HEL', 'LO', 'SMITH']);
+  });
+
   it('builds UPDATE when columns are fully qualified', () => {
     const config = buildTestConfig();
     const qb = new UpdateQueryBuilder(config as any, {
@@ -235,7 +299,7 @@ describe('SQL Builders', () => {
     const config = buildTestConfig();
     const qb = new SelectQueryBuilder(config as any, {
       WHERE: {
-        'actor.binarycol': [C6C.EQUAL, '0123456789abcdef0123456789abcdef']
+        'actor.binarycol': [C6C.EQUAL, [C6C.LIT, '0123456789abcdef0123456789abcdef']]
       }
     } as any, false);
 

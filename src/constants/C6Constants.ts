@@ -9,6 +9,7 @@ export const C6Constants = {
     BETWEEN: 'BETWEEN',
 
     CONCAT: 'CONCAT',
+    CALL: 'CALL',
     CONVERT_TZ: 'CONVERT_TZ',
     COUNT: 'COUNT',
     COUNT_ALL: 'COUNT_ALL',
@@ -71,6 +72,7 @@ export const C6Constants = {
     LESS_THAN: '<',
     LESS_THAN_OR_EQUAL_TO: '<=',
     LIKE: 'LIKE',
+    LIT: 'LIT',
     LIMIT: 'LIMIT',
     LOCALTIME: 'LOCALTIME',
     LOCALTIMESTAMP: 'LOCALTIMESTAMP',
@@ -198,7 +200,7 @@ export const C6Constants = {
     FINISH: 'FINISH',
     VALIDATE_C6_ENTITY_ID_REGEX: '#^([a-fA-F0-9]{20,35})$#',
 
-};
+} as const;
 
 
 export const C6C = C6Constants;

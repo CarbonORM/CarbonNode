@@ -65,6 +65,29 @@ export abstract class ConditionBuilder<
         return false;
     }
 
+    protected override isReferenceExpression(value: string): boolean {
+        const trimmed = value.trim();
+        if (trimmed === '*') {
+            return true;
+        }
+
+        if (trimmed.includes('.')) {
+            if (/^[A-Za-z_][A-Za-z0-9_]*\.\*$/.test(trimmed)) {
+                return true;
+            }
+            if (this.isTableReference(trimmed) || this.isColumnRef(trimmed)) {
+                return true;
+            }
+            if (/^[A-Za-z_][A-Za-z0-9_]*\.[A-Za-z_][A-Za-z0-9_]*$/.test(trimmed)) {
+                this.assertValidIdentifier(trimmed, 'SQL reference');
+                return true;
+            }
+            return false;
+        }
+
+        return super.isReferenceExpression(trimmed);
+    }
+
     abstract build(table: string): SqlBuilderResult;
 
     execute(): Promise<DetermineResponseDataType<G['RequestMethod'], G['RestTableInterface']>> {
@@ -200,45 +223,6 @@ export abstract class ConditionBuilder<
         return !!this.normalizeOperatorKey(op);
     }
 
-    private looksLikeSafeFunctionExpression(value: string): boolean {
-        if (typeof value !== 'string') return false;
-
-        const trimmed = value.trim();
-        if (trimmed.length === 0) return false;
-
-        if (trimmed.includes(';') || trimmed.includes('--') || trimmed.includes('/*') || trimmed.includes('*/')) {
-            return false;
-        }
-
-        if (!trimmed.includes('(') || !trimmed.endsWith(')')) {
-            return false;
-        }
-
-        const functionMatch = trimmed.match(/^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\s*\(/);
-        if (!functionMatch) {
-            return false;
-        }
-
-        const allowedCharacters = /^[A-Za-z0-9_().,'"\s-]+$/;
-        if (!allowedCharacters.test(trimmed)) {
-            return false;
-        }
-
-        let depth = 0;
-        for (const char of trimmed) {
-            if (char === '(') {
-                depth += 1;
-            } else if (char === ')') {
-                depth -= 1;
-                if (depth < 0) {
-                    return false;
-                }
-            }
-        }
-
-        return depth === 0;
-    }
-
     private ensureWrapped(expression: string): string {
         const trimmed = expression.trim();
         if (!trimmed) return trimmed;
@@ -268,46 +252,6 @@ export abstract class ConditionBuilder<
             .join(` ${operator} `);
     }
 
-    private normalizeFunctionField(field: any, params: any[] | Record<string, any>): any {
-        if (field instanceof Map) {
-            field = Object.fromEntries(field);
-        }
-
-        if (Array.isArray(field)) {
-            if (field.length === 0) return field;
-            const [fn, ...args] = field;
-            const normalizedArgs = args.map(arg => this.normalizeFunctionField(arg, params));
-            return [fn, ...normalizedArgs];
-        }
-
-        if (field && typeof field === 'object') {
-            if (C6C.SUBSELECT in field) {
-                const builder = (this as any).buildScalarSubSelect;
-                if (typeof builder !== 'function') {
-                    throw new Error('Scalar subselect handling requires JoinBuilder context.');
-                }
-                return builder.call(this, field[C6C.SUBSELECT], params);
-            }
-
-            const entries = Object.entries(field);
-            if (entries.length === 1) {
-                const [key, value] = entries[0];
-                if (this.isOperator(key)) {
-                    return this.buildOperatorExpression(key, value, params);
-                }
-                return this.buildFunctionCall(key, value, params);
-            }
-        }
-
-        return field;
-    }
-
-    private buildFunctionCall(fn: string, value: any, params: any[] | Record<string, any>): string {
-        const args = Array.isArray(value) ? value : [value];
-        const normalized = this.normalizeFunctionField([fn, ...args], params);
-        return this.buildAggregateField(normalized, params);
-    }
-
     private serializeOperand(
         operand: any,
         params: any[] | Record<string, any>,
@@ -328,19 +272,15 @@ export abstract class ConditionBuilder<
         }
 
         if (typeof operand === 'string') {
-            if (this.isTableReference(operand) || this.isColumnRef(operand)) {
-                return { sql: operand, isReference: true, isExpression: false, isSubSelect: false };
+            const trimmed = operand.trim();
+            if (this.isReferenceExpression(trimmed) || this.isTableReference(trimmed) || this.isColumnRef(trimmed)) {
+                return { sql: trimmed, isReference: true, isExpression: false, isSubSelect: false };
             }
-            if (this.looksLikeSafeFunctionExpression(operand)) {
-                return { sql: operand.trim(), isReference: false, isExpression: true, isSubSelect: false };
-            }
-            return { sql: asParam(operand), isReference: false, isExpression: false, isSubSelect: false };
+            throw new Error(`Bare string '${operand}' is not a reference. Wrap literal strings with [C6C.LIT, value].`);
         }
 
         if (Array.isArray(operand)) {
-            const normalized = this.normalizeFunctionField(operand, params);
-            const sql = this.buildAggregateField(normalized, params);
-            return { sql, isReference: false, isExpression: true, isSubSelect: false };
+            return this.serializeExpression(operand, params, 'SQL expression', contextColumn);
         }
 
         if (operand instanceof Map) {
@@ -371,16 +311,33 @@ export abstract class ConditionBuilder<
                     return { sql: this.ensureWrapped(sql), isReference: false, isExpression: true, isSubSelect: false };
                 }
 
-                const sql = this.buildFunctionCall(key, value, params);
-                return { sql, isReference: false, isExpression: true, isSubSelect: false };
+                throw new Error('Object-rooted expressions are not supported. Use tuple syntax instead.');
             }
         }
 
         throw new Error('Unsupported operand type in SQL expression.');
     }
 
+    private isExpressionTuple(value: any): boolean {
+        if (!Array.isArray(value) || value.length === 0 || typeof value[0] !== 'string') {
+            return false;
+        }
+
+        const token = String(value[0]).toUpperCase();
+        return (
+            token === C6C.AS
+            || token === C6C.DISTINCT
+            || token === C6C.CALL
+            || token === C6C.LIT
+            || token === C6C.PARAM
+            || token === C6C.SUBSELECT
+            || this.isKnownFunction(value[0])
+        );
+    }
+
     private isPlainArrayLiteral(value: any, allowColumnRefs = false): boolean {
         if (!Array.isArray(value)) return false;
+        if (this.isExpressionTuple(value)) return false;
         return value.every(item => {
             if (item === null) return true;
             const type = typeof item;
@@ -442,6 +399,19 @@ export abstract class ConditionBuilder<
         if (this.isPlainArrayLiteral(normalized, allowColumnRefs)
             || this.isPlainObjectLiteral(normalized, allowColumnRefs)) {
             return this.addParam(params, contextColumn ?? '', JSON.stringify(normalized));
+        }
+
+        if (
+            normalized === C6C.NULL
+            || normalized === null
+            || typeof normalized === 'string'
+            || typeof normalized === 'number'
+            || typeof normalized === 'boolean'
+            || normalized instanceof Date
+            || (typeof Buffer !== 'undefined' && Buffer.isBuffer && Buffer.isBuffer(normalized))
+        ) {
+            const scalar = normalized === C6C.NULL ? null : normalized;
+            return this.addParam(params, contextColumn ?? '', scalar);
         }
 
         let sql: string;
@@ -546,7 +516,9 @@ export abstract class ConditionBuilder<
 
         const payload = this.ensurePlainObject(payloadRaw);
         let subSelect: any;
-        if (payload && typeof payload === 'object' && C6C.SUBSELECT in payload) {
+        if (Array.isArray(payload) && payload.length === 2 && String(payload[0]).toUpperCase() === C6C.SUBSELECT) {
+            subSelect = this.ensurePlainObject(payload[1]);
+        } else if (payload && typeof payload === 'object' && C6C.SUBSELECT in payload) {
             subSelect = this.ensurePlainObject(payload[C6C.SUBSELECT]);
         } else if (payload && typeof payload === 'object') {
             subSelect = payload;
@@ -664,7 +636,11 @@ export abstract class ConditionBuilder<
             }
 
             const [search, mode] = right;
-            const placeholder = this.addParam(params, leftInfo.sql, search);
+            const searchInfo = this.serializeOperand(search, params, leftInfo.sql);
+            if (searchInfo.isReference || searchInfo.isExpression || searchInfo.isSubSelect) {
+                throw new Error('MATCH_AGAINST search payload must be a literal value (wrap strings with [C6C.LIT, value]).');
+            }
+            const placeholder = searchInfo.sql;
             let againstClause: string;
             switch (typeof mode === 'string' ? mode.toUpperCase() : '') {
                 case 'BOOLEAN':
@@ -784,7 +760,7 @@ export abstract class ConditionBuilder<
                 if (!Array.isArray(value)) {
                     throw new Error(`${column} expects an array of arguments.`);
                 }
-                return this.buildFunctionCall(column, value, params);
+                return this.serializeExpression([column, ...value], params, `WHERE function ${column}`, column).sql;
             }
         }
 

@@ -10,12 +10,10 @@ export abstract class PaginationBuilder<G extends OrmGenerics> extends JoinBuild
      *
      * Accepted structures:
      * ```ts
-     * ORDER: {
-     *   // simple column with direction
-     *   [property_units.UNIT_ID]: "DESC",
-     *	 // function call (array of arguments)
-     *   [C6Constants.ST_DISTANCE_SPHERE]: [property_units.LOCATION, F(property_units.LOCATION, "pu_target")]
-     * }
+     * ORDER: [
+     *   [property_units.UNIT_ID, "DESC"],
+     *   [[C6Constants.ST_DISTANCE_SPHERE, property_units.LOCATION, F(property_units.LOCATION, "pu_target")], "ASC"],
+     * ]
      * ```
      */
     buildPaginationClause(pagination: any, params?: any[] | Record<string, any>): string {
@@ -25,35 +23,27 @@ export abstract class PaginationBuilder<G extends OrmGenerics> extends JoinBuild
         if (pagination?.[C6Constants.ORDER]) {
             const orderParts: string[] = [];
 
-            for (const [key, val] of Object.entries(pagination[C6Constants.ORDER])) {
-                if (typeof key === 'string' && key.includes('.')) {
-                    this.assertValidIdentifier(key, 'ORDER BY');
+            const orderSpec = pagination[C6Constants.ORDER];
+            if (!Array.isArray(orderSpec)) {
+                throw new Error('PAGINATION.ORDER expects an array of terms using [expression, direction?] syntax.');
+            }
+
+            for (const rawTerm of orderSpec) {
+                let expression = rawTerm;
+                let direction: string = C6Constants.ASC;
+
+                if (
+                    Array.isArray(rawTerm)
+                    && rawTerm.length === 2
+                    && typeof rawTerm[1] === 'string'
+                    && (String(rawTerm[1]).toUpperCase() === C6Constants.ASC || String(rawTerm[1]).toUpperCase() === C6Constants.DESC)
+                ) {
+                    expression = rawTerm[0];
+                    direction = String(rawTerm[1]).toUpperCase();
                 }
-                // FUNCTION CALL: val is an array of args
-                if (Array.isArray(val)) {
-                    const identifierPathRegex = /^[A-Za-z_][A-Za-z0-9_]*\.[A-Za-z_][A-Za-z0-9_]*$/;
-                    const isNumericString = (s: string) => /^-?\d+(?:\.\d+)?$/.test(s.trim());
-                    const args = val
-                        .map((arg) => {
-                            if (Array.isArray(arg)) return this.buildAggregateField(arg, params);
-                            if (typeof arg === 'string') {
-                                if (identifierPathRegex.test(arg)) {
-                                    this.assertValidIdentifier(arg, 'ORDER BY argument');
-                                    return arg;
-                                }
-                                // numeric-looking strings should be treated as literals
-                                if (isNumericString(arg)) return arg;
-                                return arg;
-                            }
-                            return String(arg);
-                        })
-                        .join(", ");
-                    orderParts.push(`${key}(${args})`);
-                }
-                // SIMPLE COLUMN + DIR (ASC/DESC)
-                else {
-                    orderParts.push(`${key} ${String(val).toUpperCase()}`);
-                }
+
+                const serialized = this.serializeExpression(expression, params, 'ORDER BY expression');
+                orderParts.push(`${serialized.sql} ${direction}`);
             }
 
             if (orderParts.length) sql += ` ORDER BY ${orderParts.join(", ")}`;

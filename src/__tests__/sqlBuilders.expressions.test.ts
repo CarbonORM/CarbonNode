@@ -30,22 +30,20 @@ describe('Explicit SQL expression grammar', () => {
         [C6C.OR]: [
           {
             [C6C.LESS_THAN_OR_EQUAL_TO]: [
-              {
-                [C6C.ST_DISTANCE_SPHERE]: [
-                  Property_Units.LOCATION,
-                  { [C6C.ST_GEOMFROMTEXT]: ['POINT(39.4972468 -105.0403593)', 4326] },
-                ],
-              },
+              [
+                C6C.ST_DISTANCE_SPHERE,
+                Property_Units.LOCATION,
+                [C6C.ST_GEOMFROMTEXT, [C6C.LIT, 'POINT(39.4972468 -105.0403593)'], 4326],
+              ],
               5000,
             ],
           },
           {
             [C6C.GREATER_THAN]: [
-              {
-                [C6C.ST_AREA]: [
-                  { [C6C.ST_GEOMFROMTEXT]: ['POLYGON((0 0,1 0,1 1,0 1,0 0))', 4326] },
-                ],
-              },
+              [
+                C6C.ST_AREA,
+                [C6C.ST_GEOMFROMTEXT, [C6C.LIT, 'POLYGON((0 0,1 0,1 1,0 1,0 0))'], 4326],
+              ],
               10000,
             ],
           },
@@ -56,12 +54,17 @@ describe('Explicit SQL expression grammar', () => {
     const { sql, params } = qb.build(Property_Units.TABLE_NAME);
 
     expect(sql).toContain('WHERE');
-    expect(sql).toMatch(/ST_DISTANCE_SPHERE\(property_units.location, ST_GEOMFROMTEXT\('/);
-    expect(sql).toMatch(/ST_AREA\(ST_GEOMFROMTEXT\('/);
+    expect(sql).toMatch(/ST_DISTANCE_SPHERE\(property_units.location, ST_GEOMFROMTEXT\(\?, 4326\)\)/);
+    expect(sql).toMatch(/ST_AREA\(ST_GEOMFROMTEXT\(\?, 4326\)\)/);
     expect(sql).toMatch(/<= \?/);
     expect(sql).toMatch(/> \?/);
     expect(sql).toContain('OR');
-    expect(params).toEqual([5000, 10000]);
+    expect(params).toEqual([
+      'POINT(39.4972468 -105.0403593)',
+      5000,
+      'POLYGON((0 0,1 0,1 1,0 1,0 0))',
+      10000,
+    ]);
   });
 
   it('supports operator-first 3-tuple conditions in WHERE', () => {
@@ -85,7 +88,7 @@ describe('Explicit SQL expression grammar', () => {
     const qb = new SelectQueryBuilder(config as any, {
       [C6C.SELECT]: [Property_Units.PARCEL_ID],
       [C6C.WHERE]: {
-        0: [[C6C.BETWEEN, Parcel_Sales.SALE_DATE, ['2021-01-01', '2021-12-31']]],
+        0: [[C6C.BETWEEN, Parcel_Sales.SALE_DATE, [[C6C.LIT, '2021-01-01'], [C6C.LIT, '2021-12-31']]]],
       },
     } as any, false);
 
@@ -94,30 +97,25 @@ describe('Explicit SQL expression grammar', () => {
     expect(params.slice(-2)).toEqual(['2021-01-01', '2021-12-31']);
   });
 
-  it('treats safe raw function expressions as SQL expressions', () => {
+  it('supports tuple-based function expressions with literal wrappers', () => {
     const config = buildParcelConfig();
 
     const qb = new SelectQueryBuilder(config as any, {
       [C6C.SELECT]: [Property_Units.PARCEL_ID],
       [C6C.WHERE]: {
-        0: [
-          [
-            "ST_Distance_Sphere(property_units.location, ST_GeomFromText('POINT(39.4972468 -105.0403593)', 4326))",
-            C6C.LESS_THAN_OR_EQUAL_TO,
-            5000,
-          ],
+        [C6C.LESS_THAN_OR_EQUAL_TO]: [
+          [C6C.ST_DISTANCE_SPHERE, Property_Units.LOCATION, [C6C.ST_GEOMFROMTEXT, [C6C.LIT, 'POINT(39.4972468 -105.0403593)'], 4326]],
+          5000,
         ],
       },
     } as any, false);
 
     const { sql, params } = qb.build(Property_Units.TABLE_NAME);
-    expect(sql).toMatch(
-      /ST_Distance_Sphere\(property_units\.location, ST_GeomFromText\('POINT\(39\.4972468 -105\.0403593\)', 4326\)\) <= \?/
-    );
-    expect(params.slice(-1)[0]).toBe(5000);
+    expect(sql).toMatch(/ST_DISTANCE_SPHERE\(property_units\.location, ST_GEOMFROMTEXT\(\?, 4326\)\) <= \?/);
+    expect(params).toEqual(['POINT(39.4972468 -105.0403593)', 5000]);
   });
 
-  it('rejects raw function expressions containing unsafe tokens', () => {
+  it('rejects raw function expression strings', () => {
     const config = buildParcelConfig();
 
     const qb = new SelectQueryBuilder(config as any, {
@@ -133,7 +131,37 @@ describe('Explicit SQL expression grammar', () => {
       },
     } as any, false);
 
-    expect(() => qb.build(Property_Units.TABLE_NAME)).toThrowError(/Potential SQL injection detected/);
+    expect(() => qb.build(Property_Units.TABLE_NAME)).toThrowError(/Bare string/);
+  });
+
+  it('rejects legacy positional AS syntax in function tuples', () => {
+    const config = buildParcelConfig();
+
+    const qb = new SelectQueryBuilder(config as any, {
+      [C6C.SELECT]: [[C6C.COUNT, Property_Units.PARCEL_ID, C6C.AS, 'cnt']],
+    } as any, false);
+
+    expect(() => qb.build(Property_Units.TABLE_NAME)).toThrowError(/Legacy positional AS syntax/);
+  });
+
+  it('rejects legacy positional AS syntax in column tuples', () => {
+    const config = buildParcelConfig();
+
+    const qb = new SelectQueryBuilder(config as any, {
+      [C6C.SELECT]: [[Property_Units.PARCEL_ID, C6C.AS, 'parcel_id_alias']],
+    } as any, false);
+
+    expect(() => qb.build(Property_Units.TABLE_NAME)).toThrowError(/Legacy positional AS syntax/);
+  });
+
+  it('rejects object-rooted function expressions', () => {
+    const config = buildParcelConfig();
+
+    const qb = new SelectQueryBuilder(config as any, {
+      [C6C.SELECT]: [{ [C6C.COUNT]: [Property_Units.PARCEL_ID] }],
+    } as any, false);
+
+    expect(() => qb.build(Property_Units.TABLE_NAME)).toThrowError(/Object-rooted expressions are not supported/);
   });
 
   it('supports explicit AND groupings composed of nested OR clauses', () => {
@@ -146,8 +174,8 @@ describe('Explicit SQL expression grammar', () => {
           { [C6C.GREATER_THAN]: [Property_Units.PARCEL_ID, 100] },
           {
             [C6C.OR]: [
-              { [C6C.BETWEEN]: [Parcel_Sales.SALE_DATE, ['2021-01-01', '2022-06-30']] },
-              { [C6C.BETWEEN]: [Parcel_Sales.SALE_DATE, ['2023-01-01', '2024-06-30']] },
+              { [C6C.BETWEEN]: [Parcel_Sales.SALE_DATE, [[C6C.LIT, '2021-01-01'], [C6C.LIT, '2022-06-30']]] },
+              { [C6C.BETWEEN]: [Parcel_Sales.SALE_DATE, [[C6C.LIT, '2023-01-01'], [C6C.LIT, '2024-06-30']]] },
             ],
           },
         ],

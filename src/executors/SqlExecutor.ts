@@ -438,6 +438,7 @@ export class SqlExecutor<
             C6C.REPLACE,
             "dataInsertMultipleRows",
             "cacheResults",
+            "skipReactBootstrap",
             "fetchDependencies",
             "debug",
             "success",
@@ -530,7 +531,7 @@ export class SqlExecutor<
             }
 
             if (value !== undefined) {
-                pkValues[pkShort] = value;
+                pkValues[pkShort] = this.unwrapPrimaryKeyValue(value);
             }
         }
 
@@ -539,6 +540,29 @@ export class SqlExecutor<
         }
 
         return Object.keys(pkValues).length > 0 ? pkValues : null;
+    }
+
+    private unwrapPrimaryKeyValue(value: any): any {
+        if (!Array.isArray(value)) return value;
+
+        if (value.length === 2) {
+            const [head, tail] = value;
+            if (head === C6C.EQUAL) {
+                return this.unwrapPrimaryKeyValue(tail);
+            }
+            if (head === C6C.LIT || head === C6C.PARAM) {
+                return tail;
+            }
+        }
+
+        if (value.length === 3) {
+            const [, operator, right] = value;
+            if (operator === C6C.EQUAL) {
+                return this.unwrapPrimaryKeyValue(right);
+            }
+        }
+
+        return value;
     }
 
     private extractPrimaryKeyValuesFromData(data: any): Record<string, any> | null {

@@ -1,5 +1,6 @@
 // Alias a table name with a given alias
 import {C6C} from "../constants/C6Constants";
+import {OrderDirection, OrderTerm, SQLExpression, SQLKnownFunction} from "../types/mysqlTypes";
 
 type DerivedTableSpec = Record<string, any> & {
     [C6C.SUBSELECT]?: Record<string, any>;
@@ -90,3 +91,31 @@ export const bbox = (minLng: number, minLat: number, maxLng: number, maxLat: num
 // ST_Contains for map envelope/shape queries
 export const stContains = (envelope: string, shape: string): any[] =>
     [C6C.ST_CONTAINS, envelope, shape];
+
+// Strongly-typed known function helper.
+export const fn = <Fn extends SQLKnownFunction>(
+    functionName: Fn,
+    ...args: SQLExpression[]
+): [Fn, ...SQLExpression[]] => [functionName, ...args];
+
+// Escape hatch for custom function names.
+export const call = (
+    functionName: string,
+    ...args: SQLExpression[]
+): [typeof C6C.CALL, string, ...SQLExpression[]] => [C6C.CALL as typeof C6C.CALL, functionName, ...args];
+
+export const alias = (
+    expression: SQLExpression,
+    aliasName: string,
+): [typeof C6C.AS, SQLExpression, string] => [C6C.AS as typeof C6C.AS, expression, aliasName];
+
+export const distinct = (
+    expression: SQLExpression,
+): [typeof C6C.DISTINCT, SQLExpression] => [C6C.DISTINCT as typeof C6C.DISTINCT, expression];
+
+export const lit = (value: any): [typeof C6C.LIT, any] => [C6C.LIT as typeof C6C.LIT, value];
+
+export const order = (
+    expression: SQLExpression,
+    direction: OrderDirection = C6C.ASC as OrderDirection,
+): OrderTerm => [expression, direction];

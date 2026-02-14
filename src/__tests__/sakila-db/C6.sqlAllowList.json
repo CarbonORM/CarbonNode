@@ -11,8 +11,9 @@
   "DELETE `payment` FROM `payment` WHERE (payment.payment_id) = ?",
   "DELETE `rental` FROM `rental` WHERE (rental.rental_id) = ?",
   "DELETE `staff` FROM `staff` WHERE (staff.staff_id) = ?",
+  "DELETE `store` FROM `store` WHERE (store.store_id) = ?",
   "INSERT INTO `actor` ( `first_name`, `last_name`, `last_update` ) VALUES (? ×3) ×*",
-  "INSERT INTO `address` ( `address`, `address2`, `district`, `city_id`, `postal_code`, `phone`, `location`, `last_update` ) VALUES (?, ?, ?, ?, ?, ?, ST_GEOMFROMTEXT('POINT(0 0)'), ?)",
+  "INSERT INTO `address` ( `address`, `address2`, `district`, `city_id`, `postal_code`, `phone`, `location`, `last_update` ) VALUES (?, ?, ?, ?, ?, ?, ST_GEOMFROMTEXT(? ×1), ?)",
   "INSERT INTO `category` ( `name`, `last_update` ) VALUES (? ×2) ×*",
   "INSERT INTO `city` ( `city`, `country_id`, `last_update` ) VALUES (? ×3) ×*",
   "INSERT INTO `country` ( `country`, `last_update` ) VALUES (? ×2) ×*",
@@ -23,6 +24,7 @@
   "INSERT INTO `payment` ( `customer_id`, `staff_id`, `rental_id`, `amount`, `payment_date`, `last_update` ) VALUES (? ×6) ×*",
   "INSERT INTO `rental` ( `rental_date`, `inventory_id`, `customer_id`, `return_date`, `staff_id`, `last_update` ) VALUES (? ×6) ×*",
   "INSERT INTO `staff` ( `first_name`, `last_name`, `address_id`, `email`, `store_id`, `active`, `username`, `last_update` ) VALUES (? ×8) ×*",
+  "INSERT INTO `store` ( `manager_staff_id`, `address_id`, `last_update` ) VALUES (? ×3) ×*",
   "SELECT * FROM `actor` INNER JOIN `film_actor` AS `film_actor_ref` ON ((film_actor_ref.actor_id) = actor.actor_id) LIMIT ?",
   "SELECT * FROM `actor` LIMIT ?",
   "SELECT * FROM `actor` ORDER BY actor.actor_id DESC LIMIT ?",
@@ -73,6 +75,8 @@
   "SELECT * FROM `staff` WHERE (staff.staff_id) = ? LIMIT ?",
   "SELECT * FROM `store` INNER JOIN `address` AS `address_ref` ON ((address_ref.address_id) = store.address_id) LIMIT ?",
   "SELECT * FROM `store` LIMIT ?",
+  "SELECT * FROM `store` ORDER BY store.store_id DESC LIMIT ?",
+  "SELECT * FROM `store` WHERE (store.store_id) = ? LIMIT ?",
   "UPDATE `actor` SET `first_name` = ? WHERE (actor.actor_id) = ?",
   "UPDATE `address` SET `address` = ? WHERE (address.address_id) = ?",
   "UPDATE `category` SET `name` = ? WHERE (category.category_id) = ?",
@@ -84,5 +88,6 @@
   "UPDATE `language` SET `name` = ? WHERE (language.language_id) = ?",
   "UPDATE `payment` SET `amount` = ? WHERE (payment.payment_id) = ?",
   "UPDATE `rental` SET `rental_date` = ? WHERE (rental.rental_id) = ?",
-  "UPDATE `staff` SET `first_name` = ? WHERE (staff.staff_id) = ?"
+  "UPDATE `staff` SET `first_name` = ? WHERE (staff.staff_id) = ?",
+  "UPDATE `store` SET `last_update` = ? WHERE (store.store_id) = ?"
 ]

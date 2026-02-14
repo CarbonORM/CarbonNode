@@ -1,9 +1,18 @@
 import {Executor} from "../../executors/Executor";
 import {OrmGenerics} from "../../types/ormGenerics";
-import {C6C} from "../../constants/C6Constants";
+import {SQL_KNOWN_FUNCTIONS} from "../../types/mysqlTypes";
 import {getLogContext, LogLevel, logWithLevel} from "../../utils/logLevel";
+import {
+    iSerializedExpression,
+    serializeSqlExpression,
+    tSqlParams,
+} from "./ExpressionSerializer";
 
-export abstract class AggregateBuilder<G extends OrmGenerics> extends Executor<G>{
+const KNOWN_FUNCTION_LOOKUP = new Set(
+    SQL_KNOWN_FUNCTIONS.map((name) => String(name).toUpperCase()),
+);
+
+export abstract class AggregateBuilder<G extends OrmGenerics> extends Executor<G> {
     protected selectAliases: Set<string> = new Set<string>();
 
     // Overridden in ConditionBuilder where alias tracking is available.
@@ -12,130 +21,82 @@ export abstract class AggregateBuilder<G extends OrmGenerics> extends Executor<G
         // no-op placeholder for subclasses that do not implement alias validation
     }
 
-    buildAggregateField(field: string | any[], params?: any[] | Record<string, any>): string {
-        if (typeof field === 'string') {
-            this.assertValidIdentifier(field, 'SELECT field');
-            return field;
+    protected isReferenceExpression(value: string): boolean {
+        if (typeof value !== 'string') return false;
+
+        const trimmed = value.trim();
+        if (trimmed.length === 0) return false;
+
+        if (trimmed === '*') return true;
+
+        if (/^[A-Za-z_][A-Za-z0-9_]*\.\*$/.test(trimmed)) {
+            this.assertValidIdentifier(trimmed, 'SQL reference');
+            return true;
         }
 
-        if (!Array.isArray(field) || field.length === 0) {
-            throw new Error('Invalid SELECT field entry');
+        if (/^[A-Za-z_][A-Za-z0-9_]*\.[A-Za-z_][A-Za-z0-9_]*$/.test(trimmed)) {
+            this.assertValidIdentifier(trimmed, 'SQL reference');
+            return true;
         }
 
-        // If the array represents a tuple/literal list (e.g., [lng, lat]) rather than a
-        // function call like [FN, ...args], serialize the list as a comma-separated
-        // literal sequence so parent calls (like ORDER BY FN(<here>)) can embed it.
-        const isNumericString = (s: string) => /^-?\d+(?:\.\d+)?$/.test(String(s).trim());
-        if (typeof field[0] !== 'string' || isNumericString(field[0])) {
-            return field
-                .map((arg) => {
-                    if (Array.isArray(arg)) return this.buildAggregateField(arg, params);
-                    return String(arg);
-                })
-                .join(', ');
+        if (/^[A-Za-z_][A-Za-z0-9_]*$/.test(trimmed) && this.selectAliases.has(trimmed)) {
+            return true;
         }
 
-        let [fn, ...args] = field;
-        let alias: string | undefined;
+        return false;
+    }
 
-        if (args.length >= 2 && String(args[args.length - 2]).toUpperCase() === 'AS') {
-            alias = String(args.pop());
-            args.pop();
-        }
+    protected isKnownFunction(functionName: string): boolean {
+        return KNOWN_FUNCTION_LOOKUP.has(functionName.trim().toUpperCase());
+    }
 
-        const F = String(fn).toUpperCase();
-        const isGeomFromText = F === C6C.ST_GEOMFROMTEXT.toUpperCase();
-
-        if (args.length === 1 && Array.isArray(args[0])) {
-            args = args[0];
-        }
-
-        // Parameter placeholder helper: [C6C.PARAM, value]
-        if (F === C6C.PARAM) {
-            if (!params) {
-                throw new Error('PARAM requires parameter tracking.');
-            }
-            const value = args[0];
-            // Use empty column context; ORDER/SELECT literals have no column typing.
-            // @ts-ignore addParam is provided by ConditionBuilder in our hierarchy.
-            return this.addParam(params, '', value);
-        }
-
-        if (F === C6C.SUBSELECT) {
-            if (!params) {
-                throw new Error('Scalar subselects in SELECT require parameter tracking.');
-            }
-            const subRequest = args[0];
-            const subSql = (this as any).buildScalarSubSelect?.(subRequest, params);
-            if (!subSql) {
-                throw new Error('Failed to build scalar subselect.');
-            }
-
-            let expr = subSql;
-            if (alias) {
-                this.selectAliases.add(alias);
-                expr += ` AS ${alias}`;
-            }
-
-            logWithLevel(
-                LogLevel.DEBUG,
-                getLogContext(this.config, this.request),
-                console.log,
-                `[SELECT] ${expr}`,
-            );
-
-            return expr;
-        }
-
-        const identifierPathRegex = /^[A-Za-z_][A-Za-z0-9_]*\.[A-Za-z_][A-Za-z0-9_]*$/;
-
-        const argList = args
-            .map((arg, index) => {
-                if (Array.isArray(arg)) return this.buildAggregateField(arg, params);
-                if (typeof arg === 'string') {
-                    if (identifierPathRegex.test(arg)) {
-                        this.assertValidIdentifier(arg, 'SELECT expression');
-                        return arg;
+    protected serializeExpression(
+        expression: any,
+        params?: tSqlParams,
+        context: string = 'SQL expression',
+        contextColumn?: string,
+    ): iSerializedExpression {
+        return serializeSqlExpression(expression, {
+            params,
+            context,
+            contextColumn,
+            hooks: {
+                assertValidIdentifier: (identifier: string, hookContext: string) => {
+                    this.assertValidIdentifier(identifier, hookContext);
+                },
+                isReference: (value: string) => this.isReferenceExpression(value),
+                addParam: (target: tSqlParams, column: string, value: any) => {
+                    const addParam = (this as any).addParam;
+                    if (typeof addParam !== 'function') {
+                        throw new Error('Expression literal binding requires addParam support.');
                     }
-                    // Treat numeric-looking strings as literals, not identifier paths
-                    if (isNumericString(arg)) return arg;
-
-                    if (isGeomFromText && index === 0) {
-                        const trimmed = arg.trim();
-                        const alreadyQuoted = trimmed.startsWith("'") && trimmed.endsWith("'") && trimmed.length >= 2;
-                        if (alreadyQuoted) {
-                            return trimmed;
-                        }
-                        const escaped = arg.replace(/'/g, "''");
-                        return `'${escaped}'`;
+                    return addParam.call(this, target, column, value);
+                },
+                buildScalarSubSelect: (subRequest: any, target: tSqlParams) => {
+                    const builder = (this as any).buildScalarSubSelect;
+                    if (typeof builder !== 'function') {
+                        throw new Error('Scalar subselects require SelectQueryBuilder context.');
                     }
+                    return builder.call(this, subRequest, target);
+                },
+                onAlias: (alias: string) => {
+                    this.selectAliases.add(alias);
+                },
+                isKnownFunction: (functionName: string) => this.isKnownFunction(functionName),
+            },
+        });
+    }
 
-                    return arg;
-                }
-                return String(arg);
-            })
-            .join(', ');
-
-        let expr: string;
-
-        if (F === 'DISTINCT') {
-            expr = `DISTINCT ${argList}`;
-        } else {
-            expr = `${F}(${argList})`;
-        }
-
-        if (alias) {
-            this.selectAliases.add(alias);
-            expr += ` AS ${alias}`;
-        }
+    buildAggregateField(field: string | any[], params?: tSqlParams): string {
+        const serialized = this.serializeExpression(field, params, 'SELECT expression');
 
         logWithLevel(
             LogLevel.DEBUG,
             getLogContext(this.config, this.request),
             console.log,
-            `[SELECT] ${expr}`,
+            `[SELECT] ${serialized.sql}`,
         );
 
-        return expr;
+        return serialized.sql;
     }
 }

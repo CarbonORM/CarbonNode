@@ -19,7 +19,7 @@ export function normalizeSingularRequest<
 ): RequestQueryBody<Method, T, Custom, Overrides> {
   if (request == null || typeof request !== 'object') return request;
 
-  const specialKeys = new Set([
+  const specialKeys: Set<string> = new Set([
     C6C.SELECT,
     C6C.UPDATE,
     C6C.DELETE,
@@ -88,6 +88,7 @@ export function normalizeSingularRequest<
   const {
     dataInsertMultipleRows,
     cacheResults,
+    skipReactBootstrap,
     fetchDependencies,
     debug,
     success,
@@ -103,10 +104,13 @@ export function normalizeSingularRequest<
   const pkFullValues = Object.fromEntries(
     Object.entries(pkValues).map(([k, v]) => [shortToFull[k] ?? k, v])
   );
+  const pkWhereExpressions = Object.fromEntries(
+    Object.entries(pkFullValues).map(([column, value]) => [column, [C6C.EQUAL, [C6C.LIT, value]]]),
+  );
 
   if (requestMethod === C6C.GET) {
     const normalized: any = {
-      WHERE: { ...pkFullValues },
+      WHERE: { ...pkWhereExpressions },
     };
     // Preserve pagination if any was added previously
     if ((request as any)[C6C.PAGINATION]) {
@@ -116,6 +120,7 @@ export function normalizeSingularRequest<
       ...normalized,
       dataInsertMultipleRows,
       cacheResults,
+      skipReactBootstrap,
       fetchDependencies,
       debug,
       success,
@@ -126,12 +131,13 @@ export function normalizeSingularRequest<
   if (requestMethod === C6C.DELETE) {
     const normalized: any = {
       [C6C.DELETE]: true,
-      WHERE: { ...pkFullValues },
+      WHERE: { ...pkWhereExpressions },
     };
     return {
       ...normalized,
       dataInsertMultipleRows,
       cacheResults,
+      skipReactBootstrap,
       fetchDependencies,
       debug,
       success,
@@ -154,13 +160,14 @@ export function normalizeSingularRequest<
 
   const normalized: any = {
     [C6C.UPDATE]: updateBody,
-    WHERE: { ...pkFullValues },
+    WHERE: { ...pkWhereExpressions },
   };
 
   return {
     ...normalized,
     dataInsertMultipleRows,
     cacheResults,
+    skipReactBootstrap,
     fetchDependencies,
     debug,
     success,
