@@ -136,6 +136,39 @@ export function buildBinaryTestConfigFqn() {
   return baseConfig;
 }
 
+export function buildTemporalTestConfig() {
+  const temporalCols = {
+    'events.id': 'id',
+    'events.read_at': 'read_at',
+    'events.read_on': 'read_on',
+    'events.read_time': 'read_time',
+  } as const;
+
+  const C6 = {
+    C6VERSION: 'test',
+    TABLES: {
+      events: tableModel<'events' & any>('events', temporalCols as any),
+    },
+    PREFIX: '',
+    ORM: {} as any,
+  } as any;
+
+  C6.TABLES.events.TYPE_VALIDATION['id'].MYSQL_TYPE = 'INT';
+  C6.TABLES.events.TYPE_VALIDATION['read_at'].MYSQL_TYPE = 'TIMESTAMP(3)';
+  C6.TABLES.events.TYPE_VALIDATION['read_on'].MYSQL_TYPE = 'DATE';
+  C6.TABLES.events.TYPE_VALIDATION['read_time'].MYSQL_TYPE = 'TIME(3)';
+
+  const baseConfig: iRest<any, any, any> = {
+    C6,
+    restModel: C6.TABLES.events,
+    requestMethod: 'POST',
+    verbose: false,
+    logLevel: LogLevel.DEBUG,
+  } as any;
+
+  return baseConfig;
+}
+
 export function buildParcelConfig() {
   const propertyUnitsCols = {
     'property_units.unit_id': 'unit_id',

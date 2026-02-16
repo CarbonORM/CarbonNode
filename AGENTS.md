@@ -1,15 +1,111 @@
-# Contributor Guidelines
+# CarbonNode Contributor + Agent Guide
 
+This file defines contribution expectations for humans and AI agents working in this repo.
 
-- You have access to a local MySQL instance and test db.
-- Add tests for new features and behavior changes.
-- When practical, improve coverage in nearby touched code.
-- Run `npm test` before each commit. The command MUST pass.
-- Use https://semver.org/ to determine how a version bump should be applied in `package.json`
+## Structural Goal
 
-### Boot
-In AI environments that allow it, like Codex or localhost, this is already configured to run on boot. 
-No need to re-run it or other setup instructions included below.
+CarbonNode should have one consistent, typeable, JSON-serializable SQL expression grammar across:
+
+- `SELECT`
+- `WHERE`
+- `HAVING`
+- `ORDER`
+- expression-capable `UPDATE` / `INSERT` values
+
+Core principle: **one expression serializer, reused everywhere**.
+
+## Canonical Expression Grammar (6.1.0+)
+
+Use these forms only:
+
+1. Known function call: `[C6C.<KNOWN_FN>, ...args]`
+2. Custom function: `[C6C.CALL, 'FUNCTION_NAME', ...args]`
+3. Alias wrapper: `[C6C.AS, expr, 'alias']`
+4. Distinct wrapper: `[C6C.DISTINCT, expr]`
+5. Literal wrapper: `[C6C.LIT, value]` (bound param, never raw inline)
+6. ORDER term: `[expression, 'ASC' | 'DESC']`
+
+Rules:
+
+- Bare strings are references only (for example `table.column` or valid aliases).
+- Non-reference strings must be wrapped with `C6C.LIT`.
+- `AS` and `DISTINCT` are wrappers, not positional tokens.
+- `PAGINATION.ORDER` must be an array of terms, not an object map.
+
+## Removed Legacy Syntax (Must Throw)
+
+Do not reintroduce compatibility for these removed forms:
+
+- `[fn, ..., C6C.AS, alias]`
+- `[column, C6C.AS, alias]`
+- object-rooted function calls like `{ [C6C.COUNT]: [...] }`
+- implicit string literals in function args
+- legacy `ORDER` object form like `{ [States.NAME]: C6C.ASC }`
+
+## Why This Design
+
+- Uniform grammar lowers cognitive load across builders.
+- Tuple payloads stay JSON-serializable for transport/debugging.
+- Wrapper-based modifiers (`AS`, `DISTINCT`, `LIT`) avoid positional ambiguity.
+- Explicit literals improve safety and prevent reference-vs-literal mistakes.
+- Array-based `ORDER` supports expression ordering and deterministic multi-term ordering.
+
+## Files You Usually Need to Touch for Grammar Changes
+
+- `src/constants/C6Constants.ts`
+- `src/types/mysqlTypes.ts`
+- `src/types/ormInterfaces.ts`
+- `src/orm/queryHelpers.ts`
+- `src/orm/builders/ExpressionSerializer.ts`
+- `src/orm/builders/AggregateBuilder.ts`
+- `src/orm/builders/ConditionBuilder.ts`
+- `src/orm/builders/PaginationBuilder.ts`
+- `src/orm/queries/SelectQueryBuilder.ts`
+- `src/orm/queries/UpdateQueryBuilder.ts`
+- `src/orm/queries/PostQueryBuilder.ts`
+- `README.md`
+- tests in `src/__tests__/`
+
+If changing generated test behavior, update templates in:
+
+- `scripts/assets/handlebars/`
+
+not only generated outputs under `src/__tests__/sakila-db/`.
+
+## Type Safety Expectations
+
+- Keep `C6Constants` literal-typed (`as const`) so helper APIs infer correctly.
+- Prefer strong tuple types over `any` for expression APIs.
+- Keep helper builders (`fn`, `call`, `alias`, `distinct`, `lit`, `order`) aligned with canonical grammar.
+
+## SQL/Runtime Safety Expectations
+
+- Literals are parameters (`?` or named params), not string concatenation.
+- Unknown/unsafe expression shapes should fail fast with explicit errors.
+- Do not add "safe raw SQL string" bypass paths as a grammar alternative.
+
+## Testing + Validation (Required)
+
+- Add tests for behavior changes.
+- Expand nearby coverage when practical.
+- Run `npm test` before commit. It must pass.
+- `npm test` includes build + binding generation; treat that as the release gate.
+
+Recommended focus areas for grammar work:
+
+- `src/__tests__/sqlBuilders.test.ts`
+- `src/__tests__/sqlBuilders.complex.test.ts`
+- `src/__tests__/sqlBuilders.expressions.test.ts`
+
+## Versioning
+
+- Use [semver.org](https://semver.org/) rules for `package.json`.
+- If team explicitly chooses a different bump strategy for a breaking change, document it in PR notes and README migration sections.
+
+## Environment / Boot
+
+In AI environments that allow it (Codex/localhost), this is generally configured on boot already.
+No need to re-run setup unless asked.
 
 ```bash
 #!/usr/bin/env bash
@@ -28,56 +124,37 @@ if ! id -u mysql >/dev/null 2>&1; then
            --shell /usr/sbin/nologin mysql
 fi
 
-# 3. Data directories **and** secure-file-priv directory
-mkdir -p /var/lib/mysql            \
-         /var/lib/mysql-files      \
-         /var/run/mysqld
+# 3. Data directories and secure-file-priv directory
+mkdir -p /var/lib/mysql /var/lib/mysql-files /var/run/mysqld
 chown -R mysql:mysql /var/lib/mysql /var/lib/mysql-files /var/run/mysqld
-chmod 750 /var/lib/mysql-files     # MySQL expects owner-only access:contentReference[oaicite:1]{index=1}
+chmod 750 /var/lib/mysql-files
 
-# 4. Initialise and start detached
-mysqld --initialize-insecure --user=root                                # empty root pwd:contentReference[oaicite:2]{index=2}
+# 4. Initialize and start detached
+mysqld --initialize-insecure --user=root
 mysqld --daemonize --user=root \
        --socket=/var/run/mysqld/mysqld.sock \
        --pid-file=/var/run/mysqld/mysqld.pid
 
-# 5. Wait until the server is ready
+# 5. Wait until server is ready
 until mysqladmin --socket=/var/run/mysqld/mysqld.sock ping --silent; do sleep 1; done
-#verify
-# Should print exactly one mysqld line
-ps -fp $(cat /var/run/mysqld/mysqld.pid)
-# Fast “is it alive?” check
-mysqladmin --socket=/var/run/mysqld/mysqld.sock ping
-# →  mysqld is alive
 
-# A few server counters & compile flags
+# Optional sanity checks
+ps -fp "$(cat /var/run/mysqld/mysqld.pid)"
+mysqladmin --socket=/var/run/mysqld/mysqld.sock ping
 mysqladmin --socket=/var/run/mysqld/mysqld.sock version
-       
+
+# Install sakila test DB
 wget https://downloads.mysql.com/docs/sakila-db.zip
 unzip sakila-db.zip
 mysql -u root < sakila-db/sakila-schema.sql
-mysql -u root < sakila-db/sakila-data.sql       
-       
-sudo mysql <<'SQL'
--- See how root is authenticated
-SELECT user,host,plugin FROM mysql.user WHERE user='root' AND host='localhost'\G
+mysql -u root < sakila-db/sakila-data.sql
 
--- If plugin shows 'auth_socket', switch to native with your password:
-ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY 'password';
-
--- If it already shows 'mysql_native_password', just set it:
--- ALTER USER 'root'@'localhost' IDENTIFIED BY 'password';
-
-FLUSH PRIVILEGES;
-SQL
-
+# Node
 wget -qO- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash
 export NVM_DIR="$([ -z "${XDG_CONFIG_HOME-}" ] && printf %s "${HOME}/.nvm" || printf %s "${XDG_CONFIG_HOME}/nvm")"
 [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh" || true
 nvm install
-nvm use 
+nvm use
 npm install
-
 npm run c6
-
 ```

@@ -5,7 +5,7 @@ import { PostQueryBuilder } from '../orm/queries/PostQueryBuilder';
 import { UpdateQueryBuilder } from '../orm/queries/UpdateQueryBuilder';
 import { DeleteQueryBuilder } from '../orm/queries/DeleteQueryBuilder';
 import { alias, call, distinct, fn, lit, order } from '../orm/queryHelpers';
-import { buildTestConfig, buildBinaryTestConfig, buildBinaryTestConfigFqn } from './fixtures/c6.fixture';
+import { buildTestConfig, buildBinaryTestConfig, buildBinaryTestConfigFqn, buildTemporalTestConfig } from './fixtures/c6.fixture';
 
 describe('SQL Builders', () => {
   it('builds SELECT with JOIN, WHERE, GROUP BY, HAVING and default LIMIT', () => {
@@ -380,5 +380,42 @@ describe('SQL Builders', () => {
     const buf = (params as any[])[0];
     expect(Buffer.isBuffer(buf)).toBe(true);
     expect((buf as Buffer).length).toBe(16);
+  });
+
+  it('serializes ISO-8601 strings for TIMESTAMP columns in INSERT params', () => {
+    const config = buildTemporalTestConfig();
+    const qb = new PostQueryBuilder(config as any, {
+      [C6C.INSERT]: {
+        'events.read_at': '2026-02-16T21:27:06.679Z'
+      }
+    } as any, false);
+
+    const { params } = qb.build('events');
+    expect(params).toEqual(['2026-02-16 21:27:06.679']);
+  });
+
+  it('serializes ISO-8601 strings for DATE columns in UPDATE params', () => {
+    const config = buildTemporalTestConfig();
+    const qb = new UpdateQueryBuilder(config as any, {
+      [C6C.UPDATE]: {
+        'events.read_on': '2026-02-16T21:27:06.679Z'
+      },
+      WHERE: { 'events.id': [C6C.EQUAL, 1] }
+    } as any, false);
+
+    const { params } = qb.build('events');
+    expect(params).toEqual(['2026-02-16', 1]);
+  });
+
+  it('serializes offset ISO-8601 strings for TIME columns in WHERE params', () => {
+    const config = buildTemporalTestConfig();
+    const qb = new SelectQueryBuilder(config as any, {
+      WHERE: {
+        'events.read_time': [C6C.EQUAL, [C6C.LIT, '2026-02-16T16:27:06.679-05:00']]
+      }
+    } as any, false);
+
+    const { params } = qb.build('events');
+    expect(params).toEqual(['21:27:06.679']);
   });
 });

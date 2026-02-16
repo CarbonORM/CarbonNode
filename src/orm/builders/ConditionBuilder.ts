@@ -1,7 +1,7 @@
 import {C6C} from "../../constants/C6Constants";
 import {OrmGenerics} from "../../types/ormGenerics";
 import {DetermineResponseDataType} from "../../types/ormInterfaces";
-import {convertHexIfBinary, SqlBuilderResult} from "../utils/sqlUtils";
+import {convertSqlValueForColumn, SqlBuilderResult} from "../utils/sqlUtils";
 import {AggregateBuilder} from "./AggregateBuilder";
 import {isDerivedTableKey} from "../queryHelpers";
 import {getLogContext, LogLevel, logWithLevel} from "../../utils/logLevel";
@@ -175,15 +175,8 @@ export abstract class ConditionBuilder<
         column: string,
         value: any
     ): string {
-        // Determine column definition from C6.TABLES to support type-aware conversions (e.g., BINARY hex -> Buffer)
-        let columnDef: any | undefined;
-        if (typeof column === 'string' && column.includes('.')) {
-            const [tableName, colName] = column.split('.', 2);
-            const table = this.config.C6?.TABLES?.[tableName];
-            // Support both short-keyed and fully-qualified TYPE_VALIDATION entries
-            columnDef = table?.TYPE_VALIDATION?.[colName] ?? table?.TYPE_VALIDATION?.[`${tableName}.${colName}`];
-        }
-        const val = convertHexIfBinary(column, value, columnDef);
+        const columnDef = this.resolveColumnDefinition(column);
+        const val = convertSqlValueForColumn(column, value, columnDef);
 
         if (this.useNamedParams) {
             const key = `param${Object.keys(params).length}`;

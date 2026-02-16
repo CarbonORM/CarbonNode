@@ -9,106 +9,413 @@
 
 # CarbonNode
 
-CarbonNode is a part of the CarbonORM series. It is a NodeJS MySQL ORM that can run independently in the backend or paired with 
-CarbonReact for 1=1 syntax. Note the CarbonNode + CarbonReact experience is unmatched in interoperability.
+CarbonNode is a typed MySQL ORM runtime plus code generator for REST bindings.
 
-# Purpose
+It is built for:
 
-CarbonNode is designed to generate RESTful API bindings for a MySQL database. The generated code provides a simple and
-consistent interface for performing CRUD operations on the database tables. The goal is to reduce the amount of boilerplate
-code needed to interact with the database and to provide a more efficient and reliable way to work with MySQL data in a NodeJS
-environment. The major goals:
-- Allow a 1-1 interoperability when querying data from the frontend to the backend. 
-- Language based Objects/Arrays for representing and modifying queries to eliminate string manipulation operations.
-- Explicit column references to allow for easier refactoring and code completion in IDEs. 
-  - Selecting a dead column will result in a compile time error instead of a runtime error.
-- TypeScript types generated for each table in the database.
-- Lifecycle hooks for each CRUD operation to allow for custom logic to be executed before and after the operation.
-- Validation of data types and formats before executing CRUD operations to ensure data integrity.
+- full-stack teams that want one query shape across frontend and backend
+- explicit column references and safer query composition
+- JSON-serializable SQL expression payloads with predictable parsing
+- generated TypeScript bindings from live MySQL schema
 
-It's easier to scale your middleware than your database. 
-CarbonNode aims to capture issues before they reach your database.
+It can run in two modes:
 
+- SQL executor (`mysqlPool` set): executes SQL directly in Node
+- HTTP executor (no pool, axios set): sends requests to a CarbonNode REST endpoint
 
-## Alpha Release
+## Table of Contents
 
-This is an alpha release. The code is not yet ready for production. We are looking for feedback on the API and any bugs.
-Some features are not yet implemented. We are working on the documentation and will be adding more examples. Please 
-check out [any issue](https://github.com/CarbonORM/CarbonWordPress/issues) we have open and feel free to contribute.
+1. [Install](#install)
+2. [Quickstart](#quickstart)
+3. [Execution Model](#execution-model)
+4. [C6 + CarbonReact State Management](#c6--carbonreact-state-management)
+5. [Canonical SQL Expression Grammar (6.1.0+)](#canonical-sql-expression-grammar-610)
+6. [Clause-by-Clause Usage](#clause-by-clause-usage)
+7. [Helper Builders](#helper-builders)
+8. [Singular vs Complex Requests](#singular-vs-complex-requests)
+9. [HTTP Query-String Pitfalls](#http-query-string-pitfalls)
+10. [Generator Output](#generator-output)
+11. [SQL Allowlist](#sql-allowlist)
+12. [Lifecycle Hooks and Websocket Broadcast](#lifecycle-hooks-and-websocket-broadcast)
+13. [Testing](#testing)
+14. [Migration Notes (6.0 -> 6.1)](#migration-notes-60---61)
+15. [AI Interpretation Contract](#ai-interpretation-contract)
+16. [Git Hooks](#git-hooks)
+17. [Support](#support)
 
-## Installation
-
-CarbonNode is available on [NPM](https://www.npmjs.com/). You'll need to have [NodeJS](https://nodejs.org/en/) installed 
-which comes prepackaged with npm (node package manager). 
+## Install
 
 ```bash
 npm install @carbonorm/carbonnode
 ```
 
-## Generate Models
+Peer dependencies:
 
-The generator produces a single `C6.ts` file containing all tables, types, and REST bindings. Keep this file in version
-control and share it between server and client. All arguments are optional; the example below shows the defaults.
+- `mysql2` for SQL executor mode
+- `axios` for HTTP executor mode
+- `express` only if hosting the REST route in your app
+
+## Quickstart
+
+### 1) Generate bindings
+
+Generate `C6.ts` + `C6.test.ts` + dump artifacts into an output directory:
 
 ```bash
-npx generateRestBindings --user root --pass password --host 127.0.0.1 --port 3306 --dbname carbonPHP --prefix carbon_ --output ./shared/rest/C6.ts
+npx generateRestBindings \
+  --user root \
+  --pass password \
+  --host 127.0.0.1 \
+  --port 3306 \
+  --dbname sakila \
+  --prefix "" \
+  --output ./shared/rest
 ```
 
-The generated file exports `C6`, `GLOBAL_REST_PARAMETERS`, `TABLES`, `ORM`, and per-table bindings (e.g. `Users`):
+Import from generated bindings:
 
-```typescript
-import { C6, GLOBAL_REST_PARAMETERS, Users } from "./shared/rest/C6";
+```ts
+import { C6, GLOBAL_REST_PARAMETERS, Actor } from "./shared/rest/C6";
 ```
 
-You can view the generator source in
-[CarbonNode](https://github.com/CarbonORM/CarbonNode/blob/main/scripts/generateRestBindings.ts). We use
-[Handlebars templates](https://mustache.github.io/) to generate the code.
+### 2) Configure runtime
 
-### Runtime Setup
+#### SQL executor mode (Node + direct DB)
 
-CarbonNode executes SQL directly when `GLOBAL_REST_PARAMETERS.mysqlPool` is provided. If no pool is set, it will use
-the HTTP executor (useful for frontends or non-Node runtimes).
-
-```typescript
+```ts
 import mysql from "mysql2/promise";
 import { GLOBAL_REST_PARAMETERS } from "./shared/rest/C6";
 
 GLOBAL_REST_PARAMETERS.mysqlPool = mysql.createPool({
-    host: "127.0.0.1",
-    user: "root",
-    password: "password",
-    database: "carbonPHP",
+  host: "127.0.0.1",
+  user: "root",
+  password: "password",
+  database: "sakila",
 });
-
-// Optional HTTP path:
-// GLOBAL_REST_PARAMETERS.axios = axiosInstance;
-// GLOBAL_REST_PARAMETERS.restURL = "/rest/";
-
-// Optional websocket broadcast on writes:
-// GLOBAL_REST_PARAMETERS.websocketBroadcast = (payload) => wsServer.broadcast(JSON.stringify(payload));
 ```
 
-### Request Flow
+#### HTTP executor mode (frontend or remote client)
+
+```ts
+import { axiosInstance } from "@carbonorm/carbonnode";
+import { GLOBAL_REST_PARAMETERS } from "./shared/rest/C6";
+
+GLOBAL_REST_PARAMETERS.axios = axiosInstance;
+GLOBAL_REST_PARAMETERS.restURL = "/api/rest/";
+```
+
+If you are using CarbonReact, wire `reactBootstrap` as described in [C6 + CarbonReact State Management](#c6--carbonreact-state-management).
+
+### 3) Host the REST endpoint (optional, Express)
+
+```ts
+import express from "express";
+import mysql from "mysql2/promise";
+import { restExpressRequest } from "@carbonorm/carbonnode";
+import { C6 } from "./shared/rest/C6";
+
+const app = express();
+app.set("query parser", "extended");
+app.use(express.json());
+
+const mysqlPool = mysql.createPool({
+  host: "127.0.0.1",
+  user: "root",
+  password: "password",
+  database: "sakila",
+});
+
+restExpressRequest({
+  router: app,
+  routePath: "/api/rest/:table{/:primary}",
+  C6,
+  mysqlPool,
+});
+```
+
+### 4) Query data
+
+```ts
+import { C6, Actor } from "./shared/rest/C6";
+
+const result = await Actor.Get({
+  [C6.SELECT]: [
+    Actor.ACTOR_ID,
+    Actor.FIRST_NAME,
+    Actor.LAST_NAME,
+  ],
+  [C6.WHERE]: {
+    [Actor.LAST_NAME]: [C6.LIKE, [C6.LIT, "%PITT%"]],
+  },
+  [C6.PAGINATION]: {
+    [C6.LIMIT]: 10,
+    [C6.PAGE]: 1,
+    [C6.ORDER]: [[Actor.ACTOR_ID, C6.DESC]],
+  },
+});
+```
+
+## Execution Model
 
 ```mermaid
 flowchart LR
-    Client["App code\nActor.Get(...)" ] --> RestRequest["restOrm + restRequest"]
-    RestRequest -->|"Node + mysqlPool"| SqlExec["SqlExecutor"] --> MySQL[("MySQL")]
-    RestRequest -->|"No pool"| HttpExec["HttpExecutor"] --> RestApi["/rest/:table"]
-    RestApi --> Express["ExpressHandler"] --> SqlExec
+    Client["App Code\nActor.Get(...)"] --> Request["restRequest facade"]
+    Request -->|"mysqlPool configured"| SQL["SqlExecutor"] --> DB[("MySQL")]
+    Request -->|"no mysqlPool"| HTTP["HttpExecutor"] --> REST["/api/rest/:table"]
+    REST --> Express["ExpressHandler"] --> SQL
 ```
 
-### SQL Allowlist
+`restRequest` chooses SQL executor when `mysqlPool` is present; otherwise it uses HTTP executor.
 
-To restrict which SQL statements can run in production, set `GLOBAL_REST_PARAMETERS.sqlAllowListPath` to a JSON file
-containing allowed SQL strings. When the path is set, `SqlExecutor` normalizes whitespace and validates each query against
-the allowlist. If the file is missing, an error is thrown; if the SQL is not listed, execution is blocked.
+## C6 + CarbonReact State Management
 
-```typescript
-GLOBAL_REST_PARAMETERS.sqlAllowListPath = "/path/to/sqlAllowList.json";
+If your app uses [CarbonReact](https://github.com/CarbonORM/CarbonReact), CarbonNode can keep table state in sync automatically after requests.
+
+Set:
+
+```ts
+import { GLOBAL_REST_PARAMETERS } from "./shared/rest/C6";
+
+GLOBAL_REST_PARAMETERS.reactBootstrap = yourCarbonReactInstance;
 ```
 
-Allowlist format:
+State sync behavior:
+
+- HTTP executor path:
+  - `GET`: updates table state with response rows
+  - `POST`: inserts created row(s) into state
+  - `PUT`: updates matching row(s) by primary key
+  - `DELETE`: removes matching row(s) by primary key
+- SQL executor path:
+  - `GET`: updates table state when `reactBootstrap` is set
+  - write sync is typically handled by your websocket/event layer
+
+How C6 identifies rows:
+
+- `stateKey` is table name (`restModel.TABLE_NAME`)
+- `uniqueObjectId` is table primary keys (`restModel.PRIMARY_SHORT`)
+
+Per-request escape hatch:
+
+```ts
+await SomeTable.Get({
+  /* query */
+  skipReactBootstrap: true,
+});
+```
+
+This lets you opt out of automatic state writes when a call is read-only for the UI or you are running a background sync pass.
+
+## Canonical SQL Expression Grammar (6.1.0+)
+
+`6.1.0` unifies expression parsing across `SELECT`, `WHERE`, `HAVING`, `ORDER`, and expression-capable `UPDATE`/`INSERT` values.
+
+| Purpose | Canonical form |
+| --- | --- |
+| Known function | `[C6.FUNCTION_NAME, ...args]` |
+| Custom function | `[C6.CALL, "FUNCTION_NAME", ...args]` |
+| Alias | `[C6.AS, expression, "alias"]` |
+| DISTINCT | `[C6.DISTINCT, expression]` |
+| Literal binding | `[C6.LIT, value]` |
+| ORDER term | `[expression, "ASC" \| "DESC"]` |
+
+Normative rules:
+
+- Bare strings are references only (`table.column` or valid aliases in context).
+- Non-reference strings must be wrapped with `[C6.LIT, value]`.
+- `AS` and `DISTINCT` are wrappers, not positional tokens.
+- `PAGINATION.ORDER` must be an array of order terms.
+- Use `C6.CALL` for unknown/custom function names.
+
+Removed legacy syntax (throws):
+
+- `[fn, ..., C6.AS, alias]`
+- `[column, C6.AS, alias]`
+- object-rooted function expressions like `{ [C6.COUNT]: [...] }`
+- implicit string literals in function arguments
+- `ORDER` object-map syntax (now array terms only)
+
+## Clause-by-Clause Usage
+
+### SELECT with wrappers
+
+```ts
+import { C6, Actor } from "./shared/rest/C6";
+
+const response = await Actor.Get({
+  [C6.SELECT]: [
+    [C6.AS, [C6.DISTINCT, Actor.FIRST_NAME], "distinct_name"],
+    [C6.AS, [C6.COUNT, Actor.ACTOR_ID], "cnt"],
+    [C6.CALL, "COALESCE", [C6.LIT, "Unknown"], Actor.LAST_NAME],
+  ],
+});
+```
+
+### WHERE with literals, BETWEEN, IN, AND/OR
+
+```ts
+import { C6, Actor } from "./shared/rest/C6";
+
+const response = await Actor.Get({
+  [C6.WHERE]: {
+    [C6.AND]: [
+      { [Actor.LAST_NAME]: [C6.LIKE, [C6.LIT, "S%"]] },
+      { [Actor.ACTOR_ID]: [C6.BETWEEN, [5, 50]] },
+      { [Actor.FIRST_NAME]: [C6.IN, [[C6.LIT, "NICK"], [C6.LIT, "ED"]]] },
+    ],
+  },
+});
+```
+
+### JOIN
+
+```ts
+import { C6, Actor, Film_Actor } from "./shared/rest/C6";
+
+const response = await Actor.Get({
+  [C6.SELECT]: [Actor.ACTOR_ID, Actor.FIRST_NAME],
+  [C6.JOIN]: {
+    [C6.INNER]: {
+      [Film_Actor.TABLE_NAME]: {
+        [Film_Actor.ACTOR_ID]: [C6.EQUAL, Actor.ACTOR_ID],
+      },
+    },
+  },
+});
+```
+
+### ORDER and pagination
+
+```ts
+import { C6, Actor } from "./shared/rest/C6";
+
+const response = await Actor.Get({
+  [C6.PAGINATION]: {
+    [C6.ORDER]: [
+      [Actor.LAST_NAME, C6.ASC],
+      [Actor.FIRST_NAME, C6.DESC],
+    ],
+    [C6.LIMIT]: 25,
+    [C6.PAGE]: 1,
+  },
+});
+```
+
+`PAGE` is 1-based:
+
+- `PAGE = 1` -> first page
+- `PAGE = 2` -> second page
+- `PAGE = 0` is coerced to `1`
+
+### UPDATE expression values
+
+```ts
+import { C6, Actor } from "./shared/rest/C6";
+
+await Actor.Put({
+  [Actor.ACTOR_ID]: 42,
+  [C6.UPDATE]: {
+    [Actor.FIRST_NAME]: [C6.CONCAT, [C6.LIT, "Mr. "], Actor.LAST_NAME],
+  },
+});
+```
+
+## Helper Builders
+
+CarbonNode exports typed builders that return canonical tuples:
+
+```ts
+import { fn, call, alias, distinct, lit, order } from "@carbonorm/carbonnode";
+import { C6, Actor } from "./shared/rest/C6";
+
+const response = await Actor.Get({
+  [C6.SELECT]: [
+    alias(distinct(Actor.FIRST_NAME), "distinct_name"),
+    alias(fn(C6.COUNT, Actor.ACTOR_ID), "cnt"),
+    call("COALESCE", lit("N/A"), Actor.LAST_NAME),
+  ],
+  [C6.PAGINATION]: {
+    [C6.ORDER]: [order(fn(C6.COUNT, Actor.ACTOR_ID), C6.DESC)],
+    [C6.LIMIT]: 5,
+  },
+});
+```
+
+## Singular vs Complex Requests
+
+Singular requests (primary key at root) are normalized into complex query format.
+
+```ts
+await Actor.Get({ [Actor.ACTOR_ID]: 42 });
+await Actor.Put({ [Actor.ACTOR_ID]: 42, [Actor.LAST_NAME]: "Updated" });
+await Actor.Delete({ [Actor.ACTOR_ID]: 42 });
+```
+
+Behavior:
+
+- `GET` with missing PKs remains a collection query.
+- `PUT`/`DELETE` singular forms require full PK coverage.
+
+## HTTP Query-String Pitfalls
+
+If you are manually building URLs, nested arrays must preserve tuple shape exactly.
+
+Common failure:
+
+- `WHERE[job_runs.job_type][0]=LIT&WHERE[job_runs.job_type][1]=avm_print`
+- This is interpreted as operator tuple `[LIT, "avm_print"]`, and fails with:
+  - `Invalid or unsupported SQL operator detected: 'LIT'`
+
+Correct structure:
+
+- `WHERE[job_runs.job_type][0]==`
+- `WHERE[job_runs.job_type][1][0]=LIT`
+- `WHERE[job_runs.job_type][1][1]=avm_print`
+
+Also ensure `ORDER` is under `PAGINATION`:
+
+- correct: `PAGINATION[ORDER][0][0]=job_runs.created_at`
+- incorrect: `ORDER[0][0]=job_runs.created_at`
+
+Recommendation: use generated bindings + axios executor, not manual URL construction.
+
+## Generator Output
+
+`generateRestBindings` writes:
+
+- `C6.ts` (typed table model + REST bindings)
+- `C6.test.ts` (generated test suite)
+- `C6.mysqldump.sql`
+- `C6.mysqldump.json`
+- `C6.mysql.cnf`
+
+Template sources:
+
+- `scripts/assets/handlebars/C6.ts.handlebars`
+- `scripts/assets/handlebars/C6.test.ts.handlebars`
+
+## SQL Allowlist
+
+To enforce a SQL allowlist in production:
+
+```ts
+import { GLOBAL_REST_PARAMETERS } from "./shared/rest/C6";
+
+GLOBAL_REST_PARAMETERS.sqlAllowListPath = "/path/to/C6.sqlAllowList.json";
+```
+
+Optional: add a project-specific normalizer for allowlist matching:
+
+```ts
+import { GLOBAL_REST_PARAMETERS } from "./shared/rest/C6";
+
+GLOBAL_REST_PARAMETERS.sqlQueryNormalizer = (normalizedSql) =>
+  normalizedSql.toLowerCase();
+```
+
+`sqlQueryNormalizer` runs **after** CarbonNode's built-in normalization. Use it to enforce house-style matching (for example lowercase-only allowlist entries).
+
+Allowlist file format:
 
 ```json
 [
@@ -116,300 +423,210 @@ Allowlist format:
 ]
 ```
 
-Generated tests in `src/__tests__/sakila-db/C6.test.ts` write response fixtures into `src/__tests__/sakila-db/sqlResponses/`
-and compile `src/__tests__/sakila-db/C6.sqlAllowList.json` after the suite finishes. Pass that file path to enable
-validation.
+Normalization behavior (important):
 
-When using the REST handler directly, forward the path as well:
+CarbonNode normalizes both:
 
-```typescript
-app.all("/rest/:table", ExpressHandler({ C6, mysqlPool, sqlAllowListPath }));
+- each SQL entry in your allowlist file
+- each runtime SQL statement before matching
+
+So you should treat allowlist entries as **normalized query shapes**, not exact byte-for-byte logs.
+
+Normalization includes:
+
+- stripping ANSI color codes
+- collapsing whitespace
+- removing trailing `;`
+- normalizing common geo function names (`ST_DISTANCE_SPHERE`, `ST_GEOMFROMTEXT`, `MBRCONTAINS`)
+- normalizing `LIMIT`/`OFFSET` numeric literals to placeholders
+- collapsing bind groups (for example `IN (?, ?, ?)` -> `IN (? ×*)`)
+- collapsing repeated `VALUES` bind rows to a wildcard row shape
+
+Example (conceptual):
+
+```sql
+-- runtime SQL
+SELECT * FROM `actor` WHERE actor.actor_id IN (?, ?, ?) LIMIT 100
+
+-- normalized shape used for matching
+SELECT * FROM `actor` WHERE actor.actor_id IN (? ×*) LIMIT ?
 ```
 
-### Generated Tests
+When enabled:
 
-The generator also writes `C6.test.ts` alongside `C6.ts`. Tests use Vitest and the generated bindings. Keep or delete the
-file depending on your workflow.
+- missing allowlist file -> error
+- SQL not in allowlist -> blocked
 
-The generator also writes `C6.MySqlDump.json`, `C6.mysqldump.sql`, and `C6.mysql.cnf` into the same output directory for
-debugging and inspection.
+Practical workflow:
 
-### Templates
+1. Run representative queries in tests/integration.
+2. Collect normalized SQL statements.
+3. Save them into your allowlist JSON.
+4. Set `GLOBAL_REST_PARAMETERS.sqlAllowListPath`.
 
-Two templates are used to generate the output:
+## Lifecycle Hooks and Websocket Broadcast
 
-1) [C6.ts.handlebars](https://github.com/CarbonORM/CarbonNode/blob/main/scripts/assets/handlebars/C6.ts.handlebars)
-2) [C6.test.ts.handlebars](https://github.com/CarbonORM/CarbonNode/blob/main/scripts/assets/handlebars/C6.test.ts.handlebars)
+Generated models include lifecycle hook groups per method:
 
-#### Generation Example
+- `beforeProcessing`
+- `beforeExecution`
+- `afterExecution`
+- `afterCommit`
 
-0) **npx generateRestBindings** is executed.
-1) **The MySQL dump tool** outputs a structure for every table.
+Unlike other CarbonORM language bindings, C6.ts is not semi-persistent. 
+Modifications to the C6 object should be done at runtime, not by editing the generated file.
 
-```mysql
-CREATE TABLE actor (
-  actor_id SMALLINT UNSIGNED NOT NULL AUTO_INCREMENT,
-  first_name VARCHAR(45) NOT NULL,
-  last_name VARCHAR(45) NOT NULL,
-  last_update TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  PRIMARY KEY  (actor_id),
-  KEY idx_actor_last_name (last_name)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+Websocket payloads for writes are supported via:
+
+```ts
+GLOBAL_REST_PARAMETERS.websocketBroadcast = async (payload) => {
+  // broadcast payload to your websocket infrastructure
+};
 ```
 
-2) **The generator** parses the table structure and creates an internal representation.
-```typescript
-export interface iActor {
-    'actor_id'?: number;
-    'first_name'?: string;
-    'last_name'?: string;
-    'last_update'?: Date | number | string;
-}
+### Real-time communication explained (no websocket background required)
 
-export type ActorPrimaryKeys =
-    'actor_id'
-    ;
+HTTP is request/response. A browser asks, server answers, done.
 
-const actor:
-    C6RestfulModel<
-        'actor',
-        iActor,
-        ActorPrimaryKeys
-    > = {
-    TABLE_NAME: 'actor',
-    ACTOR_ID: 'actor.actor_id',
-    FIRST_NAME: 'actor.first_name',
-    LAST_NAME: 'actor.last_name',
-    LAST_UPDATE: 'actor.last_update',
-    PRIMARY: [
-        'actor.actor_id',
-    ],
-    PRIMARY_SHORT: [
-        'actor_id',
-    ],
-    COLUMNS: {
-        'actor.actor_id': 'actor_id',
-        'actor.first_name': 'first_name',
-        'actor.last_name': 'last_name',
-        'actor.last_update': 'last_update',
-    },
-    TYPE_VALIDATION: {
-        'actor.actor_id': {
-            MYSQL_TYPE: 'smallint',
-            MAX_LENGTH: '',
-            AUTO_INCREMENT: true,
-            SKIP_COLUMN_IN_POST: false
-        },
-        'actor.first_name': {
-            MYSQL_TYPE: 'varchar',
-            MAX_LENGTH: '45',
-            AUTO_INCREMENT: false,
-            SKIP_COLUMN_IN_POST: false
-        },
-        'actor.last_name': {
-            MYSQL_TYPE: 'varchar',
-            MAX_LENGTH: '45',
-            AUTO_INCREMENT: false,
-            SKIP_COLUMN_IN_POST: false
-        },
-        'actor.last_update': {
-            MYSQL_TYPE: 'timestamp',
-            MAX_LENGTH: '',
-            AUTO_INCREMENT: false,
-            SKIP_COLUMN_IN_POST: false
-        },
-    },
-    REGEX_VALIDATION: {
-    },
-    LIFECYCLE_HOOKS: {
-        GET: {beforeProcessing:{}, beforeExecution:{}, afterExecution:{}, afterCommit:{}},
-        PUT: {beforeProcessing:{}, beforeExecution:{}, afterExecution:{}, afterCommit:{}},
-        POST: {beforeProcessing:{}, beforeExecution:{}, afterExecution:{}, afterCommit:{}},
-        DELETE: {beforeProcessing:{}, beforeExecution:{}, afterExecution:{}, afterCommit:{}},
-    },
-    TABLE_REFERENCES: {
+Real-time systems add **server push**: when data changes, the server proactively notifies connected clients so they can refresh or patch state immediately.
 
-    },
-    TABLE_REFERENCED_BY: {
-        'actor_id': [{
-            TABLE: 'film_actor',
-            COLUMN: 'actor_id',
-            CONSTRAINT: 'fk_film_actor_actor',
-        },],
+In CarbonNode:
+
+- `POST`, `PUT`, `DELETE` can trigger `websocketBroadcast`
+- `GET` does not broadcast
+- CarbonNode does **not** run a websocket server for you
+- you provide the `websocketBroadcast` function and route payloads into your existing websocket layer (`ws`, Socket.IO, SSE bridge, etc.)
+
+Payload shape (high level):
+
+- table + method metadata
+- request body
+- request primary key (when detectable)
+- response row(s) and response primary key when available
+
+Why this matters:
+
+- keeps multiple tabs/users aligned without polling
+- reduces stale UI after writes
+- enables event-driven cache invalidation (`table + primary key`)
+
+Minimal `ws` example:
+
+```ts
+import { WebSocketServer } from "ws";
+import { GLOBAL_REST_PARAMETERS } from "./shared/rest/C6";
+
+const wss = new WebSocketServer({ server: httpServer });
+
+GLOBAL_REST_PARAMETERS.websocketBroadcast = async (payload) => {
+  const message = JSON.stringify({ type: "db.write", payload });
+  for (const client of wss.clients) {
+    if (client.readyState === 1) {
+      client.send(message);
     }
-}
-
-export const Actor = {
-    ...actor,
-    ...restOrm<
-        OrmGenerics<any, 'actor', iActor, ActorPrimaryKeys>
-    >(() => ({
-        ...GLOBAL_REST_PARAMETERS,
-        restModel: actor
-    }))
-}
-```
-
-3) **Profit**
-You import from the frontend or backend using the same syntax:
-
-```typescript
-import { Actor, C6 } from "./shared/rest/C6";
-
-// GET
-const actors = await Actor.Get({
-    [C6.SELECT]: [
-        Actor.ACTOR_ID,
-        Actor.FIRST_NAME,
-        Actor.LAST_NAME,
-    ],
-    [C6.WHERE]: {
-        [Actor.LAST_NAME]: [C6.LIKE, [C6.LIT, "%PITT%"]],
-    },
-    [C6.PAGINATION]: { [C6.LIMIT]: 10 },
-});
-
-// POST
-await Actor.Post({
-    [Actor.FIRST_NAME]: "Brad",
-    [Actor.LAST_NAME]: "Pitt",
-});
-
-// PUT (singular)
-await Actor.Put({
-    [Actor.ACTOR_ID]: 42,
-    [Actor.LAST_NAME]: "Updated",
-});
-
-// DELETE (singular)
-await Actor.Delete({
-    [Actor.ACTOR_ID]: 42,
-});
-```
-
-### SQL Expression Grammar
-
-CarbonNode 6.1.0 uses one tuple-based grammar for SQL expressions.
-
-| Purpose | Canonical syntax |
-| --- | --- |
-| Known function | `[C6.FUNCTION_NAME, ...args]` |
-| Custom function | `[C6.CALL, 'FUNCTION_NAME', ...args]` |
-| Alias | `[C6.AS, expression, 'alias']` |
-| DISTINCT modifier | `[C6.DISTINCT, expression]` |
-| String / scalar literal binding | `[C6.LIT, value]` |
-| ORDER term | `[expression, 'ASC' | 'DESC']` |
-
-Rules:
-
-- Bare strings are treated as references only (for example `actor.first_name` or a SELECT alias).
-- Non-reference strings must be wrapped with `[C6.LIT, ...]`.
-- Legacy positional alias tuples are removed. Use `[C6.AS, expression, alias]`.
-- Object-rooted function expressions are removed. Use tuple syntax.
-
-Migration examples:
-
-```typescript
-// Before (removed)
-[C6.COUNT, Actor.ACTOR_ID, C6.AS, "cnt"]
-
-// After
-[C6.AS, [C6.COUNT, Actor.ACTOR_ID], "cnt"]
-
-// Before (removed)
-[C6.ST_GEOMFROMTEXT, ["POINT(-104.89 39.39)", 4326]]
-
-// After
-[C6.ST_GEOMFROMTEXT, [C6.LIT, "POINT(-104.89 39.39)"], 4326]
-
-// ORDER BY example
-[C6.PAGINATION]: {
-  [C6.ORDER]: [
-    [[C6.ST_DISTANCE_SPHERE, Property_Units.LOCATION, targetPoint], "ASC"],
-    [Actor.LAST_NAME, "DESC"],
-  ],
-  [C6.LIMIT]: 25,
-}
-```
-
-Example response payloads (HTTP executor):
-
-GET
-
-```json
-{
-  "success": true,
-  "rest": [
-    { "actor_id": 1, "first_name": "PENELOPE", "last_name": "GUINESS" }
-  ],
-  "next": "Function"
-}
-```
-
-POST
-
-```json
-{
-  "success": true,
-  "created": 201,
-  "rest": { "actor_id": 201, "first_name": "Brad", "last_name": "Pitt" }
-}
-```
-
-PUT
-
-```json
-{
-  "success": true,
-  "updated": true,
-  "rest": { "actor_id": 42, "last_name": "Updated" }
-}
-```
-
-DELETE
-
-```json
-{
-  "success": true,
-  "deleted": true,
-  "rest": { "actor_id": 42 }
-}
-```
-
-SQL executor responses omit `success` and include `sql` for GETs plus `affected` for writes. Express responses from `ExpressHandler` add `success: true`.
-
-SQL executor example (GET):
-
-```json
-{
-  "rest": [
-    { "actor_id": 1, "first_name": "PENELOPE", "last_name": "GUINESS" }
-  ],
-  "sql": {
-    "sql": "SELECT * FROM `actor` LIMIT 10",
-    "values": []
   }
-}
+};
 ```
 
-Our CarbonReact extends this solution for automatic state and pagination management.
+Client handling pattern:
 
+1. listen for `db.write` events
+2. inspect `payload.REST.TABLE_NAME` and primary keys
+3. invalidate/refetch relevant queries or patch local state
 
-# Git Hooks
+## Testing
 
-This project uses Git hooks to automate certain tasks:
-
-- **post-commit**: Builds the project before pushing to ensure only working code is pushed
-- **post-push**: Automatically publishes to npm when the version number changes
-
-To set up the Git hooks, run:
+Run full validation:
 
 ```bash
-npm run hooks:setup
+npm test
 ```
 
-This will configure Git to use the hooks in the `.githooks` directory. The hooks are automatically set up when you run `npm install` as well.
+This includes:
 
-# Support and Issues
+- build
+- binding generation
+- test suite
 
-Any issues found should be reported on [GitHub](https://github.com/CarbonORM/CarbonNode/issues).
+## Migration Notes (6.0 -> 6.1)
+
+Before:
+
+```ts
+[C6.COUNT, Actor.ACTOR_ID, C6.AS, "cnt"]
+```
+
+After:
+
+```ts
+[C6.AS, [C6.COUNT, Actor.ACTOR_ID], "cnt"]
+```
+
+Before:
+
+```ts
+[C6.PAGINATION]: {
+  [C6.ORDER]: { [Actor.LAST_NAME]: C6.ASC }
+}
+```
+
+After:
+
+```ts
+[C6.PAGINATION]: {
+  [C6.ORDER]: [[Actor.LAST_NAME, C6.ASC]]
+}
+```
+
+Before:
+
+```ts
+[C6.ST_GEOMFROMTEXT, ["POINT(-104.89 39.39)", 4326]]
+```
+
+After:
+
+```ts
+[C6.ST_GEOMFROMTEXT, [C6.LIT, "POINT(-104.89 39.39)"], 4326]
+```
+
+## AI Interpretation Contract
+
+Use this section as a strict contract for automated query generation.
+
+```yaml
+carbonnode:
+  version: "6.1.0+"
+  grammar:
+    known_function: "[C6C.<KNOWN_FN>, ...args]"
+    custom_function: "[C6C.CALL, 'FUNCTION_NAME', ...args]"
+    alias: "[C6C.AS, expression, 'alias']"
+    distinct: "[C6C.DISTINCT, expression]"
+    literal: "[C6C.LIT, value]"
+    order_term: "[expression, 'ASC' | 'DESC']"
+  required_rules:
+    - "Bare strings are references only."
+    - "Wrap non-reference strings with C6C.LIT."
+    - "PAGINATION.ORDER must be an array of order terms."
+    - "Use C6C.CALL for unknown function names."
+  forbidden_legacy:
+    - "[fn, ..., C6C.AS, alias]"
+    - "[column, C6C.AS, alias]"
+    - "{ [C6C.COUNT]: [...] }"
+    - "Implicit string literals in function args"
+    - "ORDER object-map syntax"
+```
+
+## Git Hooks
+
+This project uses Git hooks via `postinstall`:
+
+- `post-commit`: builds project
+- `post-push`: publishes to npm when version changes
+- `npm install` runs `postinstall` to ensure hooks are configured
+
+## Support
+
+Report issues at:
+
+- [CarbonNode Issues](https://github.com/CarbonORM/CarbonNode/issues)

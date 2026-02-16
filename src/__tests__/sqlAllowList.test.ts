@@ -1,6 +1,6 @@
 import {describe, expect, it, vi} from "vitest";
 import path from "node:path";
-import {mkdir, readdir, readFile, writeFile} from "node:fs/promises";
+import {mkdir, readdir, readFile, unlink, writeFile} from "node:fs/promises";
 import {Actor, C6, GLOBAL_REST_PARAMETERS} from "./sakila-db/C6.js";
 import {collectSqlAllowListEntries, compileSqlAllowList, extractSqlEntries, loadSqlAllowList, normalizeSql} from "../utils/sqlAllowList";
 
@@ -42,18 +42,21 @@ const compileSqlAllowListFromFixtures = async (): Promise<string[]> => {
 const globalRestParameters = GLOBAL_REST_PARAMETERS as typeof GLOBAL_REST_PARAMETERS & {
   mysqlPool?: unknown;
   sqlAllowListPath?: string;
+  sqlQueryNormalizer?: (sql: string) => string;
   verbose?: boolean;
 };
 
 const snapshotGlobals = () => ({
   mysqlPool: globalRestParameters.mysqlPool,
   sqlAllowListPath: globalRestParameters.sqlAllowListPath,
+  sqlQueryNormalizer: globalRestParameters.sqlQueryNormalizer,
   verbose: globalRestParameters.verbose,
 });
 
 const restoreGlobals = (snapshot: ReturnType<typeof snapshotGlobals>) => {
   globalRestParameters.mysqlPool = snapshot.mysqlPool;
   globalRestParameters.sqlAllowListPath = snapshot.sqlAllowListPath;
+  globalRestParameters.sqlQueryNormalizer = snapshot.sqlQueryNormalizer;
   globalRestParameters.verbose = snapshot.verbose;
 };
 
@@ -123,6 +126,58 @@ describe("SQL allowlist", () => {
         } as any)
       ).rejects.toThrow("SQL statement is not permitted");
     } finally {
+      restoreGlobals(originalGlobals);
+    }
+  });
+
+  it("supports custom SQL normalization via GLOBAL_REST_PARAMETERS.sqlQueryNormalizer", async () => {
+    await mkdir(fixturesDir, {recursive: true});
+    const lowerCasePath = path.join(fixturesDir, "sqlAllowList.lowercase.json");
+
+    const {pool} = buildMockPool([
+      {actor_id: 1, first_name: "PENELOPE", last_name: "GUINESS"},
+    ]);
+
+    const originalGlobals = snapshotGlobals();
+    try {
+      globalRestParameters.mysqlPool = pool as any;
+      globalRestParameters.sqlAllowListPath = undefined;
+      globalRestParameters.sqlQueryNormalizer = undefined;
+      globalRestParameters.verbose = false;
+
+      const baseline = await Actor.Get({
+        [C6.PAGINATION]: {[C6.LIMIT]: 1},
+        cacheResults: false,
+      } as any);
+
+      const normalizedBaseline = normalizeSql((baseline as any).sql.sql as string);
+      await writeFile(
+        lowerCasePath,
+        JSON.stringify([normalizedBaseline.toLowerCase()], null, 2),
+      );
+
+      globalRestParameters.sqlAllowListPath = lowerCasePath;
+      globalRestParameters.sqlQueryNormalizer = (sql: string) => sql.toLowerCase();
+
+      await expect(
+        Actor.Get({
+          [C6.PAGINATION]: {[C6.LIMIT]: 1},
+          cacheResults: false,
+        } as any),
+      ).resolves.toMatchObject({
+        rest: baseline.rest,
+      });
+
+      globalRestParameters.sqlQueryNormalizer = undefined;
+
+      await expect(
+        Actor.Get({
+          [C6.PAGINATION]: {[C6.LIMIT]: 1},
+          cacheResults: false,
+        } as any),
+      ).rejects.toThrow("SQL statement is not permitted");
+    } finally {
+      await unlink(lowerCasePath).catch(() => undefined);
       restoreGlobals(originalGlobals);
     }
   });

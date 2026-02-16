@@ -22,7 +22,7 @@ import logSql, {
 } from "../utils/logSql";
 import { normalizeSingularRequest } from "../utils/normalizeSingularRequest";
 import {sortAndSerializeQueryObject} from "../utils/sortAndSerializeQueryObject";
-import { loadSqlAllowList, normalizeSql } from "../utils/sqlAllowList";
+import { loadSqlAllowList, normalizeSqlWith } from "../utils/sqlAllowList";
 import { getLogContext, LogLevel, logWithLevel } from "../utils/logLevel";
 
 const SQL_ALLOWLIST_BLOCKED_CODE = "SQL_ALLOWLIST_BLOCKED";
@@ -1070,8 +1070,9 @@ export class SqlExecutor<
             return "not verified";
         }
 
-        const allowList = await loadSqlAllowList(allowListPath);
-        const normalized = normalizeSql(sql);
+        const sqlQueryNormalizer = this.config.sqlQueryNormalizer;
+        const allowList = await loadSqlAllowList(allowListPath, sqlQueryNormalizer);
+        const normalized = normalizeSqlWith(sql, sqlQueryNormalizer);
         if (!allowList.has(normalized)) {
             throw createSqlAllowListBlockedError({
                 tableName:

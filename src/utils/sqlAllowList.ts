@@ -6,7 +6,12 @@ type AllowListCacheEntry = {
     size: number;
 };
 
-const allowListCache = new Map<string, AllowListCacheEntry>();
+export type SqlQueryNormalizer = (sql: string) => string;
+
+const DEFAULT_NORMALIZER_CACHE_KEY = "__default__";
+type AllowListCacheKey = SqlQueryNormalizer | typeof DEFAULT_NORMALIZER_CACHE_KEY;
+
+const allowListCache = new Map<string, Map<AllowListCacheKey, AllowListCacheEntry>>();
 
 const ANSI_ESCAPE_REGEX = /\x1b\[[0-9;]*m/g;
 const COLLAPSED_BIND_ROW_REGEX = /\(\?\s*×\d+\)/g;
@@ -91,7 +96,26 @@ export const normalizeSql = (sql: string): string => {
     return normalized.replace(/\s+/g, " ").trim();
 };
 
-const parseAllowList = (raw: string, sourcePath: string): string[] => {
+export const normalizeSqlWith = (
+    sql: string,
+    sqlQueryNormalizer?: SqlQueryNormalizer,
+): string => {
+    const normalized = normalizeSql(sql);
+    if (!sqlQueryNormalizer) return normalized;
+
+    const customized = sqlQueryNormalizer(normalized);
+    if (typeof customized !== "string") {
+        throw new Error("sqlQueryNormalizer must return a string.");
+    }
+
+    return customized.replace(/\s+/g, " ").trim();
+};
+
+const parseAllowList = (
+    raw: string,
+    sourcePath: string,
+    sqlQueryNormalizer?: SqlQueryNormalizer,
+): string[] => {
     let parsed: unknown;
     try {
         parsed = JSON.parse(raw);
@@ -105,7 +129,7 @@ const parseAllowList = (raw: string, sourcePath: string): string[] => {
 
     const sqlEntries = parsed
         .filter((entry): entry is string => typeof entry === "string")
-        .map(normalizeSql)
+        .map((entry) => normalizeSqlWith(entry, sqlQueryNormalizer))
         .filter((entry) => entry.length > 0);
 
     if (sqlEntries.length !== parsed.length) {
@@ -115,7 +139,10 @@ const parseAllowList = (raw: string, sourcePath: string): string[] => {
     return sqlEntries;
 };
 
-export const loadSqlAllowList = async (allowListPath: string): Promise<Set<string>> => {
+export const loadSqlAllowList = async (
+    allowListPath: string,
+    sqlQueryNormalizer?: SqlQueryNormalizer,
+): Promise<Set<string>> => {
     if (!isNode()) {
         throw new Error("SQL allowlist validation requires a Node runtime.");
     }
@@ -129,7 +156,10 @@ export const loadSqlAllowList = async (allowListPath: string): Promise<Set<strin
         throw new Error(`SQL allowlist file not found at ${allowListPath}.`);
     }
 
-    const cached = allowListCache.get(allowListPath);
+    const pathCache = allowListCache.get(allowListPath)
+        ?? new Map<AllowListCacheKey, AllowListCacheEntry>();
+    const cacheKey: AllowListCacheKey = sqlQueryNormalizer ?? DEFAULT_NORMALIZER_CACHE_KEY;
+    const cached = pathCache.get(cacheKey);
     if (
         cached &&
         cached.mtimeMs === fileStat.mtimeMs &&
@@ -145,13 +175,14 @@ export const loadSqlAllowList = async (allowListPath: string): Promise<Set<strin
         throw new Error(`SQL allowlist file not found at ${allowListPath}.`);
     }
 
-    const sqlEntries = parseAllowList(raw, allowListPath);
+    const sqlEntries = parseAllowList(raw, allowListPath, sqlQueryNormalizer);
     const allowList = new Set(sqlEntries);
-    allowListCache.set(allowListPath, {
+    pathCache.set(cacheKey, {
         allowList,
         mtimeMs: fileStat.mtimeMs,
         size: fileStat.size,
     });
+    allowListCache.set(allowListPath, pathCache);
     return allowList;
 };
 
@@ -186,10 +217,11 @@ export const extractSqlEntries = (payload: unknown): string[] => {
 
 export const collectSqlAllowListEntries = (
     payload: unknown,
-    entries: Set<string> = new Set<string>()
+    entries: Set<string> = new Set<string>(),
+    sqlQueryNormalizer?: SqlQueryNormalizer,
 ): Set<string> => {
     const sqlEntries = extractSqlEntries(payload)
-        .map(normalizeSql)
+        .map((entry) => normalizeSqlWith(entry, sqlQueryNormalizer))
         .filter((entry) => entry.length > 0);
 
     sqlEntries.forEach((entry) => entries.add(entry));
@@ -199,7 +231,8 @@ export const collectSqlAllowListEntries = (
 
 export const compileSqlAllowList = async (
     allowListPath: string,
-    entries: Iterable<string>
+    entries: Iterable<string>,
+    sqlQueryNormalizer?: SqlQueryNormalizer,
 ): Promise<string[]> => {
     if (!isNode()) {
         throw new Error("SQL allowlist compilation requires a Node runtime.");
@@ -212,7 +245,7 @@ export const compileSqlAllowList = async (
 
     const compiled = Array.from(new Set(
         Array.from(entries)
-            .map(normalizeSql)
+            .map((entry) => normalizeSqlWith(entry, sqlQueryNormalizer))
             .filter((entry) => entry.length > 0)
     )).sort();
 

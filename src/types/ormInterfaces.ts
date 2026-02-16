@@ -235,6 +235,7 @@ export interface iRest<
     logLevel?: number;
     verbose?: boolean;
     sqlAllowListPath?: string;
+    sqlQueryNormalizer?: (sql: string) => string;
 }
 
 export interface iConstraint {
