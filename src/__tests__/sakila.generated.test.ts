@@ -51,6 +51,105 @@ describe('sakila-db generated C6 bindings', () => {
       expect(Array.isArray((data as any)?.rest)).toBe(true);
     }
   });
+
+  it('supports generated C6.<database>.<Table>.Get(...) scoped usage', async () => {
+    const pool = (GLOBAL_REST_PARAMETERS as any).mysqlPool;
+    (GLOBAL_REST_PARAMETERS as any).databases = {
+      app: pool,
+    };
+
+    const response = await (C6 as any).app.Actor.Get({
+      [C6.PAGINATION]: { [C6.LIMIT]: 1 },
+    } as any);
+    const data = (response as any)?.data ?? response;
+    expect(Array.isArray((data as any)?.rest)).toBe(true);
+
+    expect(() =>
+      (C6 as any).app.Actor.Get({
+        [C6.DB]: 'billing',
+      } as any)
+    ).toThrow(/Conflicting database selection/i);
+  });
+
+  it('exposes scoped ORM bindings only for configured database keys', async () => {
+    const globals = GLOBAL_REST_PARAMETERS as any;
+    const pool = globals.mysqlPool;
+    const originalDatabases = globals.databases;
+
+    try {
+      delete globals.databases;
+      expect((C6 as any).billing).toBeUndefined();
+
+      globals.databases = { billing: pool };
+      const scoped = (C6 as any).billing;
+      expect(scoped).toBeDefined();
+      expect(typeof scoped.Actor.Get).toBe('function');
+      expect(typeof scoped.ORM.Actor.Get).toBe('function');
+
+      const tableResponse = await scoped.Actor.Get({
+        [C6.PAGINATION]: { [C6.LIMIT]: 1 },
+      } as any);
+      const tableData = (tableResponse as any)?.data ?? tableResponse;
+      expect(Array.isArray((tableData as any)?.rest)).toBe(true);
+
+      const ormResponse = await scoped.ORM.Actor.Get({
+        [C6.DB]: 'billing',
+        [C6.PAGINATION]: { [C6.LIMIT]: 1 },
+      } as any);
+      const ormData = (ormResponse as any)?.data ?? ormResponse;
+      expect(Array.isArray((ormData as any)?.rest)).toBe(true);
+    } finally {
+      globals.databases = originalDatabases;
+    }
+  });
+
+  it('supports C6.app.Actor.Get and C6.stats.General.Post namespace usage', async () => {
+    const globals = GLOBAL_REST_PARAMETERS as any;
+    const pool = globals.mysqlPool;
+    const originalDatabases = globals.databases;
+    const orm = (C6 as any).ORM as Record<string, any>;
+    const originalGeneral = orm.General;
+
+    const generalPost = vi.fn(async (request: any) => ({
+      rest: [],
+      affected: 1,
+      created: true,
+      request,
+    }));
+
+    try {
+      orm.General = {
+        ...(orm.Actor ?? {}),
+        Post: generalPost,
+      };
+
+      globals.databases = {
+        app: pool,
+        stats: pool,
+      };
+
+      const actorGet = await (C6 as any).app.Actor.Get({
+        [C6.PAGINATION]: { [C6.LIMIT]: 1 },
+      } as any);
+      const actorData = (actorGet as any)?.data ?? actorGet;
+      expect(Array.isArray((actorData as any)?.rest)).toBe(true);
+
+      await (C6 as any).stats.General.Post({
+        action: 'record',
+      } as any);
+
+      expect(generalPost).toHaveBeenCalledTimes(1);
+      expect(generalPost.mock.calls[0][0][C6.DB]).toBe('stats');
+    } finally {
+      if (originalGeneral === undefined) {
+        delete orm.General;
+      } else {
+        orm.General = originalGeneral;
+      }
+      globals.databases = originalDatabases;
+    }
+  });
+
   it('broadcasts websocket payloads for write operations', async () => {
     const broadcast = vi.fn();
     GLOBAL_REST_PARAMETERS.websocketBroadcast = broadcast;

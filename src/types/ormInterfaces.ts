@@ -81,6 +81,7 @@ export type RequestPostBody<T extends { [key: string]: any } = any> = T | {
 };
 
 export type iAPI<T extends { [key: string]: any }> = T & {
+    DB?: string;
     dataInsertMultipleRows?: T[];
     cacheResults?: boolean;
     skipReactBootstrap?: boolean;
@@ -215,6 +216,23 @@ export type iRestWebsocketPayload = {
 
 export type tWebsocketBroadcast = (payload: iRestWebsocketPayload) => void | Promise<void>;
 
+export interface iDatabaseRuntimeOptions {
+    mysqlPool?: Pool;
+    axios?: AxiosInstance;
+    restURL?: string;
+    withCredentials?: boolean;
+    C6?: iC6Object;
+    reactBootstrap?: CarbonReact<any, any>;
+    stateAdapter?: iStateAdapter<any>;
+    websocketBroadcast?: tWebsocketBroadcast;
+    logLevel?: number;
+    verbose?: boolean;
+    sqlAllowListPath?: string;
+    sqlQueryNormalizer?: (sql: string) => string;
+}
+
+export type iDatabaseRuntimeConfig = Pool | (iDatabaseRuntimeOptions & Record<string, any>);
+
 export interface iRest<
     RestShortTableName extends string = any,
     RestTableInterface extends Record<string, any> = any,
@@ -236,6 +254,8 @@ export interface iRest<
     verbose?: boolean;
     sqlAllowListPath?: string;
     sqlQueryNormalizer?: (sql: string) => string;
+    databases?: Record<string, iDatabaseRuntimeConfig>;
+    defaultDatabase?: string;
 }
 
 export interface iConstraint {

@@ -1,0 +1,38 @@
+{
+  "databases": [
+    {
+      "alias": "app",
+      "host": "127.0.0.1",
+      "port": 3306,
+      "user": "root",
+      "passEnv": "APP_DB_PASS",
+      "dbnames": [
+        "app"
+      ]
+    },
+    {
+      "alias": "billing",
+      "host": "10.0.0.12",
+      "port": 3306,
+      "user": "billing_user",
+      "passEnv": "BILLING_DB_PASS",
+      "dbnames": [
+        "billing"
+      ]
+    },
+    {
+      "alias": "analytics",
+      "host": "analytics-db.internal",
+      "port": 3306,
+      "user": "analytics_user",
+      "passEnv": "ANALYTICS_DB_PASS",
+      "dbnames": [
+        "analytics",
+        "app"
+      ]
+    }
+  ],
+  "primaryAlias": "app",
+  "prefix": "",
+  "restUrlExpression": "\"/rest/\""
+}

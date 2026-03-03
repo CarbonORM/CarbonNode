@@ -4,6 +4,7 @@ import restRequest from "../api/restRequest";
 import {iRest, iRestMethods} from "../types/ormInterfaces";
 import {LogLevel, logWithLevel} from "../utils/logLevel";
 import {OrmGenerics} from "../types/ormGenerics";
+import {resolveDatabaseSelection} from "../api/databaseResolver";
 
 
 export function restExpressRequest<G extends OrmGenerics>(
@@ -35,10 +36,7 @@ export function ExpressHandler<
 
     return async (req: Request, res: Response) => {
         try {
-            const config = typeof configX === "function" ? configX() : configX;
-            const {
-                C6
-            } = config;
+            const baseConfig = typeof configX === "function" ? configX() : configX;
 
             const incomingMethod = req.method.toUpperCase() as iRestMethods;
             const table = req.params.table;
@@ -76,6 +74,9 @@ export function ExpressHandler<
                     `Ignoring unsupported METHOD override: ${methodOverride}`,
                 );
             }
+
+            const { config } = resolveDatabaseSelection(baseConfig as any, payload);
+            const { C6 } = config;
 
             if (!(table in C6.TABLES)) {
                 res.status(400).json({error: `Invalid table: ${table}`});

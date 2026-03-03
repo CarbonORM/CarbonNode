@@ -3,6 +3,7 @@
 const {execSync} = require('child_process');
 const fs = require('fs');
 const path = require('path');
+const readline = require('readline');
 const Handlebars = require('handlebars');
 import {version} from '../package.json';
 
@@ -13,12 +14,312 @@ for (let i = 0; i < args.length; i += 2) {
     argMap[args[i]] = args[i + 1];
 }
 
+type iDatabaseConnection = {
+    host: string;
+    port: string;
+    user: string;
+    pass: string;
+};
+
+type iScopedDatabaseAliasDefinition = {
+    DATABASE_KEY: string;
+    DATABASE_NAME: string;
+    DATABASE_KEY_IDENTIFIER: string;
+    DATABASE_KEY_PASCAL_CASE: string;
+};
+
+type iScopedDatabaseDefinition = iScopedDatabaseAliasDefinition & {
+    CONNECTION: iDatabaseConnection;
+};
+
+type iGeneratorDatabaseConfigEntry = {
+    alias: string;
+    host: string;
+    port?: number | string;
+    user: string;
+    pass?: string;
+    passEnv?: string;
+    dbname?: string;
+    dbnames?: string[];
+};
+
+type iGeneratorConfig = {
+    databases: iGeneratorDatabaseConfigEntry[];
+    prefix?: string;
+    output?: string;
+    restUrlExpression?: string;
+    objectOverrides?: string;
+    interfaceOverrides?: string;
+    customImports?: string;
+    react?: string;
+    primaryAlias?: string;
+};
+
+const sanitizeIdentifier = (value: string): string => {
+    const normalized = value
+        .trim()
+        .replace(/[^A-Za-z0-9_]/g, "_")
+        .replace(/^[^A-Za-z_]+/, "");
+    return normalized.length > 0 ? normalized : "db";
+};
+
+const toPascalCaseFromIdentifier = (identifier: string): string =>
+    identifier
+        .split("_")
+        .filter(Boolean)
+        .map(capitalizeFirstLetter)
+        .join("_") || "Db";
+
 const createDirIfNotExists = dir =>
     !fs.existsSync(dir) ? fs.mkdirSync(dir, {recursive: true}) : undefined;
 
+const ensureString = (value: unknown, label: string): string => {
+    if (typeof value !== "string" || value.trim().length === 0) {
+        throw new Error(`${label} must be a non-empty string.`);
+    }
+
+    return value.trim();
+};
+
+const resolveConfigPassword = (entry: iGeneratorDatabaseConfigEntry): string => {
+    if (typeof entry.pass === "string" && entry.pass.trim().length > 0) {
+        return entry.pass.trim();
+    }
+
+    if (typeof entry.passEnv === "string" && entry.passEnv.trim().length > 0) {
+        const envKey = entry.passEnv.trim();
+        const envValue = process.env[envKey];
+        if (typeof envValue !== "string" || envValue.trim().length === 0) {
+            throw new Error(`Environment variable '${envKey}' is required for database alias '${entry.alias}'.`);
+        }
+        return envValue;
+    }
+
+    throw new Error(`Database alias '${entry.alias}' must provide either 'pass' or 'passEnv'.`);
+};
+
+const parseConfigDbNames = (entry: iGeneratorDatabaseConfigEntry): string[] => {
+    if (Array.isArray(entry.dbnames)) {
+        const names = entry.dbnames
+            .map(dbName => ensureString(dbName, `databases[${entry.alias}].dbnames[]`))
+            .filter(Boolean);
+        if (names.length > 0) {
+            return names;
+        }
+    }
+
+    if (typeof entry.dbname === "string" && entry.dbname.trim().length > 0) {
+        return [entry.dbname.trim()];
+    }
+
+    throw new Error(`Database alias '${entry.alias}' must provide 'dbname' or a non-empty 'dbnames' array.`);
+};
+
+const aliasForConfigDbName = (
+    baseAlias: string,
+    dbName: string,
+    totalDbNames: number,
+): string => {
+    if (totalDbNames <= 1 || dbName === baseAlias) {
+        return baseAlias;
+    }
+
+    return `${baseAlias}_${dbName}`;
+};
+
+const buildScopedDefinitionsFromConfig = (
+    config: iGeneratorConfig,
+): iScopedDatabaseDefinition[] => {
+    if (!Array.isArray(config.databases) || config.databases.length === 0) {
+        throw new Error("Config must define a non-empty 'databases' array.");
+    }
+
+    const scopedDefinitions: iScopedDatabaseDefinition[] = [];
+    for (const entry of config.databases) {
+        const baseAlias = ensureString(entry.alias, "databases[].alias");
+        const host = ensureString(entry.host, `databases[${baseAlias}].host`);
+        const user = ensureString(entry.user, `databases[${baseAlias}].user`);
+        const port = String(entry.port ?? "3306").trim();
+        if (port.length === 0) {
+            throw new Error(`databases[${baseAlias}].port must be non-empty when provided.`);
+        }
+        const pass = resolveConfigPassword(entry);
+        const dbNames = parseConfigDbNames(entry);
+
+        for (const dbName of dbNames) {
+            const runtimeAlias = aliasForConfigDbName(baseAlias, dbName, dbNames.length);
+            const aliasIdentifier = sanitizeIdentifier(runtimeAlias);
+            scopedDefinitions.push({
+                DATABASE_KEY: runtimeAlias,
+                DATABASE_NAME: dbName,
+                DATABASE_KEY_IDENTIFIER: aliasIdentifier,
+                DATABASE_KEY_PASCAL_CASE: toPascalCaseFromIdentifier(aliasIdentifier),
+                CONNECTION: {
+                    host,
+                    port,
+                    user,
+                    pass,
+                },
+            });
+        }
+    }
+
+    const seenRuntimeKeys = new Set<string>();
+    const seenRuntimeIdentifiers = new Set<string>();
+    for (const scopedDefinition of scopedDefinitions) {
+        if (seenRuntimeKeys.has(scopedDefinition.DATABASE_KEY)) {
+            throw new Error(`Duplicate database alias '${scopedDefinition.DATABASE_KEY}' in config.`);
+        }
+        seenRuntimeKeys.add(scopedDefinition.DATABASE_KEY);
+
+        if (seenRuntimeIdentifiers.has(scopedDefinition.DATABASE_KEY_IDENTIFIER)) {
+            throw new Error(
+                `Database aliases map to duplicate identifier '${scopedDefinition.DATABASE_KEY_IDENTIFIER}'.`,
+            );
+        }
+        seenRuntimeIdentifiers.add(scopedDefinition.DATABASE_KEY_IDENTIFIER);
+    }
+
+    return scopedDefinitions;
+};
+
+const CONFIG_DISCOVERY_NAMES = [
+    ".C6.ts",
+    ".C6.json",
+    "C6.config.ts",
+    "C6.config.json",
+];
+
+const discoverConfigPath = (startDir: string): string | undefined => {
+    let current = path.resolve(startDir);
+
+    while (true) {
+        for (const configName of CONFIG_DISCOVERY_NAMES) {
+            const candidate = path.join(current, configName);
+            if (fs.existsSync(candidate)) {
+                return candidate;
+            }
+        }
+
+        const parent = path.dirname(current);
+        if (parent === current) {
+            return undefined;
+        }
+        current = parent;
+    }
+};
+
+const askQuestion = async (
+    rl: any,
+    question: string,
+): Promise<string> =>
+    await new Promise<string>((resolve) => {
+        rl.question(question, (answer: string) => resolve(answer.trim()));
+    });
+
+const buildConfigInteractively = async (): Promise<iGeneratorConfig> => {
+    const rl = readline.createInterface({
+        input: process.stdin,
+        output: process.stdout,
+    });
+
+    try {
+        console.log("[generateRestBindings] No config found. Let's create C6.config.json.");
+        const databases: iGeneratorDatabaseConfigEntry[] = [];
+
+        while (true) {
+            const alias = ensureString(await askQuestion(rl, "Database alias (e.g. app): "), "alias");
+            const host = ensureString(await askQuestion(rl, "Host (e.g. 127.0.0.1): "), "host");
+            const port = (await askQuestion(rl, "Port (default 3306): ")) || "3306";
+            const user = ensureString(await askQuestion(rl, "User: "), "user");
+            const pass = ensureString(await askQuestion(rl, "Password: "), "pass");
+            const dbnamesRaw = ensureString(
+                await askQuestion(rl, "Schema names (comma-separated, e.g. app,billing): "),
+                "dbnames",
+            );
+
+            databases.push({
+                alias,
+                host,
+                port,
+                user,
+                pass,
+                dbnames: dbnamesRaw.split(",").map((name) => name.trim()).filter(Boolean),
+            });
+
+            const addAnother = (await askQuestion(rl, "Add another database entry? (y/N): ")).toLowerCase();
+            if (addAnother !== "y" && addAnother !== "yes") {
+                break;
+            }
+        }
+
+        return {
+            databases,
+        };
+    } finally {
+        rl.close();
+    }
+};
+
+const isGeneratorConfigObject = (value: unknown): value is iGeneratorConfig =>
+    !!value && typeof value === "object" && !Array.isArray(value);
+
+const resolveLoadedConfig = async (
+    loaded: unknown,
+    configPath: string,
+): Promise<iGeneratorConfig> => {
+    const evaluated = typeof loaded === "function"
+        ? (loaded as (...args: any[]) => unknown)()
+        : loaded;
+    const awaited = await Promise.resolve(evaluated);
+
+    if (!isGeneratorConfigObject(awaited)) {
+        throw new Error(
+            `Config at '${configPath}' must export an object, function, or async function that resolves to an object.`,
+        );
+    }
+
+    return awaited;
+};
+
+const loadConfigFromPath = async (configPath: string): Promise<iGeneratorConfig> => {
+    const ext = path.extname(configPath).toLowerCase();
+
+    if (ext === ".json") {
+        const raw = fs.readFileSync(configPath, "utf-8");
+        return await resolveLoadedConfig(JSON.parse(raw), configPath);
+    }
+
+    if (ext === ".ts") {
+        const typescript = require("typescript");
+        const source = fs.readFileSync(configPath, "utf-8");
+        const transpiled = typescript.transpileModule(source, {
+            compilerOptions: {
+                module: typescript.ModuleKind.CommonJS,
+                target: typescript.ScriptTarget.ES2020,
+            },
+        }).outputText;
+
+        const moduleRef = { exports: {} as any };
+        const compiled = new Function(
+            "require",
+            "module",
+            "exports",
+            "__filename",
+            "__dirname",
+            transpiled,
+        );
+        compiled(require, moduleRef, moduleRef.exports, configPath, path.dirname(configPath));
+
+        return await resolveLoadedConfig(moduleRef.exports.default ?? moduleRef.exports, configPath);
+    }
+
+    throw new Error(`Unsupported config extension '${ext}'. Use .json or .ts.`);
+};
+
 class MySQLDump {
 
-    static mysqlcnf: string = '';
+    static mysqlcnf: Record<string, string> = {};
     static mysqldump: string = '';
     static DB_USER = argMap['--user'] || 'root';
     static DB_PASS = argMap['--pass'] || 'password';
@@ -27,22 +328,22 @@ class MySQLDump {
     static DB_NAME = argMap['--dbname'] || 'sakila';
     static DB_PREFIX = argMap['--prefix'] || '';
     static RELATIVE_OUTPUT_DIR = argMap['--output'] || '/src';
-    static OUTPUT_DIR = path.join(process.cwd(), MySQLDump.RELATIVE_OUTPUT_DIR);
+    static OUTPUT_DIR = path.isAbsolute(MySQLDump.RELATIVE_OUTPUT_DIR)
+        ? MySQLDump.RELATIVE_OUTPUT_DIR
+        : path.join(process.cwd(), MySQLDump.RELATIVE_OUTPUT_DIR);
 
-    static buildCNF(cnfFile: string = '') {
-
-        if (this.mysqlcnf !== '') {
-
-            return this.mysqlcnf;
-
-        }
+    static buildCNF(
+        connection: iDatabaseConnection,
+        cnfFile: string = '',
+        cnfTag: string = '',
+    ) {
 
         const cnf = [
             '[client]',
-            `user = ${this.DB_USER}`,
-            `password = ${this.DB_PASS}`,
-            `host = ${this.DB_HOST}`,
-            `port = ${this.DB_PORT}`,
+            `user = ${connection.user}`,
+            `password = ${connection.pass}`,
+            `host = ${connection.host}`,
+            `port = ${connection.port}`,
             '',
         ];
 
@@ -50,7 +351,8 @@ class MySQLDump {
 
         if ('' === cnfFile) {
 
-            cnfFile = path.join(this.OUTPUT_DIR, 'C6.mysql.cnf');
+            const suffix = cnfTag ? `.${sanitizeIdentifier(cnfTag)}` : '';
+            cnfFile = path.join(this.OUTPUT_DIR, `C6${suffix}.mysql.cnf`);
 
         }
 
@@ -70,11 +372,27 @@ class MySQLDump {
 
         }
 
-        return (this.mysqlcnf = cnfFile);
+        this.mysqlcnf[cnfTag || "default"] = cnfFile;
+        return cnfFile;
 
     }
 
-    static MySQLDump(mysqldump: string = 'mysqldump', data = false, schemas = true, outputFile = '', otherOption = '', specificTable: string = '') {
+    static MySQLDump(
+        mysqldump: string = 'mysqldump',
+        data = false,
+        schemas = true,
+        outputFile = '',
+        otherOption = '',
+        specificTable: string = '',
+        databaseName: string = this.DB_NAME,
+        connection: iDatabaseConnection = {
+            user: this.DB_USER,
+            pass: this.DB_PASS,
+            host: this.DB_HOST,
+            port: this.DB_PORT,
+        },
+        cnfTag: string = "",
+    ) {
 
         if (outputFile === '') {
             outputFile = path.join(this.OUTPUT_DIR, 'C6.mysqldump.sql');
@@ -84,15 +402,25 @@ class MySQLDump {
             console.warn("MysqlDump is running with --no-create-info and --no-data. Why?");
         }
 
-        const defaultsExtraFile = this.buildCNF();
+        const defaultsExtraFile = this.buildCNF(connection, "", cnfTag);
 
         const hexBlobOption = data ? '--hex-blob ' : '--no-data ';
 
         const createInfoOption = schemas ? '' : ' --no-create-info ';
 
-        const cmd = `${mysqldump} --defaults-extra-file="${defaultsExtraFile}" ${otherOption} --set-gtid-purged="OFF" --skip-add-locks --lock-tables=false --single-transaction --quick ${createInfoOption}${hexBlobOption}${this.DB_NAME} ${specificTable} > '${outputFile}'`;
+        const tempOutputFile = `${outputFile}.tmp`;
+        const cmd = `${mysqldump} --defaults-extra-file="${defaultsExtraFile}" ${otherOption} --set-gtid-purged="OFF" --skip-add-locks --lock-tables=false --single-transaction --quick ${createInfoOption}${hexBlobOption}${databaseName} ${specificTable} > '${tempOutputFile}'`;
 
-        this.executeAndCheckStatus(cmd, false);
+        const succeeded = this.executeAndCheckStatus(cmd, false);
+        if (succeeded && fs.existsSync(tempOutputFile)) {
+            fs.renameSync(tempOutputFile, outputFile);
+        } else if (fs.existsSync(tempOutputFile)) {
+            fs.unlinkSync(tempOutputFile);
+        }
+
+        if (!succeeded && fs.existsSync(outputFile)) {
+            console.warn(`[generateRestBindings] mysqldump for '${databaseName}' failed. Reusing existing dump file at ${outputFile}.`);
+        }
 
         if (!fs.existsSync(outputFile)) {
             console.warn(`[generateRestBindings] mysqldump output not found at ${outputFile}. If running in CI/no-DB environment, ensure a prebuilt dump file exists at this path.`);
@@ -102,13 +430,15 @@ class MySQLDump {
 
     }
 
-    static executeAndCheckStatus(command: string, exitOnFailure = true, output: any[] = []) {
+    static executeAndCheckStatus(command: string, exitOnFailure = true, output: any[] = []): boolean {
 
         try {
 
             const stdout = execSync(command, {encoding: 'utf-8'});
 
             output.push(stdout);
+
+            return true;
 
         } catch (e) {
 
@@ -120,6 +450,7 @@ class MySQLDump {
 
             }
 
+            return false;
 
         }
 
@@ -127,12 +458,7 @@ class MySQLDump {
 
 }
 
-createDirIfNotExists(MySQLDump.OUTPUT_DIR)
-
-const pathRuntimeReference = MySQLDump.RELATIVE_OUTPUT_DIR.replace(/(^\/(src\/)?)|(\/+$)/g, '')
-
-// Usage example
-const dumpFileLocation = MySQLDump.MySQLDump();
+let pathRuntimeReference = '';
 
 /*type ColumnInfo = {
     type: string;
@@ -481,29 +807,233 @@ const parseSQLToTypeScript = (sql: string) => {
     };
 };
 
+const withScopedTableSymbols = (
+    databaseDefinition: iScopedDatabaseDefinition,
+    tables: any[],
+) => tables.map((table) => ({
+    ...table,
+    SCOPED_TABLE_CONST: `${databaseDefinition.DATABASE_KEY_IDENTIFIER}_${table.TABLE_NAME_SHORT}`,
+    SCOPED_BINDING_CONST: `${databaseDefinition.DATABASE_KEY_PASCAL_CASE}_${table.TABLE_NAME_SHORT_PASCAL_CASE}`,
+}));
 
-// use dumpFileLocation to get sql
-const sql = fs.readFileSync(dumpFileLocation, 'utf-8');
+const applyConfigDefaultsToArgs = (config: iGeneratorConfig) => {
+    if (argMap['--prefix'] == null && typeof config.prefix === "string") {
+        argMap['--prefix'] = config.prefix;
+    }
+    if (argMap['--output'] == null && typeof config.output === "string") {
+        argMap['--output'] = config.output;
+    }
+    if (argMap['--restUrlExpression'] == null && typeof config.restUrlExpression === "string") {
+        argMap['--restUrlExpression'] = config.restUrlExpression;
+    }
+    if (argMap['--objectOverrides'] == null && typeof config.objectOverrides === "string") {
+        argMap['--objectOverrides'] = config.objectOverrides;
+    }
+    if (argMap['--interfaceOverrides'] == null && typeof config.interfaceOverrides === "string") {
+        argMap['--interfaceOverrides'] = config.interfaceOverrides;
+    }
+    if (argMap['--customImports'] == null && typeof config.customImports === "string") {
+        argMap['--customImports'] = config.customImports;
+    }
+    if (argMap['--react'] == null && typeof config.react === "string") {
+        argMap['--react'] = config.react;
+    }
+};
 
-const tableData = parseSQLToTypeScript(sql);
+const resolveConfigPathFromArgsOrDiscovery = async (): Promise<string> => {
+    if (typeof argMap['--config'] === "string" && argMap['--config'].trim().length > 0) {
+        const explicitPath = path.resolve(process.cwd(), argMap['--config']);
+        if (!fs.existsSync(explicitPath)) {
+            throw new Error(`Config not found at '${explicitPath}'.`);
+        }
+        return explicitPath;
+    }
 
-// write to file
-fs.writeFileSync(path.join(MySQLDump.OUTPUT_DIR, 'C6.mysqldump.json'), JSON.stringify(tableData));
+    const discovered = discoverConfigPath(process.cwd());
+    if (discovered) {
+        return discovered;
+    }
 
-// import this file  src/assets/handlebars/C6.tsx.handlebars for a mustache template
-const c6Template = fs.readFileSync(path.resolve(__dirname, 'assets/handlebars/C6.ts.handlebars'), 'utf-8');
-const c6TestTemplate = fs.readFileSync(path.resolve(__dirname, 'assets/handlebars/C6.test.ts.handlebars'), 'utf-8');
+    if (!process.stdin.isTTY || !process.stdout.isTTY) {
+        throw new Error(
+            "No config found. Pass --config <path> or create C6.config.json/C6.config.ts (or .C6.json/.C6.ts) in the current directory tree.",
+        );
+    }
 
-const outputDir = MySQLDump.OUTPUT_DIR;
+    const rl = readline.createInterface({
+        input: process.stdin,
+        output: process.stdout,
+    });
+    try {
+        const answer = (await askQuestion(rl, "No config found. Create ./C6.config.json now? (y/N): ")).toLowerCase();
+        if (answer !== "y" && answer !== "yes") {
+            throw new Error("Config is required. Generation cancelled.");
+        }
+    } finally {
+        rl.close();
+    }
 
-fs.writeFileSync(path.join(outputDir, 'C6.ts'), Handlebars.compile(c6Template)(tableData));
-fs.writeFileSync(path.join(outputDir, 'C6.test.ts'), Handlebars.compile(c6TestTemplate)(tableData));
+    const generatedConfig = await buildConfigInteractively();
+    const generatedPath = path.resolve(process.cwd(), "C6.config.json");
+    fs.writeFileSync(generatedPath, `${JSON.stringify(generatedConfig, null, 2)}\n`);
+    console.log(`[generateRestBindings] Created config at ${generatedPath}`);
+    return generatedPath;
+};
 
-// compile generated TypeScript for runtime tests
-try {
-    execSync(`npx tsc ${path.join(outputDir, 'C6.ts')} --target ES2020 --module ES2020 --moduleResolution node --esModuleInterop --skipLibCheck --outDir ${outputDir}`);
-} catch (e) {
-    console.warn('TypeScript compilation for generated C6.ts reported errors:', e);
-}
+const resolveScopedDefinitionsFromConfig = (
+    config: iGeneratorConfig,
+): { scopedDefinitions: iScopedDatabaseDefinition[]; primaryDefinition: iScopedDatabaseDefinition } => {
+    const scopedDefinitions = buildScopedDefinitionsFromConfig(config);
+    const requestedPrimaryAlias = typeof argMap['--primaryAlias'] === "string"
+        ? argMap['--primaryAlias'].trim()
+        : typeof config.primaryAlias === "string"
+            ? config.primaryAlias.trim()
+            : "";
 
-console.log('Successfully created CarbonORM bindings!')
+    const primaryDefinition = requestedPrimaryAlias
+        ? scopedDefinitions.find((definition) => definition.DATABASE_KEY === requestedPrimaryAlias)
+        : scopedDefinitions[0];
+
+    if (!primaryDefinition) {
+        throw new Error(
+            requestedPrimaryAlias
+                ? `primaryAlias '${requestedPrimaryAlias}' was not found in config databases.`
+                : "Config databases resolved to an empty target list.",
+        );
+    }
+
+    return {
+        scopedDefinitions,
+        primaryDefinition,
+    };
+};
+
+const main = async () => {
+    const configPath = await resolveConfigPathFromArgsOrDiscovery();
+    const config = await loadConfigFromPath(configPath);
+    applyConfigDefaultsToArgs(config);
+
+    const { scopedDefinitions, primaryDefinition } = resolveScopedDefinitionsFromConfig(config);
+
+    MySQLDump.DB_USER = primaryDefinition.CONNECTION.user;
+    MySQLDump.DB_PASS = primaryDefinition.CONNECTION.pass;
+    MySQLDump.DB_HOST = primaryDefinition.CONNECTION.host;
+    MySQLDump.DB_PORT = primaryDefinition.CONNECTION.port;
+    MySQLDump.DB_NAME = primaryDefinition.DATABASE_NAME;
+    MySQLDump.DB_PREFIX = argMap['--prefix'] || '';
+    MySQLDump.RELATIVE_OUTPUT_DIR = argMap['--output'] || '/src';
+    MySQLDump.OUTPUT_DIR = path.isAbsolute(MySQLDump.RELATIVE_OUTPUT_DIR)
+        ? MySQLDump.RELATIVE_OUTPUT_DIR
+        : path.join(process.cwd(), MySQLDump.RELATIVE_OUTPUT_DIR);
+
+    createDirIfNotExists(MySQLDump.OUTPUT_DIR);
+    pathRuntimeReference = MySQLDump.RELATIVE_OUTPUT_DIR.replace(/(^\/(src\/)?)|(\/+$)/g, '');
+
+    const dumpFileLocation = MySQLDump.MySQLDump(
+        'mysqldump',
+        false,
+        true,
+        '',
+        '',
+        '',
+        primaryDefinition.DATABASE_NAME,
+        primaryDefinition.CONNECTION,
+    );
+
+    if (!fs.existsSync(dumpFileLocation)) {
+        throw new Error(`[generateRestBindings] Missing base dump at ${dumpFileLocation}.`);
+    }
+
+    // use dumpFileLocation to get sql
+    const sql = fs.readFileSync(dumpFileLocation, 'utf-8');
+    const tableData: any = parseSQLToTypeScript(sql);
+
+    const scopedDatabaseSchemas = scopedDefinitions.map((databaseDefinition) => {
+        const isPrimaryScopedDefinition = databaseDefinition.DATABASE_NAME === primaryDefinition.DATABASE_NAME
+            && databaseDefinition.CONNECTION.host === primaryDefinition.CONNECTION.host
+            && databaseDefinition.CONNECTION.port === primaryDefinition.CONNECTION.port
+            && databaseDefinition.CONNECTION.user === primaryDefinition.CONNECTION.user
+            && databaseDefinition.CONNECTION.pass === primaryDefinition.CONNECTION.pass;
+
+        if (isPrimaryScopedDefinition) {
+            return {
+                DATABASE_KEY: databaseDefinition.DATABASE_KEY,
+                DATABASE_NAME: databaseDefinition.DATABASE_NAME,
+                DATABASE_KEY_IDENTIFIER: databaseDefinition.DATABASE_KEY_IDENTIFIER,
+                DATABASE_KEY_PASCAL_CASE: databaseDefinition.DATABASE_KEY_PASCAL_CASE,
+                TABLES: withScopedTableSymbols(
+                    databaseDefinition,
+                    tableData.TABLES,
+                ),
+            };
+        }
+
+        const scopedDumpFile = path.join(
+            MySQLDump.OUTPUT_DIR,
+            `C6.${databaseDefinition.DATABASE_KEY_IDENTIFIER}.mysqldump.sql`,
+        );
+        const scopedDumpPath = MySQLDump.MySQLDump(
+            'mysqldump',
+            false,
+            true,
+            scopedDumpFile,
+            '',
+            '',
+            databaseDefinition.DATABASE_NAME,
+            databaseDefinition.CONNECTION,
+            databaseDefinition.DATABASE_KEY_IDENTIFIER,
+        );
+
+        if (!fs.existsSync(scopedDumpPath)) {
+            throw new Error(
+                `[generateRestBindings] Missing scoped dump for database key '${databaseDefinition.DATABASE_KEY}' at ${scopedDumpPath}.`,
+            );
+        }
+
+        const scopedSql = fs.readFileSync(scopedDumpPath, 'utf-8');
+        const scopedTableData = parseSQLToTypeScript(scopedSql);
+
+        return {
+            DATABASE_KEY: databaseDefinition.DATABASE_KEY,
+            DATABASE_NAME: databaseDefinition.DATABASE_NAME,
+            DATABASE_KEY_IDENTIFIER: databaseDefinition.DATABASE_KEY_IDENTIFIER,
+            DATABASE_KEY_PASCAL_CASE: databaseDefinition.DATABASE_KEY_PASCAL_CASE,
+            TABLES: withScopedTableSymbols(
+                databaseDefinition,
+                scopedTableData.TABLES,
+            ),
+        };
+    });
+
+    tableData.SCOPED_DATABASES = scopedDatabaseSchemas;
+
+    // write to file
+    fs.writeFileSync(path.join(MySQLDump.OUTPUT_DIR, 'C6.mysqldump.json'), JSON.stringify(tableData));
+
+    // import this file  src/assets/handlebars/C6.tsx.handlebars for a mustache template
+    const c6Template = fs.readFileSync(path.resolve(__dirname, 'assets/handlebars/C6.ts.handlebars'), 'utf-8');
+    const c6TestTemplate = fs.readFileSync(path.resolve(__dirname, 'assets/handlebars/C6.test.ts.handlebars'), 'utf-8');
+
+    const outputDir = MySQLDump.OUTPUT_DIR;
+
+    fs.writeFileSync(path.join(outputDir, 'C6.ts'), Handlebars.compile(c6Template)(tableData));
+    fs.writeFileSync(path.join(outputDir, 'C6.test.ts'), Handlebars.compile(c6TestTemplate)(tableData));
+
+    // compile generated TypeScript for runtime tests
+    if (process.env.C6_SKIP_GENERATED_TSC === "1") {
+        console.log("[generateRestBindings] Skipping generated C6.ts compile check (C6_SKIP_GENERATED_TSC=1).");
+    } else {
+        try {
+            execSync(`npx tsc ${path.join(outputDir, 'C6.ts')} --target ES2020 --module ES2020 --moduleResolution node --esModuleInterop --skipLibCheck --outDir ${outputDir}`);
+        } catch (e) {
+            console.warn('TypeScript compilation for generated C6.ts reported errors:', e);
+        }
+    }
+
+    console.log('Successfully created CarbonORM bindings!');
+};
+
+main().catch((error) => {
+    console.error(error instanceof Error ? error.message : error);
+    process.exit(1);
+});

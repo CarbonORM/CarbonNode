@@ -24,6 +24,7 @@ describe("convertForRequestBody", () => {
     const payload = convertForRequestBody(
       {
         actor_id: 5,
+        [C6C.DB]: "billing",
         [C6C.DELETE]: true,
         cacheResults: false,
       } as any,
@@ -33,6 +34,7 @@ describe("convertForRequestBody", () => {
 
     expect(payload).toMatchObject({
       "actor.actor_id": 5,
+      [C6C.DB]: "billing",
       [C6C.DELETE]: true,
       cacheResults: false,
     });

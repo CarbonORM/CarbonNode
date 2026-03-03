@@ -19,7 +19,16 @@ export function normalizeSingularRequest<
 ): RequestQueryBody<Method, T, Custom, Overrides> {
   if (request == null || typeof request !== 'object') return request;
 
+  const complexShapeKeys: Set<string> = new Set([
+    C6C.SELECT,
+    C6C.UPDATE,
+    C6C.DELETE,
+    C6C.WHERE,
+    C6C.JOIN,
+  ]);
+
   const specialKeys: Set<string> = new Set([
+    C6C.DB,
     C6C.SELECT,
     C6C.UPDATE,
     C6C.DELETE,
@@ -30,7 +39,7 @@ export function normalizeSingularRequest<
 
   // Determine if the request is already complex (has any special key besides PAGINATION)
   const keys = Object.keys(request as any);
-  const hasComplexKeys = keys.some(k => k !== C6C.PAGINATION && specialKeys.has(k));
+  const hasComplexKeys = keys.some(k => complexShapeKeys.has(k));
   if (hasComplexKeys) return request; // already complex
 
   // We treat it as singular when it's not complex.

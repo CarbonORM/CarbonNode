@@ -120,6 +120,20 @@ describe('normalizeSingularRequest', () => {
     expect(out[C6C.UPDATE]).toEqual({ first_name: 'S' });
   });
 
+  it('treats DB as request metadata and excludes it from UPDATE payloads', () => {
+    const model = makeModel('actor', ['actor_id'], ['first_name']);
+    const req = {
+      [C6C.DB]: 'billing',
+      actor_id: 2,
+      first_name: 'Scoped',
+    } as any;
+
+    const out = normalizeSingularRequest('PUT', req, model) as any;
+    expect(out[C6C.UPDATE]).toEqual({ first_name: 'Scoped' });
+    expect(out[C6C.WHERE]).toEqual({ 'actor.actor_id': litEq(2) });
+    expect(out[C6C.DB]).toBeUndefined();
+  });
+
   it('accepts fully-qualified PK and maps WHERE/UPDATE to short keys', () => {
     const model = makeModel('actor', ['actor_id'], ['first_name']);
     const req = { 'actor.actor_id': 12, 'actor.first_name': 'FN' } as any;

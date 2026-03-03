@@ -183,6 +183,7 @@ export const C6Constants = {
     YEARWEEK: 'YEARWEEK',
 
     // carbon identifiers
+    DB: 'DB',
     DEPENDANT_ON_ENTITY: 'DEPENDANT_ON_ENTITY',
     HEADERS: 'HEADERS',
 

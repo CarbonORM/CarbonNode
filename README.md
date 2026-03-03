@@ -38,10 +38,11 @@ It can run in two modes:
 11. [SQL Allowlist](#sql-allowlist)
 12. [Lifecycle Hooks and Websocket Broadcast](#lifecycle-hooks-and-websocket-broadcast)
 13. [Testing](#testing)
-14. [Migration Notes (6.0 -> 6.1)](#migration-notes-60---61)
-15. [AI Interpretation Contract](#ai-interpretation-contract)
-16. [Git Hooks](#git-hooks)
-17. [Support](#support)
+14. [Migration Notes (6.x -> 7.0)](#migration-notes-6x---70)
+15. [Migration Notes (6.0 -> 6.1)](#migration-notes-60---61)
+16. [AI Interpretation Contract](#ai-interpretation-contract)
+17. [Git Hooks](#git-hooks)
+18. [Support](#support)
 
 ## Install
 
@@ -63,14 +64,81 @@ Generate `C6.ts` + `C6.test.ts` + dump artifacts into an output directory:
 
 ```bash
 npx generateRestBindings \
-  --user root \
-  --pass password \
-  --host 127.0.0.1 \
-  --port 3306 \
-  --dbname sakila \
+  --config ./rest.config.json \
   --prefix "" \
   --output ./shared/rest
 ```
+
+`--config` is optional if a `C6.config.json`, `C6.config.ts`, `.C6.json`, or `.C6.ts` exists in the current directory or any parent directory.
+If no config exists and the process is interactive (TTY), the CLI offers a guided prompt to create `./C6.config.json`.
+Prefer `C6.config.json` for security/reproducibility; TS config files are executed as local code during generation.
+TS config may export a plain object, a function returning an object, or an async function/Promise resolving to the config object.
+
+Config shape:
+
+```json
+{
+  "databases": [
+    {
+      "alias": "app",
+      "host": "127.0.0.1",
+      "port": 3306,
+      "user": "root",
+      "passEnv": "APP_DB_PASS",
+      "dbnames": ["app"]
+    },
+    {
+      "alias": "analytics",
+      "host": "analytics-db.internal",
+      "port": 3306,
+      "user": "analytics_user",
+      "passEnv": "ANALYTICS_DB_PASS",
+      "dbnames": ["analytics", "app"]
+    }
+  ],
+  "primaryAlias": "app"
+}
+```
+
+Each `dbnames` entry creates a generated scoped namespace. If one entry has multiple schema names, aliases are generated as:
+
+- `alias` for the schema matching `alias`
+- `alias_<dbname>` for additional schema names
+
+Example above yields `C6.analytics` and `C6.analytics_app`.
+
+Starter template: `./rest.config.example.json`.
+TS starter template: `./C6.config.example.ts`.
+
+Beginner-friendly TS setup (recommended when you want env/vault secrets):
+
+1. Copy the template.
+
+```bash
+cp ./C6.config.example.ts ./C6.config.ts
+```
+
+2. Set password env vars in your shell.
+
+```bash
+export APP_DB_PASS='replace-me'
+export BILLING_DB_PASS='replace-me'
+export ANALYTICS_DB_PASS='replace-me'
+```
+
+3. Open `C6.config.ts` and update `host`, `user`, `dbnames`, and `primaryAlias` for your databases.
+
+4. Generate bindings.
+
+```bash
+npx generateRestBindings --output ./shared/rest
+```
+
+Notes:
+
+- You can pass an explicit path too: `npx generateRestBindings --config ./C6.config.ts --output ./shared/rest`.
+- `C6.config.ts` can load secrets asynchronously (for example from Vault) before returning the config object.
+- Keep secret-bearing files out of git. Prefer local/private config names like `.C6.ts` or `.C6.json`.
 
 Import from generated bindings:
 
@@ -93,6 +161,41 @@ GLOBAL_REST_PARAMETERS.mysqlPool = mysql.createPool({
   database: "sakila",
 });
 ```
+
+#### SQL executor mode with multiple databases (request-scoped)
+
+Use `GLOBAL_REST_PARAMETERS.databases` to register connection targets. Then select one per request with `[C6.DB]`.
+
+```ts
+import mysql from "mysql2/promise";
+import { C6, GLOBAL_REST_PARAMETERS, Actor } from "./shared/rest/C6";
+
+const appPool = mysql.createPool({ host: "10.0.0.10", user: "root", password: "password", database: "app" });
+const billingPool = mysql.createPool({ host: "10.0.0.20", user: "root", password: "password", database: "billing" });
+
+GLOBAL_REST_PARAMETERS.databases = {
+  app: appPool,
+  billing: billingPool,
+};
+GLOBAL_REST_PARAMETERS.defaultDatabase = "app";
+
+await Actor.Get({
+  [C6.DB]: "billing",
+  [C6.PAGINATION]: { [C6.LIMIT]: 10 },
+});
+```
+
+`C6.DB` is request-scoped and safe for parallel async requests.
+
+If a key exists in `GLOBAL_REST_PARAMETERS.databases`, generated bindings also expose scoped namespaces:
+
+```ts
+await C6.billing.Actor.Get({
+  [C6.PAGINATION]: { [C6.LIMIT]: 10 },
+});
+```
+
+This is equivalent to calling `Actor.Get({ [C6.DB]: "billing", ... })`.
 
 #### HTTP executor mode (frontend or remote client)
 
@@ -388,6 +491,7 @@ Recommendation: use generated bindings + axios executor, not manual URL construc
 - `C6.mysqldump.sql`
 - `C6.mysqldump.json`
 - `C6.mysql.cnf`
+- `C6.<databaseKey>.mysqldump.sql` for each resolved config database alias
 
 Template sources:
 
@@ -547,6 +651,55 @@ This includes:
 - build
 - binding generation
 - test suite
+
+## Migration Notes (6.x -> 7.0)
+
+`generateRestBindings` is now config-first and this is a breaking change.
+
+Before (6.x):
+
+```bash
+npx generateRestBindings \
+  --user root \
+  --pass password \
+  --host 127.0.0.1 \
+  --port 3306 \
+  --dbname sakila \
+  --output ./shared/rest
+```
+
+After (7.0):
+
+```bash
+npx generateRestBindings \
+  --config ./rest.config.json \
+  --output ./shared/rest
+```
+
+Flag migration:
+
+- `--user` -> `databases[].user`
+- `--pass` -> `databases[].pass` (or `passEnv`, recommended)
+- `--host` -> `databases[].host`
+- `--port` -> `databases[].port`
+- `--dbname` -> `databases[].dbname` / `databases[].dbnames[]`
+- `--databases` (legacy alias map) -> explicit `databases[]` entries in config
+
+Behavior changes:
+
+- Config discovery now checks `.C6.ts`, `.C6.json`, `C6.config.ts`, and `C6.config.json` from CWD upward.
+- If no config is found and the process is interactive, a guided prompt can scaffold `C6.config.json`.
+- Multi-schema aliases are explicit via `dbnames` and emitted as `C6.<alias>` / `C6.<alias>_<dbname>`.
+
+Security recommendation:
+
+- Prefer `passEnv` over inline `pass`.
+- Keep secret-bearing config files out of source control (`.gitignore`), for example:
+  - `.C6.json`
+  - `.C6.ts`
+  - `C6.config.local.json`
+  - `rest.config.json`
+  - `rest.config.local.json`
 
 ## Migration Notes (6.0 -> 6.1)
 

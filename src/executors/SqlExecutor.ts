@@ -428,6 +428,7 @@ export class SqlExecutor<
 
     private stripRequestMetadata(source: Record<string, unknown>): Record<string, unknown> {
         const ignoredKeys = new Set<string>([
+            C6C.DB,
             C6C.SELECT,
             C6C.UPDATE,
             C6C.DELETE,

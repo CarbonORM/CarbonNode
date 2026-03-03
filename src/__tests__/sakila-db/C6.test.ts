@@ -19,6 +19,7 @@ import {
     expect,
     beforeAll,
     afterAll,
+    vi,
 } from 'vitest';
 
 function toPascalCase(name: string) {
@@ -466,6 +467,50 @@ describe('sakila-db generated C6 bindings', () => {
             database: 'sakila',
         });
         GLOBAL_REST_PARAMETERS.mysqlPool = pool;
+    });
+
+    it('supports C6.app.Actor.Get and C6.stats.General.Post namespace usage', async () => {
+        const originalDatabases = (GLOBAL_REST_PARAMETERS as any).databases;
+        const actorBinding = (C6 as any).app?.ORM?.Actor ?? (C6 as any).ORM?.Actor;
+        if (!actorBinding || typeof actorBinding.Get !== 'function') return;
+
+        const originalGeneral = (C6 as any).ORM?.General;
+        const generalPost = vi.fn(async (request: Record<string, any>) => ({
+            rest: [],
+            affected: 1,
+            created: true,
+            request,
+        }));
+
+        (C6 as any).ORM.General = {
+            ...actorBinding,
+            Post: generalPost,
+        };
+
+        (GLOBAL_REST_PARAMETERS as any).databases = { app: pool, stats: pool };
+
+        try {
+            const actorGet = await executeAndRecord(`scoped.app.actor.get`, () =>
+                (C6 as any).app.Actor.Get({
+                    [C6.PAGINATION]: { [C6.LIMIT]: 1 },
+                } as any)
+            );
+            const actorData = unwrapResponse(actorGet);
+            expect(Array.isArray(actorData?.rest)).toBe(true);
+
+            await (C6 as any).stats.General.Post({
+                action: 'record',
+            } as any);
+            expect(generalPost).toHaveBeenCalledTimes(1);
+            expect(generalPost.mock.calls[0][0][C6.DB]).toBe('stats');
+        } finally {
+            if (originalGeneral === undefined) {
+                delete (C6 as any).ORM.General;
+            } else {
+                (C6 as any).ORM.General = originalGeneral;
+            }
+            (GLOBAL_REST_PARAMETERS as any).databases = originalDatabases;
+        }
     });
 
     afterAll(async () => {

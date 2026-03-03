@@ -5,6 +5,7 @@ import {
     iRest, RequestQueryBody
 } from "../types/ormInterfaces";
 import {applyLogLevelDefaults, getLogContext, LogLevel, logWithLevel} from "../utils/logLevel";
+import {resolveRestConfigForRequest, stripDatabaseKeyFromRequest} from "./databaseResolver";
 
 /**
  * Facade: routes API calls to SQL or HTTP executors based on runtime context.
@@ -31,7 +32,8 @@ export default function restRequest<
         >,
     ): Promise<DetermineResponseDataType<G['RequestMethod'], G['RestTableInterface']>> => {
 
-        const config = typeof configX === "function" ? configX() : configX;
+        const baseConfig = typeof configX === "function" ? configX() : configX;
+        const { config } = resolveRestConfigForRequest(baseConfig as any, request as any);
 
         applyLogLevelDefaults(config, request);
 
@@ -45,7 +47,8 @@ export default function restRequest<
         if (config.mysqlPool) {
             logWithLevel(LogLevel.DEBUG, logContext, console.log, "Using SQL Executor");
             const {SqlExecutor} = await import('../executors/SqlExecutor');
-            const executor = new SqlExecutor<G>(config, request);
+            const sanitizedRequest = stripDatabaseKeyFromRequest(request);
+            const executor = new SqlExecutor<G>(config as any, sanitizedRequest as any);
             return executor.execute();
         }
 
@@ -55,7 +58,7 @@ export default function restRequest<
 
         // HTTP path fallback
         const {HttpExecutor} = await import('../executors/HttpExecutor');
-        const http = new HttpExecutor<G>(config, request);
+        const http = new HttpExecutor<G>(config as any, request);
         return http.execute();
     };
 }

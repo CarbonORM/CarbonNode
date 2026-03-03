@@ -175,6 +175,22 @@ describe('SQL Builders', () => {
     expect(params).toEqual(['ALICE', 'ONE', 'BOB', 'TWO']);
   });
 
+  it('ignores DB metadata on root-level POST payload inserts', () => {
+    const config = buildTestConfig();
+    const qb = new PostQueryBuilder(config as any, {
+      [C6C.DB]: 'billing',
+      'actor.first_name': 'ALICE',
+      'actor.last_name': 'ONE',
+    } as any, false);
+
+    const { sql, params } = qb.build('actor');
+
+    expect(sql).toContain('INSERT INTO `actor`');
+    expect(sql).toContain('`first_name`, `last_name`');
+    expect(sql).not.toContain('`DB`');
+    expect(params).toEqual(['ALICE', 'ONE']);
+  });
+
   it('stringifies dotted-key JSON payloads for JSON columns on UPDATE', () => {
     const config = buildTestConfig();
     const payload = { 'section1.preparedBy': 'Prepared by Assessorly, Co.' };

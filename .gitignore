@@ -99,6 +99,14 @@ web_modules/
 # Carbon Generations
 rest/
 
+# Local generator configs (can contain DB credentials)
+rest.config.json
+rest.config.local.json
+.C6.json
+.C6.ts
+C6.config.local.json
+C6.config.local.ts
+
 # Next.js build output
 .next
 out
@@ -149,4 +157,3 @@ dist
 
 # junie
 .output.txt
-

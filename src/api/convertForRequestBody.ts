@@ -42,6 +42,7 @@ export default function <
             if ([
                 C6Constants.GET,
                 C6Constants.POST,
+                C6Constants.DB,
                 C6Constants.UPDATE,
                 C6Constants.REPLACE,
                 C6Constants.DELETE,
