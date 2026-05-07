@@ -113,7 +113,24 @@ export const distinct = (
     expression: SQLExpression,
 ): [typeof C6C.DISTINCT, SQLExpression] => [C6C.DISTINCT as typeof C6C.DISTINCT, expression];
 
-export const lit = (value: any): [typeof C6C.LIT, any] => [C6C.LIT as typeof C6C.LIT, value];
+export const lit = <T>(value: T): [typeof C6C.LIT, T] => [C6C.LIT as typeof C6C.LIT, value];
+
+export const lits = <T>(values: readonly T[]): Array<[typeof C6C.LIT, T]> =>
+    values.map((value) => [C6C.LIT as typeof C6C.LIT, value]);
+
+export const eqLit = <T>(value: T): [typeof C6C.EQUAL, [typeof C6C.LIT, T]] =>
+    [C6C.EQUAL as typeof C6C.EQUAL, lit(value)];
+
+export const inLit = <T>(values: readonly T[]): Record<typeof C6C.IN, Array<[typeof C6C.LIT, T]>> =>
+    ({ [C6C.IN]: lits(values) } as Record<typeof C6C.IN, Array<[typeof C6C.LIT, T]>>);
+
+export const betweenLit = <Start, End>(
+    start: Start,
+    end: End,
+): [typeof C6C.BETWEEN, [[typeof C6C.LIT, Start], [typeof C6C.LIT, End]]] => [
+    C6C.BETWEEN as typeof C6C.BETWEEN,
+    [lit(start), lit(end)],
+];
 
 export const order = (
     expression: SQLExpression,

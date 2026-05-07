@@ -1,6 +1,62 @@
 import { C6Constants as C6C } from "../constants/C6Constants";
 import { C6RestfulModel, iRestMethods, RequestQueryBody } from "../types/ormInterfaces";
 
+const isPlainObject = (value: unknown): value is Record<string, any> =>
+  !!value && typeof value === 'object' && !Array.isArray(value);
+
+const assertOrderTerms = (value: unknown, path: string): void => {
+  if (value === undefined) return;
+  if (!Array.isArray(value)) {
+    throw new Error(`${path} expects an array of terms using [expression, direction?] syntax. Legacy ORDER object maps are not supported.`);
+  }
+};
+
+export function normalizeRequestOrder<
+  Method extends iRestMethods,
+  T extends Record<string, any>,
+  Custom extends Record<string, any> = {},
+  Overrides extends Record<string, any> = {}
+> (
+  request: RequestQueryBody<Method, T, Custom, Overrides>,
+): RequestQueryBody<Method, T, Custom, Overrides> {
+  if (request == null || typeof request !== 'object') return request;
+
+  const requestObj = request as Record<string, any>;
+  const rootOrder = requestObj[C6C.ORDER];
+  const paginationRaw = requestObj[C6C.PAGINATION];
+  const paginationOrder = isPlainObject(paginationRaw)
+    ? paginationRaw[C6C.ORDER]
+    : undefined;
+
+  assertOrderTerms(rootOrder, C6C.ORDER);
+  assertOrderTerms(paginationOrder, `${C6C.PAGINATION}.${C6C.ORDER}`);
+
+  if (rootOrder === undefined) {
+    return request;
+  }
+
+  if (paginationOrder !== undefined) {
+    throw new Error(`Specify ${C6C.ORDER} in only one place. Use either ${C6C.ORDER} or ${C6C.PAGINATION}.${C6C.ORDER}, not both.`);
+  }
+
+  if (paginationRaw != null && !isPlainObject(paginationRaw)) {
+    throw new Error(`${C6C.PAGINATION} must be an object when ${C6C.ORDER} is provided.`);
+  }
+
+  const {
+    [C6C.ORDER]: _removedOrder,
+    ...rest
+  } = requestObj;
+
+  return {
+    ...(rest as any),
+    [C6C.PAGINATION]: {
+      ...(isPlainObject(paginationRaw) ? paginationRaw : {}),
+      [C6C.ORDER]: rootOrder,
+    },
+  } as RequestQueryBody<Method, T, Custom, Overrides>;
+}
+
 /**
  * Converts a singular T-shaped request into complex ORM format for GET/PUT/DELETE
  * Enforces that all primary keys are present for singular syntax and that the table has PKs.
@@ -25,6 +81,9 @@ export function normalizeSingularRequest<
     C6C.DELETE,
     C6C.WHERE,
     C6C.JOIN,
+    C6C.GROUP_BY,
+    C6C.HAVING,
+    C6C.INDEX_HINTS,
   ]);
 
   const specialKeys: Set<string> = new Set([
@@ -34,6 +93,10 @@ export function normalizeSingularRequest<
     C6C.DELETE,
     C6C.WHERE,
     C6C.JOIN,
+    C6C.ORDER,
+    C6C.GROUP_BY,
+    C6C.HAVING,
+    C6C.INDEX_HINTS,
     C6C.PAGINATION,
   ]);
 
@@ -95,6 +158,10 @@ export function normalizeSingularRequest<
 
   // Strip API metadata that should remain at root
   const {
+    ORDER,
+    GROUP_BY,
+    HAVING,
+    INDEX_HINTS,
     dataInsertMultipleRows,
     cacheResults,
     skipReactBootstrap,
@@ -127,6 +194,10 @@ export function normalizeSingularRequest<
     }
     return {
       ...normalized,
+      ...(ORDER !== undefined ? { [C6C.ORDER]: ORDER } : {}),
+      ...(GROUP_BY !== undefined ? { [C6C.GROUP_BY]: GROUP_BY } : {}),
+      ...(HAVING !== undefined ? { [C6C.HAVING]: HAVING } : {}),
+      ...(INDEX_HINTS !== undefined ? { [C6C.INDEX_HINTS]: INDEX_HINTS } : {}),
       dataInsertMultipleRows,
       cacheResults,
       skipReactBootstrap,
@@ -144,6 +215,10 @@ export function normalizeSingularRequest<
     };
     return {
       ...normalized,
+      ...(ORDER !== undefined ? { [C6C.ORDER]: ORDER } : {}),
+      ...(GROUP_BY !== undefined ? { [C6C.GROUP_BY]: GROUP_BY } : {}),
+      ...(HAVING !== undefined ? { [C6C.HAVING]: HAVING } : {}),
+      ...(INDEX_HINTS !== undefined ? { [C6C.INDEX_HINTS]: INDEX_HINTS } : {}),
       dataInsertMultipleRows,
       cacheResults,
       skipReactBootstrap,
@@ -174,6 +249,10 @@ export function normalizeSingularRequest<
 
   return {
     ...normalized,
+    ...(ORDER !== undefined ? { [C6C.ORDER]: ORDER } : {}),
+    ...(GROUP_BY !== undefined ? { [C6C.GROUP_BY]: GROUP_BY } : {}),
+    ...(HAVING !== undefined ? { [C6C.HAVING]: HAVING } : {}),
+    ...(INDEX_HINTS !== undefined ? { [C6C.INDEX_HINTS]: INDEX_HINTS } : {}),
     dataInsertMultipleRows,
     cacheResults,
     skipReactBootstrap,

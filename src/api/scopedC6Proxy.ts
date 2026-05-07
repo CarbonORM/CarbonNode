@@ -12,6 +12,9 @@ export type iScopedNamespace = {
     ORM: Record<string, iScopedBinding>;
 } & Record<string, iScopedBinding>;
 
+export type iScopedC6Object<RestTableInterfaces extends { [key: string]: any }> =
+    iC6Object<RestTableInterfaces> & Record<string, iScopedNamespace | any>;
+
 type iDatabaseAwareRuntimeConfig = {
     databases?: Record<string, any>;
 };
@@ -22,6 +25,42 @@ type iScopedC6ProxyOptions = {
 
 const isRecord = (value: unknown): value is Record<string, any> =>
     !!value && typeof value === "object" && !Array.isArray(value);
+
+export const isScopedC6Namespace = (value: unknown): value is iScopedNamespace => {
+    if (!isRecord(value)) return false;
+    return isRecord(value.ORM);
+};
+
+const normalizeDatabaseKey = (value: unknown, origin: string): string => {
+    if (typeof value !== "string") {
+        throw new Error(`${origin} must be a non-empty string.`);
+    }
+    const trimmed = value.trim();
+    if (trimmed === "") {
+        throw new Error(`${origin} must be a non-empty string.`);
+    }
+    return trimmed;
+};
+
+export const getScopedC6Namespace = <
+    RestTableInterfaces extends { [key: string]: any },
+>(
+    c6: iScopedC6Object<RestTableInterfaces>,
+    databaseKey: string,
+): iScopedNamespace => {
+    const normalizedDatabaseKey = normalizeDatabaseKey(
+        databaseKey,
+        "databaseKey",
+    );
+    const namespace = c6[normalizedDatabaseKey];
+    if (!isScopedC6Namespace(namespace)) {
+        throw new Error(
+            `Unknown or unconfigured C6 database key '${normalizedDatabaseKey}'. Configure GLOBAL_REST_PARAMETERS.databases['${normalizedDatabaseKey}'].`,
+        );
+    }
+
+    return namespace;
+};
 
 const mergeDatabaseRequest = (
     databaseToken: string,
@@ -134,7 +173,7 @@ export const createScopedC6Proxy = <
     c6Core: iC6Object<RestTableInterfaces>,
     globalRestParameters: iDatabaseAwareRuntimeConfig,
     options?: iScopedC6ProxyOptions,
-): iC6Object<RestTableInterfaces> & Record<string, iScopedNamespace | any> => {
+): iScopedC6Object<RestTableInterfaces> => {
     const fallbackDatabaseToken = resolveDatabaseToken(c6Core);
     const databaseNamespaceCache: Record<
         string,
@@ -198,5 +237,5 @@ export const createScopedC6Proxy = <
 
             return resolveDatabaseNamespace(prop);
         },
-    }) as iC6Object<RestTableInterfaces> & Record<string, iScopedNamespace | any>;
+    }) as iScopedC6Object<RestTableInterfaces>;
 };

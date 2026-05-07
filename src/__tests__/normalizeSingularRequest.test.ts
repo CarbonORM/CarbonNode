@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { normalizeSingularRequest } from '../utils/normalizeSingularRequest';
+import { normalizeRequestOrder, normalizeSingularRequest } from '../utils/normalizeSingularRequest';
 import { C6C } from '../constants/C6Constants';
 import type { C6RestfulModel } from '../types/ormInterfaces';
 
@@ -163,5 +163,48 @@ describe('normalizeSingularRequest', () => {
     const req = { 'link.from_id': 1, 'link.to_id': 2, 'link.label': 'L' } as any;
     const out = normalizeSingularRequest('PUT', req, model) as any;
     expect(out[C6C.WHERE]).toEqual({ 'link.from_id': litEq(1), 'link.to_id': litEq(2) });
+  });
+});
+
+describe('normalizeRequestOrder', () => {
+  it('moves top-level ORDER into PAGINATION.ORDER', () => {
+    const out = normalizeRequestOrder({
+      [C6C.ORDER]: [['actor.last_name', C6C.DESC]],
+      [C6C.PAGINATION]: { [C6C.LIMIT]: 25 },
+    } as any) as any;
+
+    expect(out[C6C.ORDER]).toBeUndefined();
+    expect(out[C6C.PAGINATION]).toEqual({
+      [C6C.LIMIT]: 25,
+      [C6C.ORDER]: [['actor.last_name', C6C.DESC]],
+    });
+  });
+
+  it('preserves singular normalization metadata before moving ORDER', () => {
+    const model = makeModel('actor', ['actor_id']);
+    const singular = normalizeSingularRequest('GET', {
+      actor_id: 5,
+      [C6C.ORDER]: [['actor.last_name', C6C.ASC]],
+    } as any, model);
+
+    const out = normalizeRequestOrder(singular) as any;
+
+    expect(out[C6C.WHERE]).toEqual({ 'actor.actor_id': litEq(5) });
+    expect(out[C6C.PAGINATION][C6C.ORDER]).toEqual([['actor.last_name', C6C.ASC]]);
+  });
+
+  it('rejects legacy ORDER object maps', () => {
+    expect(() => normalizeRequestOrder({
+      [C6C.ORDER]: { 'actor.last_name': C6C.ASC },
+    } as any)).toThrow(/Legacy ORDER object maps are not supported/);
+  });
+
+  it('rejects duplicate ORDER declarations', () => {
+    expect(() => normalizeRequestOrder({
+      [C6C.ORDER]: [['actor.last_name', C6C.ASC]],
+      [C6C.PAGINATION]: {
+        [C6C.ORDER]: [['actor.first_name', C6C.DESC]],
+      },
+    } as any)).toThrow(/Specify ORDER in only one place/);
   });
 });

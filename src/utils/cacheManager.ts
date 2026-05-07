@@ -1,6 +1,7 @@
 import type {iCacheAPI, iCacheResponse} from "../types/ormInterfaces";
 import {LogContext, LogLevel, logWithLevel, shouldLog} from "./logLevel";
 import logSql, { SqlAllowListStatus } from "./logSql";
+import {sortQueryValue} from "./sortAndSerializeQueryObject";
 
 // -----------------------------------------------------------------------------
 // Cache Storage
@@ -28,7 +29,7 @@ function makeCacheKey(
     tableName: string | string[],
     requestData: unknown,
 ): string {
-    const raw = JSON.stringify([method, tableName, requestData]);
+    const raw = JSON.stringify([method, tableName, sortQueryValue(requestData)]);
     return fnv1a(raw);
 }
 

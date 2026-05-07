@@ -15,6 +15,7 @@ import {
 import {removeInvalidKeys, removePrefixIfExists, TestRestfulResponse} from "../utils/apiHelpers";
 import {checkCache, evictCacheEntry, setCache, userCustomClearCache} from "../utils/cacheManager";
 import type { SqlAllowListStatus } from "../utils/logSql";
+import {normalizeRequestOrder} from "../utils/normalizeSingularRequest";
 import {sortAndSerializeQueryObject} from "../utils/sortAndSerializeQueryObject";
 import {notifyToast} from "../utils/toastRuntime";
 import {Executor} from "./Executor";
@@ -86,6 +87,20 @@ export class HttpExecutor<
         const responseRows: Record<string, any>[] = Array.isArray(responseRestRaw)
             ? responseRestRaw
             : (responseRestRaw ? [responseRestRaw] : []);
+        const mergedRows = undefined !== request.dataInsertMultipleRows
+            ? request.dataInsertMultipleRows.map((row, index) => {
+                const normalizedRow = this.stripTableNameFromKeys<RT>(row as Partial<RT>);
+                return removeInvalidKeys<RT>({
+                    ...normalizedRow,
+                    ...(responseRows[index] ?? {}),
+                }, this.config.C6.TABLES)
+            })
+            : [
+                removeInvalidKeys<RT>({
+                    ...this.stripTableNameFromKeys<RT>(request as unknown as Partial<RT>),
+                    ...(responseRows[0] ?? {}),
+                }, this.config.C6.TABLES)
+            ];
 
         if (this.config.restModel.PRIMARY_SHORT.length === 1) {
             const pk = this.config.restModel.PRIMARY_SHORT[0] as PK;
@@ -95,31 +110,34 @@ export class HttpExecutor<
                     (request as unknown as Record<PK, RT[PK]>)[pk] = created as RT[PK];
                 }
             } catch {/* best-effort */}
-        } else if (isLocal()) {
+        }
+
+        const missingPrimaryRows = mergedRows.flatMap((row, index) => {
+            const missing = this.config.restModel.PRIMARY_SHORT.filter((pk) => {
+                const value = (row as Record<string, any>)?.[pk as string];
+                return value === undefined || value === null;
+            });
+            return missing.length > 0
+                ? [{index, missing}]
+                : [];
+        });
+
+        if (isLocal() && missingPrimaryRows.length > 0) {
             logWithLevel(
                 LogLevel.ERROR,
                 getLogContext(this.config, this.request),
                 console.error,
                 "C6 received unexpected results given the primary key length",
+                {
+                    primaryKeys: this.config.restModel.PRIMARY_SHORT,
+                    missingPrimaryRows,
+                },
             );
         }
 
         this.config.reactBootstrap?.updateRestfulObjectArrays<RT>({
             callback,
-            dataOrCallback: undefined !== request.dataInsertMultipleRows
-                ? request.dataInsertMultipleRows.map((row, index) => {
-                    const normalizedRow = this.stripTableNameFromKeys<RT>(row as Partial<RT>);
-                    return removeInvalidKeys<RT>({
-                        ...normalizedRow,
-                        ...(responseRows[index] ?? {}),
-                    }, this.config.C6.TABLES)
-                })
-                : [
-                    removeInvalidKeys<RT>({
-                        ...this.stripTableNameFromKeys<RT>(request as unknown as Partial<RT>),
-                        ...(responseRows[0] ?? {}),
-                    }, this.config.C6.TABLES)
-                ],
+            dataOrCallback: mergedRows,
             stateKey: this.config.restModel.TABLE_NAME,
             uniqueObjectId: this.config.restModel.PRIMARY_SHORT as (keyof RT)[]
         })
@@ -167,6 +185,8 @@ export class HttpExecutor<
                 config: this.config,
                 request: this.request,
             });
+
+        this.request = normalizeRequestOrder(this.request) as typeof this.request;
 
         const tableName = restModel.TABLE_NAME as string;
 

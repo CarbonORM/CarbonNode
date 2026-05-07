@@ -4,7 +4,7 @@ import { SelectQueryBuilder } from '../orm/queries/SelectQueryBuilder';
 import { PostQueryBuilder } from '../orm/queries/PostQueryBuilder';
 import { UpdateQueryBuilder } from '../orm/queries/UpdateQueryBuilder';
 import { DeleteQueryBuilder } from '../orm/queries/DeleteQueryBuilder';
-import { alias, call, distinct, fn, lit, order } from '../orm/queryHelpers';
+import { alias, betweenLit, call, distinct, eqLit, fn, inLit, lit, lits, order } from '../orm/queryHelpers';
 import { buildTestConfig, buildBinaryTestConfig, buildBinaryTestConfigFqn, buildTemporalTestConfig } from './fixtures/c6.fixture';
 
 describe('SQL Builders', () => {
@@ -74,7 +74,7 @@ describe('SQL Builders', () => {
     expect(params).toEqual(['fallback']);
   });
 
-  it('supports helper builders for fn/call/as/distinct/lit/order', () => {
+  it('supports helper builders for fn/call/as/distinct/lit/lits/order', () => {
     const config = buildTestConfig();
     const qb = new SelectQueryBuilder(config as any, {
       SELECT: [
@@ -82,6 +82,9 @@ describe('SQL Builders', () => {
         alias(fn(C6C.COUNT, 'actor.actor_id'), 'cnt'),
         call('COALESCE', lit('N/A'), 'actor.last_name'),
       ],
+      WHERE: {
+        'actor.first_name': [C6C.IN, lits(['ALICE', 'BOB'])],
+      },
       PAGINATION: {
         [C6C.ORDER]: [order(fn(C6C.COUNT, 'actor.actor_id'), 'DESC')],
         [C6C.LIMIT]: 5,
@@ -92,8 +95,34 @@ describe('SQL Builders', () => {
     expect(sql).toContain('DISTINCT actor.first_name AS distinct_name');
     expect(sql).toContain('COUNT(actor.actor_id) AS cnt');
     expect(sql).toContain('COALESCE(?, actor.last_name)');
+    expect(sql).toContain('( actor.first_name IN (?, ?) )');
     expect(sql).toContain('ORDER BY COUNT(actor.actor_id) DESC');
-    expect(params).toEqual(['N/A']);
+    expect(params).toEqual(['N/A', 'ALICE', 'BOB']);
+  });
+
+  it('supports literal-safe WHERE helper builders', () => {
+    const config = buildTestConfig();
+    const qb = new SelectQueryBuilder(config as any, {
+      WHERE: {
+        'actor.first_name': eqLit('ALICE'),
+        'actor.last_name': { ...inLit(['SMITH', 'JONES']) },
+        0: {
+          'actor.last_update': betweenLit('2006-02-15 04:34:33', '2006-02-16 04:34:33'),
+        },
+      },
+    } as any, false);
+
+    const { sql, params } = qb.build('actor');
+    expect(sql).toContain('(actor.first_name) = ?');
+    expect(sql).toContain('( actor.last_name IN (?, ?) )');
+    expect(sql).toContain('(actor.last_update) BETWEEN ? AND ?');
+    expect(params).toEqual([
+      'ALICE',
+      'SMITH',
+      'JONES',
+      '2006-02-15 04:34:33',
+      '2006-02-16 04:34:33',
+    ]);
   });
 
   it('builds INSERT with ON DUPLICATE KEY UPDATE', () => {

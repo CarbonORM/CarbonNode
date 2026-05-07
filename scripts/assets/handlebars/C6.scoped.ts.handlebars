@@ -1,0 +1,116 @@
+// noinspection JSUnusedGlobalSymbols,SpellCheckingInspection
+
+import {
+    C6Constants,
+    restOrm,
+} from "@carbonorm/carbonnode";
+import type {
+    C6RestfulModel,
+    iC6Object,
+} from "@carbonorm/carbonnode";
+{{#if CUSTOM_IMPORTS_GENERATED}}{{{CUSTOM_IMPORTS_GENERATED}}}
+{{/if}}
+import {
+    GLOBAL_REST_PARAMETERS,
+    RestTablePrefix,
+} from "./core";
+
+export const SCOPED_C6_BY_DATABASE: Record<string, iC6Object<any>> = {
+    {{#each SCOPED_DATABASES}}
+    '{{DATABASE_KEY}}': (() => {
+        {{#each TABLES}}
+        const {{SCOPED_TABLE_CONST}}: C6RestfulModel<any, any, any> = {
+            TABLE_NAME: '{{TABLE_NAME}}',
+            {{#each COLUMNS_UPPERCASE}}
+            {{@key}}: '{{this}}',
+            {{/each}}
+            PRIMARY: [
+            {{#PRIMARY}}
+                '{{this}}',
+            {{/PRIMARY}}
+            ],
+            PRIMARY_SHORT: [
+            {{#each PRIMARY_SHORT}}
+                '{{this}}',
+            {{/each}}
+            ],
+            COLUMNS: {
+            {{#each COLUMNS}}
+                '{{@key}}': '{{this}}',
+            {{/each}}
+            },
+            TYPE_VALIDATION: {
+            {{#each TYPE_VALIDATION}}
+                '{{@key}}': {
+                    MYSQL_TYPE: '{{this.MYSQL_TYPE}}',
+                    MAX_LENGTH: '{{this.MAX_LENGTH}}',
+                    AUTO_INCREMENT: {{this.AUTO_INCREMENT}},
+                    SKIP_COLUMN_IN_POST: {{this.SKIP_COLUMN_IN_POST}}
+                },
+            {{/each}}
+            },
+            REGEX_VALIDATION: {
+            {{#each REGEX_VALIDATION}}
+                '{{@key}}': '{{this}}',
+            {{/each}}
+            },
+            LIFECYCLE_HOOKS: {
+                GET: {beforeProcessing:{}, beforeExecution:{}, afterExecution:{}, afterCommit:{}},
+                PUT: {beforeProcessing:{}, beforeExecution:{}, afterExecution:{}, afterCommit:{}},
+                POST: {beforeProcessing:{}, beforeExecution:{}, afterExecution:{}, afterCommit:{}},
+                DELETE: {beforeProcessing:{}, beforeExecution:{}, afterExecution:{}, afterCommit:{}},
+            },
+            TABLE_REFERENCES: {
+                {{#each TABLE_REFERENCES}}'{{@key}}': [{{#this}}{
+                    TABLE: '{{TABLE}}',
+                    COLUMN: '{{COLUMN}}',
+                    CONSTRAINT: '{{CONSTRAINT}}',
+                },{{/this}}],{{/each}}
+            },
+            TABLE_REFERENCED_BY: {
+                {{#each TABLE_REFERENCED_BY}}'{{@key}}': [{{#this}}{
+                    TABLE: '{{TABLE}}',
+                    COLUMN: '{{COLUMN}}',
+                    CONSTRAINT: '{{CONSTRAINT}}',
+                },{{/this}}],{{/each}}
+            }
+        };
+        {{/each}}
+
+        const scopedTables = {
+            {{#each TABLES}}
+            '{{TABLE_NAME_SHORT}}': {{SCOPED_TABLE_CONST}},
+            {{/each}}
+        };
+
+        const scopedC6: iC6Object<any> = {
+            ...C6Constants,
+            C6VERSION: '{{../C6VERSION}}',
+            PREFIX: RestTablePrefix,
+            TABLES: scopedTables,
+            ORM: {},
+            ...scopedTables,
+        };
+
+        {{#each TABLES}}
+        const {{SCOPED_BINDING_CONST}} = {
+            ...{{SCOPED_TABLE_CONST}},
+            ...restOrm<any>(() => ({
+                ...GLOBAL_REST_PARAMETERS,
+                C6: scopedC6,
+                restModel: {{SCOPED_TABLE_CONST}}{{#if ../../OBJECT_OVERRIDES}},
+                {{{../../OBJECT_OVERRIDES}}}{{/if}}
+            }))
+        };
+        {{/each}}
+
+        scopedC6.ORM = {
+            {{#each TABLES}}
+            {{TABLE_NAME_SHORT_PASCAL_CASE}}: {{SCOPED_BINDING_CONST}},
+            {{/each}}
+        };
+
+        return scopedC6;
+    })(),
+    {{/each}}
+};

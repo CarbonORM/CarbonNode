@@ -1,9 +1,7 @@
 import { describe, it, expect, beforeAll, vi } from 'vitest';
 
-// Import the generated C6.js from sakila-db folder (ESM)
-// This file is generated from the Sakila schema and wired with restOrm
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore - C6.js is JS, vitest/ts handles ESM imports fine
+// Import the generated C6 facade through the runtime JS specifier.
+// Vitest resolves this to the generated TypeScript source.
 import { C6, GLOBAL_REST_PARAMETERS } from './sakila-db/C6.js';
 
 function toPascalCase(name: string) {

@@ -57,4 +57,42 @@ describe("convertForRequestBody", () => {
       "actor.last_name",
     ]);
   });
+
+  it("preserves control-array order while sorting nested object keys", () => {
+    const payload = convertForRequestBody(
+      {
+        [C6C.SELECT]: [
+          "actor.last_name",
+          "actor.first_name",
+        ],
+        [C6C.ORDER]: [
+          ["actor.last_name", C6C.DESC],
+          ["actor.first_name", C6C.ASC],
+        ],
+        [C6C.WHERE]: {
+          [C6C.OR]: [
+            {
+              "actor.last_name": "B",
+              "actor.first_name": "A",
+            },
+          ],
+        },
+      } as any,
+      "actor",
+      C6,
+    );
+
+    expect(payload[C6C.SELECT]).toEqual([
+      "actor.last_name",
+      "actor.first_name",
+    ]);
+    expect(payload[C6C.ORDER]).toEqual([
+      ["actor.last_name", C6C.DESC],
+      ["actor.first_name", C6C.ASC],
+    ]);
+    expect(Object.keys(payload[C6C.WHERE][C6C.OR][0])).toEqual([
+      "actor.first_name",
+      "actor.last_name",
+    ]);
+  });
 });

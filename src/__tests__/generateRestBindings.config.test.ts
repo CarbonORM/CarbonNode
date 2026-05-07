@@ -226,6 +226,9 @@ describe("generateRestBindings config validation", () => {
             const outputDir = path.join(tempDir, "generated");
             fs.mkdirSync(nestedDir, { recursive: true });
             fs.mkdirSync(outputDir, { recursive: true });
+            fs.mkdirSync(path.join(outputDir, "C6.generated"), { recursive: true });
+            fs.writeFileSync(path.join(outputDir, "C6.js"), "stale");
+            fs.writeFileSync(path.join(outputDir, "C6.generated", "core.js"), "stale");
             fs.writeFileSync(
                 path.join(outputDir, "C6.mysqldump.sql"),
                 minimalSchemaDump,
@@ -242,6 +245,7 @@ describe("generateRestBindings config validation", () => {
                         dbnames: ["sakila"],
                     },
                 ],
+                customImports: 'import type { CustomRestContext } from "./restCustomTypes";',
             });
 
             const { status, output } = runGenerator(
@@ -252,9 +256,26 @@ describe("generateRestBindings config validation", () => {
             expect(status).toBe(0);
             expect(output).toMatch(/Successfully created CarbonORM bindings/i);
             const generatedC6Path = path.join(outputDir, "C6.ts");
+            const generatedCorePath = path.join(outputDir, "C6.generated", "core.ts");
+            const generatedScopedPath = path.join(outputDir, "C6.generated", "scoped.ts");
+            const generatedActorPath = path.join(outputDir, "C6.generated", "tables", "Actor.ts");
             expect(fs.existsSync(generatedC6Path)).toBe(true);
+            expect(fs.existsSync(path.join(outputDir, "C6.js"))).toBe(false);
+            expect(fs.existsSync(path.join(outputDir, "C6.generated", "core.js"))).toBe(false);
+            expect(fs.existsSync(generatedCorePath)).toBe(true);
+            expect(fs.existsSync(generatedScopedPath)).toBe(true);
+            expect(fs.existsSync(generatedActorPath)).toBe(true);
             expect(fs.readFileSync(generatedC6Path, "utf-8")).toMatch(
                 /SCOPED_C6_BY_DATABASE/,
+            );
+            expect(fs.readFileSync(generatedActorPath, "utf-8")).toMatch(
+                /registerC6Table\(/,
+            );
+            expect(fs.readFileSync(generatedActorPath, "utf-8")).toMatch(
+                /from "\.\.\/\.\.\/restCustomTypes"/,
+            );
+            expect(fs.readFileSync(generatedScopedPath, "utf-8")).toMatch(
+                /from "\.\.\/restCustomTypes"/,
             );
         } finally {
             fs.rmSync(tempDir, { recursive: true, force: true });

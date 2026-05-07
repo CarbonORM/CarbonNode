@@ -328,6 +328,7 @@ Normative rules:
 - Non-reference strings must be wrapped with `[C6.LIT, value]`.
 - `AS` and `DISTINCT` are wrappers, not positional tokens.
 - `PAGINATION.ORDER` must be an array of order terms.
+- CarbonNode normalizes a top-level `ORDER` into `PAGINATION.ORDER` for compatibility, but new code should prefer `PAGINATION.ORDER`.
 - Use `C6.CALL` for unknown/custom function names.
 
 Removed legacy syntax (throws):
@@ -425,10 +426,10 @@ await Actor.Put({
 
 ## Helper Builders
 
-CarbonNode exports typed builders that return canonical tuples:
+CarbonNode exports typed builders for canonical expression tuples and common literal-safe `WHERE` / `HAVING` predicates:
 
 ```ts
-import { fn, call, alias, distinct, lit, order } from "@carbonorm/carbonnode";
+import { fn, call, alias, distinct, lit, eqLit, inLit, betweenLit, order } from "@carbonorm/carbonnode";
 import { C6, Actor } from "./shared/rest/C6";
 
 const response = await Actor.Get({
@@ -437,12 +438,21 @@ const response = await Actor.Get({
     alias(fn(C6.COUNT, Actor.ACTOR_ID), "cnt"),
     call("COALESCE", lit("N/A"), Actor.LAST_NAME),
   ],
+  [C6.WHERE]: {
+    [Actor.FIRST_NAME]: eqLit("NICK"),
+    [Actor.LAST_NAME]: inLit(["WAHLBERG", "CHASE"]),
+    0: {
+      [Actor.LAST_UPDATE]: betweenLit("2006-02-15", "2006-02-16"),
+    },
+  },
   [C6.PAGINATION]: {
     [C6.ORDER]: [order(fn(C6.COUNT, Actor.ACTOR_ID), C6.DESC)],
     [C6.LIMIT]: 5,
   },
 });
 ```
+
+Use `eqLit()`, `inLit()`, and `betweenLit()` when the comparison value is a string or other non-reference literal that should be wrapped with `C6.LIT` automatically.
 
 ## Singular vs Complex Requests
 
@@ -478,7 +488,7 @@ Correct structure:
 Also ensure `ORDER` is under `PAGINATION`:
 
 - correct: `PAGINATION[ORDER][0][0]=job_runs.created_at`
-- incorrect: `ORDER[0][0]=job_runs.created_at`
+- compatible but non-canonical: `ORDER[0][0]=job_runs.created_at`
 
 Recommendation: use generated bindings + axios executor, not manual URL construction.
 
@@ -486,16 +496,29 @@ Recommendation: use generated bindings + axios executor, not manual URL construc
 
 `generateRestBindings` writes:
 
-- `C6.ts` (typed table model + REST bindings)
+- `C6.ts` (stable compatibility facade and public entrypoint)
+- `C6.generated/core.ts` (shared runtime state such as `TABLES`, `COLUMNS`, `initialRestfulObjectsState`, and `GLOBAL_REST_PARAMETERS`)
+- `C6.generated/tables/*.ts` (one generated table module per table, including the interface, primary-key type, base model, and REST binding)
+- `C6.generated/scoped.ts` (scoped database bindings)
 - `C6.test.ts` (generated test suite)
 - `C6.mysqldump.sql`
 - `C6.mysqldump.json`
 - `C6.mysql.cnf`
 - `C6.<databaseKey>.mysqldump.sql` for each resolved config database alias
 
+`C6.ts` re-exports the selected public symbols from `C6.generated/**`, so existing imports such as
+`import { C6, Actor, type iActor, TABLES } from "./rest/C6"` remain the public contract. Auto-barrel
+tools should exclude `C6.generated/**` to avoid publishing noisy internals. Correctness does not depend
+on that exclusion: re-exporting both `C6.ts` and an individual generated table module resolves to the
+same table export.
+
 Template sources:
 
 - `scripts/assets/handlebars/C6.ts.handlebars`
+- `scripts/assets/handlebars/C6.core.ts.handlebars`
+- `scripts/assets/handlebars/C6.table.ts.handlebars`
+- `scripts/assets/handlebars/C6.tablesIndex.ts.handlebars`
+- `scripts/assets/handlebars/C6.scoped.ts.handlebars`
 - `scripts/assets/handlebars/C6.test.ts.handlebars`
 
 ## SQL Allowlist

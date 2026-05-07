@@ -1,6 +1,26 @@
 import { C6Constants } from "../constants/C6Constants";
 import {iC6Object, C6RestfulModel, iRestMethods, RequestQueryBody} from "../types/ormInterfaces";
 import {LogLevel, logWithLevel} from "../utils/logLevel";
+import {sortQueryValue} from "../utils/sortAndSerializeQueryObject";
+
+const sortShallowObjectKeys = (value: any) => {
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+        return value;
+    }
+
+    return Object.keys(value)
+        .sort()
+        .reduce((acc, key) => {
+            acc[key] = value[key];
+            return acc;
+        }, {} as Record<string, any>);
+};
+
+const SHALLOW_SORT_CONTROL_KEYS = new Set<string>([
+    C6Constants.UPDATE,
+    C6Constants.INSERT,
+    C6Constants.REPLACE,
+]);
 
 export default function <
     RequestMethod extends iRestMethods,
@@ -43,23 +63,28 @@ export default function <
                 C6Constants.GET,
                 C6Constants.POST,
                 C6Constants.DB,
+                C6Constants.SELECT,
+                C6Constants.ORDER,
                 C6Constants.UPDATE,
+                C6Constants.INSERT,
                 C6Constants.REPLACE,
                 C6Constants.DELETE,
                 C6Constants.WHERE,
                 C6Constants.JOIN,
+                C6Constants.GROUP_BY,
+                C6Constants.HAVING,
+                C6Constants.INDEX_HINTS,
                 C6Constants.PAGINATION,
                 "cacheResults",
             ].includes(value)) {
-                const val = restfulObject[value];
-                if (Array.isArray(val)) {
-                    payload[value] = val.sort();
-                } else if (typeof val === 'object' && val !== null) {
-                    payload[value] = Object.keys(val)
-                        .sort()
-                        .reduce((acc, key) => ({ ...acc, [key]: val[key] }), {});
+                const controlValue = restfulObject[value];
+
+                if (SHALLOW_SORT_CONTROL_KEYS.has(value)) {
+                    payload[value] = Array.isArray(controlValue)
+                        ? [...controlValue]
+                        : sortShallowObjectKeys(controlValue);
                 } else {
-                    payload[value] = val;
+                    payload[value] = sortQueryValue(controlValue);
                 }
                 continue;
             }

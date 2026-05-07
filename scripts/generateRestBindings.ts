@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-const {execSync} = require('child_process');
+const {execFileSync, execSync} = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const readline = require('readline');
@@ -589,6 +589,7 @@ const parseSQLToTypeScript = (sql: string) => {
             COLUMNS_UPPERCASE: {},
             TYPE_VALIDATION: {},
             REGEX_VALIDATION: {},
+            HAS_GEOJSON_TYPES?: boolean,
         }
     } = {};
 
@@ -711,6 +712,7 @@ const parseSQLToTypeScript = (sql: string) => {
             REGEX_VALIDATION: {},
             TABLE_REFERENCES: {},
             TABLE_REFERENCED_BY: {},
+            HAS_GEOJSON_TYPES: false,
             REACT_IMPORT: REACT_IMPORT,
             CARBON_REACT_INSTANCE: CARBON_REACT_INSTANCE,
         };
@@ -722,6 +724,10 @@ const parseSQLToTypeScript = (sql: string) => {
             tsModel.COLUMNS_UPPERCASE[colName.toUpperCase()] = tableName + '.' + colName;
 
             const typescript_type = determineTypeScriptType(columns[colName].type.toLowerCase(), columns[colName].enumValues)
+
+            if (typescript_type.includes('GeoJSON.')) {
+                tsModel.HAS_GEOJSON_TYPES = true;
+            }
 
             tsModel.TYPE_VALIDATION[`${tableName}.${colName}`] = {
                 COLUMN_NAME: colName,
@@ -815,6 +821,81 @@ const withScopedTableSymbols = (
     SCOPED_TABLE_CONST: `${databaseDefinition.DATABASE_KEY_IDENTIFIER}_${table.TABLE_NAME_SHORT}`,
     SCOPED_BINDING_CONST: `${databaseDefinition.DATABASE_KEY_PASCAL_CASE}_${table.TABLE_NAME_SHORT_PASCAL_CASE}`,
 }));
+
+const prefixRelativeImportSpecifier = (
+    specifier: string,
+    prefix: string,
+): string => {
+    if (specifier.startsWith("./")) {
+        return `${prefix}${specifier.slice(2)}`;
+    }
+
+    return `${prefix}${specifier}`;
+};
+
+const shiftCustomImports = (
+    customImports: string,
+    prefix: string,
+): string =>
+    customImports
+        .replace(
+            /(from\s*["'])(\.{1,2}\/[^"']+)(["'])/g,
+            (_match, start, specifier, end) =>
+                `${start}${prefixRelativeImportSpecifier(specifier, prefix)}${end}`,
+        )
+        .replace(
+            /(import\s*["'])(\.{1,2}\/[^"']+)(["'])/g,
+            (_match, start, specifier, end) =>
+                `${start}${prefixRelativeImportSpecifier(specifier, prefix)}${end}`,
+        );
+
+const applyGeneratedModuleMetadata = (tableData: any) => {
+    const customImports = tableData.CUSTOM_IMPORTS || "";
+
+    tableData.CUSTOM_IMPORTS_GENERATED = shiftCustomImports(customImports, "../");
+    tableData.CUSTOM_IMPORTS_TABLE = shiftCustomImports(customImports, "../../");
+
+    for (const scopedDatabase of tableData.SCOPED_DATABASES || []) {
+        scopedDatabase.OBJECT_OVERRIDES = tableData.OBJECT_OVERRIDES;
+        scopedDatabase.CUSTOM_IMPORTS_GENERATED = tableData.CUSTOM_IMPORTS_GENERATED;
+    }
+};
+
+const writeGeneratedBindings = (outputDir: string, tableData: any) => {
+    const templatesDir = path.resolve(__dirname, 'assets/handlebars');
+    const readTemplate = (templateName: string) =>
+        fs.readFileSync(path.join(templatesDir, templateName), 'utf-8');
+
+    const c6Template = Handlebars.compile(readTemplate('C6.ts.handlebars'));
+    const c6CoreTemplate = Handlebars.compile(readTemplate('C6.core.ts.handlebars'));
+    const c6ScopedTemplate = Handlebars.compile(readTemplate('C6.scoped.ts.handlebars'));
+    const c6TableTemplate = Handlebars.compile(readTemplate('C6.table.ts.handlebars'));
+    const c6TablesIndexTemplate = Handlebars.compile(readTemplate('C6.tablesIndex.ts.handlebars'));
+    const c6TestTemplate = Handlebars.compile(readTemplate('C6.test.ts.handlebars'));
+
+    const generatedDir = path.join(outputDir, 'C6.generated');
+    const tablesDir = path.join(generatedDir, 'tables');
+
+    fs.rmSync(generatedDir, { recursive: true, force: true });
+    fs.rmSync(path.join(outputDir, 'C6.js'), { force: true });
+    createDirIfNotExists(tablesDir);
+
+    fs.writeFileSync(path.join(outputDir, 'C6.ts'), c6Template(tableData));
+    fs.writeFileSync(path.join(outputDir, 'C6.test.ts'), c6TestTemplate(tableData));
+    fs.writeFileSync(path.join(generatedDir, 'core.ts'), c6CoreTemplate(tableData));
+    fs.writeFileSync(path.join(generatedDir, 'scoped.ts'), c6ScopedTemplate(tableData));
+    fs.writeFileSync(path.join(tablesDir, 'index.ts'), c6TablesIndexTemplate(tableData));
+
+    for (const table of tableData.TABLES) {
+        fs.writeFileSync(
+            path.join(tablesDir, `${table.TABLE_NAME_SHORT_PASCAL_CASE}.ts`),
+            c6TableTemplate({
+                ...tableData,
+                ...table,
+            }),
+        );
+    }
+};
 
 const applyConfigDefaultsToArgs = (config: iGeneratorConfig) => {
     if (argMap['--prefix'] == null && typeof config.prefix === "string") {
@@ -1006,27 +1087,34 @@ const main = async () => {
     });
 
     tableData.SCOPED_DATABASES = scopedDatabaseSchemas;
+    applyGeneratedModuleMetadata(tableData);
 
     // write to file
     fs.writeFileSync(path.join(MySQLDump.OUTPUT_DIR, 'C6.mysqldump.json'), JSON.stringify(tableData));
 
-    // import this file  src/assets/handlebars/C6.tsx.handlebars for a mustache template
-    const c6Template = fs.readFileSync(path.resolve(__dirname, 'assets/handlebars/C6.ts.handlebars'), 'utf-8');
-    const c6TestTemplate = fs.readFileSync(path.resolve(__dirname, 'assets/handlebars/C6.test.ts.handlebars'), 'utf-8');
-
     const outputDir = MySQLDump.OUTPUT_DIR;
+    writeGeneratedBindings(outputDir, tableData);
 
-    fs.writeFileSync(path.join(outputDir, 'C6.ts'), Handlebars.compile(c6Template)(tableData));
-    fs.writeFileSync(path.join(outputDir, 'C6.test.ts'), Handlebars.compile(c6TestTemplate)(tableData));
-
-    // compile generated TypeScript for runtime tests
+    // type-check generated TypeScript without writing parallel JavaScript artifacts
     if (process.env.C6_SKIP_GENERATED_TSC === "1") {
-        console.log("[generateRestBindings] Skipping generated C6.ts compile check (C6_SKIP_GENERATED_TSC=1).");
+        console.log("[generateRestBindings] Skipping generated C6.ts type check (C6_SKIP_GENERATED_TSC=1).");
     } else {
         try {
-            execSync(`npx tsc ${path.join(outputDir, 'C6.ts')} --target ES2020 --module ES2020 --moduleResolution node --esModuleInterop --skipLibCheck --outDir ${outputDir}`);
+            execFileSync("npx", [
+                "tsc",
+                path.join(outputDir, "C6.ts"),
+                "--target",
+                "ES2020",
+                "--module",
+                "ES2020",
+                "--moduleResolution",
+                "node",
+                "--esModuleInterop",
+                "--skipLibCheck",
+                "--noEmit",
+            ], { encoding: "utf-8" });
         } catch (e) {
-            console.warn('TypeScript compilation for generated C6.ts reported errors:', e);
+            console.warn('TypeScript type check for generated C6.ts reported errors:', e);
         }
     }
 

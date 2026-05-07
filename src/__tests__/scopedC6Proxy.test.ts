@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 import { C6Constants } from "../constants/C6Constants";
-import { createScopedC6Proxy } from "../api/scopedC6Proxy";
+import {
+    createScopedC6Proxy,
+    getScopedC6Namespace,
+    isScopedC6Namespace,
+} from "../api/scopedC6Proxy";
 
 const createTestC6 = () => {
     const get = vi.fn(async (request?: Record<string, any>) => ({ request }));
@@ -133,5 +137,35 @@ describe("createScopedC6Proxy", () => {
         });
         expect(get).not.toHaveBeenCalled();
         expect((C6 as any).analytics.Actor.marker).toBe("runtime");
+    });
+
+    it("provides typed scoped namespace lookups without casts", async () => {
+        const { c6Core, get } = createTestC6();
+        const C6 = createScopedC6Proxy(c6Core, {
+            databases: {
+                staging: {},
+            },
+        });
+
+        const scoped = getScopedC6Namespace(C6, "staging");
+        await scoped.Actor.Get({ actor_id: 42 });
+        expect(get).toHaveBeenCalledWith({
+            actor_id: 42,
+            [C6Constants.DB]: "staging",
+        });
+        expect(isScopedC6Namespace(scoped)).toBe(true);
+    });
+
+    it("throws a clear error for unknown scoped namespace keys", () => {
+        const { c6Core } = createTestC6();
+        const C6 = createScopedC6Proxy(c6Core, {
+            databases: {
+                staging: {},
+            },
+        });
+
+        expect(() => getScopedC6Namespace(C6, "prod")).toThrow(
+            /Unknown or unconfigured C6 database key/i,
+        );
     });
 });

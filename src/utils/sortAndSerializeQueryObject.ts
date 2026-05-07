@@ -1,12 +1,26 @@
+const isPlainObject = (value: unknown): value is Record<string, any> =>
+    Object.prototype.toString.call(value) === "[object Object]";
 
-export function sortAndSerializeQueryObject(tables: String, query: Object) {
-    const orderedQuery = Object.keys(query).sort().reduce(
-        (obj, key) => {
-            obj[key] = query[key];
-            return obj;
-        },
-        {}
-    );
+export function sortQueryValue<T>(value: T): T {
+    if (Array.isArray(value)) {
+        return value.map((entry) => sortQueryValue(entry)) as T;
+    }
 
-    return tables + ' ' + JSON.stringify(orderedQuery);
+    if (!isPlainObject(value)) {
+        return value;
+    }
+
+    return Object.keys(value)
+        .sort()
+        .reduce((acc, key) => {
+            acc[key] = sortQueryValue(value[key]);
+            return acc;
+        }, {} as Record<string, any>) as T;
+}
+
+export function sortAndSerializeQueryObject(
+    tables: string,
+    query: Record<string, any>,
+) {
+    return `${tables} ${JSON.stringify(sortQueryValue(query))}`;
 }

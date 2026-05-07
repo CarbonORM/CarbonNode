@@ -1,0 +1,116 @@
+// noinspection JSUnusedGlobalSymbols,SpellCheckingInspection
+
+import { restOrm } from "@carbonorm/carbonnode";
+import type {
+    C6RestfulModel,
+    OrmGenerics,
+} from "@carbonorm/carbonnode";
+{{#if HAS_GEOJSON_TYPES}}
+import type * as GeoJSON from "geojson";
+{{/if}}
+{{#if CUSTOM_IMPORTS_TABLE}}{{{CUSTOM_IMPORTS_TABLE}}}
+{{/if}}
+import {
+    GLOBAL_REST_PARAMETERS,
+    registerC6Table,
+} from "../core";
+
+/**
+{{{TABLE_DEFINITION}}}
+**/
+
+export interface i{{TABLE_NAME_SHORT_PASCAL_CASE}} {
+{{#each TYPE_VALIDATION}}
+    '{{this.COLUMN_NAME}}'?: {{{this.TYPESCRIPT_TYPE}}}{{^NOT_NULL}} | null{{/NOT_NULL}};
+{{/each}}
+}
+
+export type {{TABLE_NAME_SHORT_PASCAL_CASE}}PrimaryKeys = {{#if PRIMARY_SHORT.length}}
+    {{#each PRIMARY_SHORT}}
+        '{{this}}'{{#unless @last}} |{{/unless}}
+    {{/each}};
+{{else}}
+    never;
+{{/if}}
+
+const {{TABLE_NAME_SHORT}}:
+    C6RestfulModel<
+        '{{TABLE_NAME_SHORT}}',
+        i{{TABLE_NAME_SHORT_PASCAL_CASE}},
+        {{TABLE_NAME_SHORT_PASCAL_CASE}}PrimaryKeys
+    > = {
+    TABLE_NAME: '{{TABLE_NAME}}',
+    {{#each COLUMNS_UPPERCASE}}
+    {{@key}}: '{{this}}',
+    {{/each}}
+    PRIMARY: [
+    {{#PRIMARY}}
+        '{{this}}',
+    {{/PRIMARY}}
+    ],
+    PRIMARY_SHORT: [
+    {{#each PRIMARY_SHORT}}
+        '{{this}}',
+    {{/each}}
+    ],
+    COLUMNS: {
+    {{#each COLUMNS}}
+        '{{@key}}': '{{this}}',
+    {{/each}}
+    },
+    TYPE_VALIDATION: {
+    {{#each TYPE_VALIDATION}}
+        '{{@key}}': {
+            MYSQL_TYPE: '{{this.MYSQL_TYPE}}',
+            MAX_LENGTH: '{{this.MAX_LENGTH}}',
+            AUTO_INCREMENT: {{this.AUTO_INCREMENT}},
+            SKIP_COLUMN_IN_POST: {{this.SKIP_COLUMN_IN_POST}}
+        },
+    {{/each}}
+    },
+    REGEX_VALIDATION: {
+    {{#each REGEX_VALIDATION}}
+        '{{@key}}': '{{this}}',
+    {{/each}}
+    },
+    LIFECYCLE_HOOKS: {
+        GET: {beforeProcessing:{}, beforeExecution:{}, afterExecution:{}, afterCommit:{}},
+        PUT: {beforeProcessing:{}, beforeExecution:{}, afterExecution:{}, afterCommit:{}},
+        POST: {beforeProcessing:{}, beforeExecution:{}, afterExecution:{}, afterCommit:{}},
+        DELETE: {beforeProcessing:{}, beforeExecution:{}, afterExecution:{}, afterCommit:{}},
+    },
+    TABLE_REFERENCES: {
+        {{#each TABLE_REFERENCES}}'{{@key}}': [{{#this}}{
+            TABLE: '{{TABLE}}',
+            COLUMN: '{{COLUMN}}',
+            CONSTRAINT: '{{CONSTRAINT}}',
+        },{{/this}}],{{/each}}
+    },
+    TABLE_REFERENCED_BY: {
+        {{#each TABLE_REFERENCED_BY}}'{{@key}}': [{{#this}}{
+            TABLE: '{{TABLE}}',
+            COLUMN: '{{COLUMN}}',
+            CONSTRAINT: '{{CONSTRAINT}}',
+        },{{/this}}],{{/each}}
+    }
+}
+
+export const {{TABLE_NAME_SHORT_PASCAL_CASE}} = {
+    ...{{TABLE_NAME_SHORT}},
+    ...restOrm<
+        OrmGenerics<any, '{{TABLE_NAME_SHORT}}', i{{TABLE_NAME_SHORT_PASCAL_CASE}}, {{TABLE_NAME_SHORT_PASCAL_CASE}}PrimaryKeys{{#if INTERFACE_OVERRIDES}}, {{{INTERFACE_OVERRIDES}}}{{/if}}>
+    >(() => ({
+        ...GLOBAL_REST_PARAMETERS,
+        restModel: {{TABLE_NAME_SHORT}}{{#if OBJECT_OVERRIDES}},
+        {{{OBJECT_OVERRIDES}}}{{/if}}
+    }))
+}
+
+registerC6Table(
+    '{{TABLE_NAME_SHORT}}',
+    '{{TABLE_NAME_SHORT_PASCAL_CASE}}',
+    {{TABLE_NAME_SHORT}},
+    {{TABLE_NAME_SHORT_PASCAL_CASE}},
+);
+
+export default {{TABLE_NAME_SHORT_PASCAL_CASE}};

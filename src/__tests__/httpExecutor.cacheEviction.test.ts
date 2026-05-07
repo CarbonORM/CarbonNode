@@ -67,4 +67,48 @@ describe("HttpExecutor cache eviction", () => {
     expect(cached.evictFromCache?.()).toBe(true);
     expect(apiRequestCache.size).toBe(0);
   });
+
+  it("normalizes top-level ORDER into PAGINATION.ORDER before GET requests", async () => {
+    const get = vi.fn().mockResolvedValue({ data: makeResponsePayload() });
+    const actorHttp = buildOrm(get);
+
+    await actorHttp.Get({
+      [C6C.ORDER]: [["actor.last_name", C6C.DESC]],
+      [C6C.PAGINATION]: { [C6C.LIMIT]: 10 },
+      cacheResults: false,
+    } as any);
+
+    expect(get).toHaveBeenCalledTimes(1);
+    expect(get.mock.calls[0][1]?.params).toMatchObject({
+      [C6C.PAGINATION]: {
+        [C6C.LIMIT]: 10,
+        [C6C.ORDER]: [["actor.last_name", C6C.DESC]],
+      },
+      cacheResults: false,
+    });
+    expect(get.mock.calls[0][1]?.params?.[C6C.ORDER]).toBeUndefined();
+  });
+
+  it("reuses cache entries when nested WHERE object key order differs", async () => {
+    const get = vi.fn().mockResolvedValue({ data: makeResponsePayload() });
+    const actorHttp = buildOrm(get);
+
+    await actorHttp.Get({
+      [C6C.WHERE]: {
+        "actor.last_name": "ONE",
+        "actor.first_name": "ALICE",
+      },
+      cacheResults: true,
+    } as any);
+
+    await actorHttp.Get({
+      [C6C.WHERE]: {
+        "actor.first_name": "ALICE",
+        "actor.last_name": "ONE",
+      },
+      cacheResults: true,
+    } as any);
+
+    expect(get).toHaveBeenCalledTimes(1);
+  });
 });

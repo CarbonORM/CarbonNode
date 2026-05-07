@@ -20,7 +20,7 @@ import {checkCache, evictCacheEntry, setCache} from "../utils/cacheManager";
 import logSql, {
     SqlAllowListStatus,
 } from "../utils/logSql";
-import { normalizeSingularRequest } from "../utils/normalizeSingularRequest";
+import { normalizeRequestOrder, normalizeSingularRequest } from "../utils/normalizeSingularRequest";
 import {sortAndSerializeQueryObject} from "../utils/sortAndSerializeQueryObject";
 import { loadSqlAllowList, normalizeSqlWith } from "../utils/sqlAllowList";
 import { getLogContext, LogLevel, logWithLevel } from "../utils/logLevel";
@@ -295,6 +295,7 @@ export class SqlExecutor<
                 this.config.restModel,
                 undefined
             ) as typeof this.request;
+            this.request = normalizeRequestOrder(this.request) as typeof this.request;
         } catch (e) {
             // Surface normalization errors early
             throw e;
@@ -434,6 +435,10 @@ export class SqlExecutor<
             C6C.DELETE,
             C6C.WHERE,
             C6C.JOIN,
+            C6C.ORDER,
+            C6C.GROUP_BY,
+            C6C.HAVING,
+            C6C.INDEX_HINTS,
             C6C.PAGINATION,
             C6C.INSERT,
             C6C.REPLACE,

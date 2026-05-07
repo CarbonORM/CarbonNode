@@ -60,6 +60,8 @@ export type JoinTableCondition<T = any> = Partial<T> | WhereClause<T>[] | Compar
 export type JoinClause<T = any> = { [table: string]: JoinTableCondition<T>; };
 export type Join<T = any> = { [K in JoinType]?: JoinClause<T>; };
 
+export type IndexHints = Partial<Record<'FORCE INDEX' | 'USE INDEX' | 'IGNORE INDEX', string[]>>;
+
 export type Pagination = {
     PAGE?: number;
     LIMIT?: number | null;
@@ -72,6 +74,10 @@ export type RequestGetPutDeleteBody<T extends { [key: string]: any } = any> = T 
     DELETE?: boolean;
     WHERE?: WhereClause<T>;
     JOIN?: Join<T>;
+    ORDER?: OrderTerm[];
+    GROUP_BY?: string | string[];
+    HAVING?: WhereClause<T>;
+    INDEX_HINTS?: IndexHints;
     PAGINATION?: Pagination;
 };
 
