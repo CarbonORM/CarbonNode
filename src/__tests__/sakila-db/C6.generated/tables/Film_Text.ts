@@ -35,8 +35,13 @@ const film_text:
         'film_text',
         iFilm_Text,
         Film_TextPrimaryKeys
-    > = {
+    > & Record<string, any> & {
+        RELATION_TYPE: 'TABLE';
+        READ_ONLY: false;
+    } = {
     TABLE_NAME: 'film_text',
+    RELATION_TYPE: 'TABLE',
+    READ_ONLY: false,
     FILM_ID: 'film_text.film_id',
     TITLE: 'film_text.title',
     DESCRIPTION: 'film_text.description',
@@ -102,6 +107,7 @@ registerC6Table(
     'Film_Text',
     film_text,
     Film_Text,
+    'TABLE',
 );
 
 export default Film_Text;

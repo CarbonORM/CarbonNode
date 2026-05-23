@@ -55,6 +55,23 @@ type iGeneratorConfig = {
     primaryAlias?: string;
 };
 
+type iSchemaColumnMetadata = {
+    TABLE_NAME: string;
+    TABLE_TYPE: string;
+    COLUMN_NAME: string;
+    DATA_TYPE: string;
+    COLUMN_TYPE: string;
+    IS_NULLABLE: string;
+    EXTRA: string;
+};
+
+type iSchemaTableMetadata = {
+    TABLE_TYPE: string;
+    COLUMNS: iSchemaColumnMetadata[];
+};
+
+type iSchemaMetadata = Record<string, iSchemaTableMetadata>;
+
 const sanitizeIdentifier = (value: string): string => {
     const normalized = value
         .trim()
@@ -69,6 +86,16 @@ const toPascalCaseFromIdentifier = (identifier: string): string =>
         .filter(Boolean)
         .map(capitalizeFirstLetter)
         .join("_") || "Db";
+
+const toConstantIdentifier = (value: string): string => {
+    const normalized = value
+        .toUpperCase()
+        .replace(/[^A-Z0-9_]/g, "_")
+        .replace(/_+/g, "_")
+        .replace(/^([^A-Z_])/, "_$1");
+
+    return normalized.length > 0 ? normalized : "COLUMN";
+};
 
 const createDirIfNotExists = dir =>
     !fs.existsSync(dir) ? fs.mkdirSync(dir, {recursive: true}) : undefined;
@@ -430,6 +457,90 @@ class MySQLDump {
 
     }
 
+    static LoadInformationSchema(
+        databaseName: string = this.DB_NAME,
+        connection: iDatabaseConnection = {
+            user: this.DB_USER,
+            pass: this.DB_PASS,
+            host: this.DB_HOST,
+            port: this.DB_PORT,
+        },
+        cnfTag: string = "",
+    ): iSchemaMetadata {
+        const defaultsExtraFile = this.buildCNF(connection, "", cnfTag);
+        const escapedDatabaseName = databaseName.replace(/\\/g, "\\\\").replace(/'/g, "''");
+        const query = `
+            SELECT
+                c.TABLE_NAME,
+                t.TABLE_TYPE,
+                c.COLUMN_NAME,
+                c.DATA_TYPE,
+                c.COLUMN_TYPE,
+                c.IS_NULLABLE,
+                c.EXTRA
+            FROM information_schema.COLUMNS c
+            JOIN information_schema.TABLES t
+                ON t.TABLE_SCHEMA = c.TABLE_SCHEMA
+                AND t.TABLE_NAME = c.TABLE_NAME
+            WHERE c.TABLE_SCHEMA = '${escapedDatabaseName}'
+            ORDER BY c.TABLE_NAME, c.ORDINAL_POSITION
+        `;
+
+        try {
+            const stdout = execFileSync(
+                "mysql",
+                [
+                    `--defaults-extra-file=${defaultsExtraFile}`,
+                    "--batch",
+                    "--raw",
+                    "--skip-column-names",
+                    "-e",
+                    query,
+                ],
+                {encoding: "utf-8"},
+            );
+
+            const schemaMetadata: iSchemaMetadata = {};
+            for (const line of stdout.split(/\r?\n/)) {
+                if (!line.trim()) continue;
+                const [
+                    tableName,
+                    tableType,
+                    columnName,
+                    dataType,
+                    columnType,
+                    isNullable,
+                    extra,
+                ] = line.split("\t");
+
+                if (!tableName || !columnName) continue;
+
+                if (!schemaMetadata[tableName]) {
+                    schemaMetadata[tableName] = {
+                        TABLE_TYPE: tableType || "BASE TABLE",
+                        COLUMNS: [],
+                    };
+                }
+
+                schemaMetadata[tableName].COLUMNS.push({
+                    TABLE_NAME: tableName,
+                    TABLE_TYPE: tableType || "BASE TABLE",
+                    COLUMN_NAME: columnName,
+                    DATA_TYPE: dataType || "",
+                    COLUMN_TYPE: columnType || dataType || "",
+                    IS_NULLABLE: isNullable || "YES",
+                    EXTRA: extra || "",
+                });
+            }
+
+            return schemaMetadata;
+        } catch (error) {
+            console.warn(`[generateRestBindings] information_schema lookup for '${databaseName}' failed. Falling back to dump-derived metadata where possible.`);
+            return {};
+        }
+
+    }
+
     static executeAndCheckStatus(command: string, exitOnFailure = true, output: any[] = []): boolean {
 
         try {
@@ -566,7 +677,7 @@ function determineTypeScriptType(mysqlType: string, enumValues?: string[]): stri
     }
 }
 
-const parseSQLToTypeScript = (sql: string) => {
+const parseSQLToTypeScript = (sql: string, schemaMetadata: iSchemaMetadata = {}) => {
 
     const tableMatches = sql.matchAll(/CREATE\s+TABLE\s+`?(\w+)`?\s+\(((.|\n)+?)\)\s*(ENGINE=.+?);/gm);
 
@@ -574,6 +685,8 @@ const parseSQLToTypeScript = (sql: string) => {
         [TableName: string]: {
             RELATIVE_OUTPUT_DIR: string,
             TABLE_NAME: string,
+            RELATION_TYPE: 'TABLE' | 'VIEW',
+            READ_ONLY: boolean,
             TABLE_DEFINITION: string,
             TABLE_CONSTRAINT: {},
             TABLE_NAME_SHORT: string,
@@ -594,6 +707,39 @@ const parseSQLToTypeScript = (sql: string) => {
     } = {};
 
     let references: foreignKeyInfo[] = [];
+
+    const columnInfoFromMetadata = (column: iSchemaColumnMetadata) => {
+        const fullType = (column.COLUMN_TYPE || column.DATA_TYPE || 'text').trim();
+        const enumMatch = /^enum\((.+)\)$/i.exec(fullType);
+        const enumValues = enumMatch
+            ? enumMatch[1]
+                .split(/,(?=(?:[^']*'[^']*')*[^']*$)/)
+                .map(s => s.trim().replace(/^'(.*)'$/, '$1'))
+            : null;
+        const type = fullType.replace(/\(.+?\)/, '').split(' ')[0].toLowerCase();
+        const lengthMatch = fullType.match(/\(([^)]+)\)/);
+        const length = lengthMatch ? lengthMatch[1] : '';
+
+        return {
+            type,
+            length,
+            srid: null,
+            enumValues,
+            notNull: column.IS_NULLABLE.toUpperCase() === 'NO',
+            autoIncrement: column.EXTRA.toLowerCase().includes('auto_increment'),
+            defaultValue: '',
+        };
+    };
+
+    const fallbackColumnInfo = () => ({
+        type: 'text',
+        length: '',
+        srid: null,
+        enumValues: null,
+        notNull: false,
+        autoIncrement: false,
+        defaultValue: '',
+    });
 
     // @ts-ignore
     for (const tableMatch of tableMatches) {
@@ -693,6 +839,8 @@ const parseSQLToTypeScript = (sql: string) => {
         const tsModel = {
             RELATIVE_OUTPUT_DIR: pathRuntimeReference,
             TABLE_NAME: tableName,
+            RELATION_TYPE: 'TABLE' as const,
+            READ_ONLY: false,
             TABLE_DEFINITION: tableMatch[0].replace(/\/\*!([0-9]{5}) ([^*]+)\*\//g, (_match, _version, body) => {
                 return `/!* ${body.trim()} *!/`;
             }),
@@ -721,7 +869,7 @@ const parseSQLToTypeScript = (sql: string) => {
 
             tsModel.COLUMNS[`${tableName}.${colName}`] = colName;
 
-            tsModel.COLUMNS_UPPERCASE[colName.toUpperCase()] = tableName + '.' + colName;
+            tsModel.COLUMNS_UPPERCASE[toConstantIdentifier(colName)] = tableName + '.' + colName;
 
             const typescript_type = determineTypeScriptType(columns[colName].type.toLowerCase(), columns[colName].enumValues)
 
@@ -745,6 +893,111 @@ const parseSQLToTypeScript = (sql: string) => {
 
         tableData[tableName] = tsModel;
 
+    }
+
+    const viewDefinitions = new Map<string, string>();
+    const viewColumnNamesFromDump = new Map<string, string[]>();
+    const tempViewRegex = /\/\*!50001\s+CREATE\s+VIEW\s+(?:`[^`]+`\.)?`?(\w+)`?\s+AS\s+SELECT\s+([\s\S]*?)\*\/;/gim;
+    const finalViewRegex = /\/\*!50001\s+VIEW\s+(?:`[^`]+`\.)?`?(\w+)`?\s+AS\s+([\s\S]*?)\s*\*\/;/gim;
+    let tempViewMatch: RegExpExecArray | null;
+
+    while ((tempViewMatch = tempViewRegex.exec(sql))) {
+        const viewName = tempViewMatch[1];
+        const selectDefinition = tempViewMatch[2];
+        const aliases = Array.from(selectDefinition.matchAll(/\bAS\s+`([^`]+)`/gi))
+            .map(match => match[1])
+            .filter(Boolean);
+
+        if (!viewColumnNamesFromDump.has(viewName)) {
+            viewColumnNamesFromDump.set(viewName, aliases);
+        }
+    }
+
+    let finalViewMatch: RegExpExecArray | null;
+    while ((finalViewMatch = finalViewRegex.exec(sql))) {
+        const viewName = finalViewMatch[1];
+        const selectDefinition = finalViewMatch[2].trim().replace(/;\s*$/, '');
+        viewDefinitions.set(viewName, `CREATE VIEW \`${viewName}\` AS ${selectDefinition};`);
+    }
+
+    const viewNames = new Set<string>([
+        ...Object.entries(schemaMetadata)
+            .filter(([, metadata]) => metadata.TABLE_TYPE.toUpperCase().includes('VIEW'))
+            .map(([tableName]) => tableName),
+        ...viewColumnNamesFromDump.keys(),
+        ...viewDefinitions.keys(),
+    ]);
+
+    for (const viewName of viewNames) {
+        if (tableData[viewName]) continue;
+
+        const metadataColumns = schemaMetadata[viewName]?.COLUMNS ?? [];
+        const dumpColumnNames = viewColumnNamesFromDump.get(viewName) ?? [];
+        const columns = metadataColumns.length > 0
+            ? Object.fromEntries(metadataColumns.map(column => [
+                column.COLUMN_NAME,
+                columnInfoFromMetadata(column),
+            ]))
+            : Object.fromEntries(dumpColumnNames.map(columnName => [
+                columnName,
+                fallbackColumnInfo(),
+            ]));
+
+        if (Object.keys(columns).length === 0) {
+            continue;
+        }
+
+        const tsModel = {
+            RELATIVE_OUTPUT_DIR: pathRuntimeReference,
+            TABLE_NAME: viewName,
+            RELATION_TYPE: 'VIEW' as const,
+            READ_ONLY: true,
+            TABLE_DEFINITION: (viewDefinitions.get(viewName) || `VIEW ${viewName}`).replace(/\*\//g, '* /'),
+            TABLE_CONSTRAINT: {},
+            REST_URL_EXPRESSION: argMap['--restUrlExpression'] || '"/rest/"',
+            TABLE_NAME_SHORT: viewName.replace(MySQLDump.DB_PREFIX, ''),
+            TABLE_NAME_LOWER: viewName.toLowerCase(),
+            TABLE_NAME_UPPER: viewName.toUpperCase(),
+            TABLE_NAME_PASCAL_CASE: viewName.split('_').map(capitalizeFirstLetter).join('_'),
+            TABLE_NAME_SHORT_PASCAL_CASE: viewName.replace(MySQLDump.DB_PREFIX, '').split('_').map(capitalizeFirstLetter).join('_'),
+            PRIMARY: [],
+            PRIMARY_SHORT: [],
+            PRIMARY_KEYS_TYPE: 'never',
+            COLUMNS: {},
+            COLUMNS_UPPERCASE: {},
+            TYPE_VALIDATION: {},
+            REGEX_VALIDATION: {},
+            TABLE_REFERENCES: {},
+            TABLE_REFERENCED_BY: {},
+            HAS_GEOJSON_TYPES: false,
+            REACT_IMPORT: false,
+            CARBON_REACT_INSTANCE: false,
+        };
+
+        for (const colName in columns) {
+            tsModel.COLUMNS[`${viewName}.${colName}`] = colName;
+            tsModel.COLUMNS_UPPERCASE[toConstantIdentifier(colName)] = viewName + '.' + colName;
+
+            const typescript_type = determineTypeScriptType(columns[colName].type.toLowerCase(), columns[colName].enumValues);
+
+            if (typescript_type.includes('GeoJSON.')) {
+                tsModel.HAS_GEOJSON_TYPES = true;
+            }
+
+            tsModel.TYPE_VALIDATION[`${viewName}.${colName}`] = {
+                COLUMN_NAME: colName,
+                MYSQL_TYPE: columns[colName].type.toLowerCase(),
+                TYPESCRIPT_TYPE: typescript_type,
+                TYPESCRIPT_TYPE_IS_STRING: typescript_type === 'string' || typescript_type.includes("'"),
+                TYPESCRIPT_TYPE_IS_NUMBER: 'number' === typescript_type,
+                MAX_LENGTH: columns[colName].length,
+                AUTO_INCREMENT: false,
+                NOT_NULL: columns[colName].notNull,
+                SKIP_COLUMN_IN_POST: true,
+            };
+        }
+
+        tableData[viewName] = tsModel;
     }
 
     for (const ref of references) {
@@ -796,7 +1049,9 @@ const parseSQLToTypeScript = (sql: string) => {
 
     }
 
-    const tables = Object.values(tableData);
+    const relations = Object.values(tableData);
+    const tables = relations.filter((table: any) => table.RELATION_TYPE !== 'VIEW');
+    const views = relations.filter((table: any) => table.RELATION_TYPE === 'VIEW');
 
 
     return {
@@ -807,9 +1062,17 @@ const parseSQLToTypeScript = (sql: string) => {
         CUSTOM_IMPORTS: argMap['--customImports'] || '',
         REST_URL_EXPRESSION: argMap['--restUrlExpression'] || '"/rest/"',
         TABLES: tables,
-        RestTableNames: tables.map(table => "'" + table.TABLE_NAME + "'").join('\n | '),
-        RestShortTableNames: tables.map(table => "'" + table.TABLE_NAME_SHORT + "'").join('\n | '),
-        RestTableInterfaces: tables.map(table => 'i' + table.TABLE_NAME_SHORT_PASCAL_CASE).join('\n | '),
+        VIEWS: views,
+        RELATIONS: relations,
+        RestTableNames: relations.map((table: any) => "'" + table.TABLE_NAME + "'").join('\n | '),
+        RestShortTableNames: relations.map((table: any) => "'" + table.TABLE_NAME_SHORT + "'").join('\n | '),
+        RestTableInterfaces: relations.map((table: any) => 'i' + table.TABLE_NAME_SHORT_PASCAL_CASE).join('\n | '),
+        RestViewNames: views.length
+            ? views.map((table: any) => "'" + table.TABLE_NAME + "'").join('\n | ')
+            : 'never',
+        RestShortViewNames: views.length
+            ? views.map((table: any) => "'" + table.TABLE_NAME_SHORT + "'").join('\n | ')
+            : 'never',
     };
 };
 
@@ -870,21 +1133,26 @@ const writeGeneratedBindings = (outputDir: string, tableData: any) => {
     const c6CoreTemplate = Handlebars.compile(readTemplate('C6.core.ts.handlebars'));
     const c6ScopedTemplate = Handlebars.compile(readTemplate('C6.scoped.ts.handlebars'));
     const c6TableTemplate = Handlebars.compile(readTemplate('C6.table.ts.handlebars'));
+    const c6ViewTemplate = Handlebars.compile(readTemplate('C6.view.ts.handlebars'));
     const c6TablesIndexTemplate = Handlebars.compile(readTemplate('C6.tablesIndex.ts.handlebars'));
+    const c6ViewsIndexTemplate = Handlebars.compile(readTemplate('C6.viewsIndex.ts.handlebars'));
     const c6TestTemplate = Handlebars.compile(readTemplate('C6.test.ts.handlebars'));
 
     const generatedDir = path.join(outputDir, 'C6.generated');
     const tablesDir = path.join(generatedDir, 'tables');
+    const viewsDir = path.join(generatedDir, 'views');
 
     fs.rmSync(generatedDir, { recursive: true, force: true });
     fs.rmSync(path.join(outputDir, 'C6.js'), { force: true });
     createDirIfNotExists(tablesDir);
+    createDirIfNotExists(viewsDir);
 
     fs.writeFileSync(path.join(outputDir, 'C6.ts'), c6Template(tableData));
     fs.writeFileSync(path.join(outputDir, 'C6.test.ts'), c6TestTemplate(tableData));
     fs.writeFileSync(path.join(generatedDir, 'core.ts'), c6CoreTemplate(tableData));
     fs.writeFileSync(path.join(generatedDir, 'scoped.ts'), c6ScopedTemplate(tableData));
     fs.writeFileSync(path.join(tablesDir, 'index.ts'), c6TablesIndexTemplate(tableData));
+    fs.writeFileSync(path.join(viewsDir, 'index.ts'), c6ViewsIndexTemplate(tableData));
 
     for (const table of tableData.TABLES) {
         fs.writeFileSync(
@@ -892,6 +1160,16 @@ const writeGeneratedBindings = (outputDir: string, tableData: any) => {
             c6TableTemplate({
                 ...tableData,
                 ...table,
+            }),
+        );
+    }
+
+    for (const view of tableData.VIEWS) {
+        fs.writeFileSync(
+            path.join(viewsDir, `${view.TABLE_NAME_SHORT_PASCAL_CASE}.ts`),
+            c6ViewTemplate({
+                ...tableData,
+                ...view,
             }),
         );
     }
@@ -961,6 +1239,64 @@ const resolveConfigPathFromArgsOrDiscovery = async (): Promise<string> => {
     return generatedPath;
 };
 
+const getCurrentPackageName = (): string | null => {
+    try {
+        const packageJsonPath = path.resolve(process.cwd(), "package.json");
+        if (!fs.existsSync(packageJsonPath)) {
+            return null;
+        }
+
+        const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, "utf-8"));
+        return typeof packageJson.name === "string" ? packageJson.name : null;
+    } catch {
+        return null;
+    }
+};
+
+const typeCheckGeneratedC6 = (outputDir: string) => {
+    const c6Path = path.join(outputDir, "C6.ts");
+    const tempTsConfigPath = path.join(outputDir, ".C6.generated-typecheck.tsconfig.json");
+    const currentPackageName = getCurrentPackageName();
+    const localSourceRoot = path.resolve(process.cwd(), "src");
+    const compilerOptions: Record<string, any> = {
+        target: "ES2020",
+        module: "ES2020",
+        moduleResolution: "node",
+        esModuleInterop: true,
+        resolveJsonModule: true,
+        skipLibCheck: true,
+        noEmit: true,
+    };
+
+    if (
+        currentPackageName === "@carbonorm/carbonnode" &&
+        fs.existsSync(path.join(localSourceRoot, "index.ts"))
+    ) {
+        compilerOptions.baseUrl = localSourceRoot;
+        compilerOptions.paths = {
+            "@carbonorm/carbonnode": ["."],
+        };
+    }
+
+    fs.writeFileSync(
+        tempTsConfigPath,
+        `${JSON.stringify({
+            compilerOptions,
+            files: [c6Path],
+        }, null, 2)}\n`,
+    );
+
+    try {
+        execFileSync("npx", [
+            "tsc",
+            "--project",
+            tempTsConfigPath,
+        ], { encoding: "utf-8" });
+    } finally {
+        fs.rmSync(tempTsConfigPath, { force: true });
+    }
+};
+
 const resolveScopedDefinitionsFromConfig = (
     config: iGeneratorConfig,
 ): { scopedDefinitions: iScopedDatabaseDefinition[]; primaryDefinition: iScopedDatabaseDefinition } => {
@@ -1027,7 +1363,11 @@ const main = async () => {
 
     // use dumpFileLocation to get sql
     const sql = fs.readFileSync(dumpFileLocation, 'utf-8');
-    const tableData: any = parseSQLToTypeScript(sql);
+    const schemaMetadata = MySQLDump.LoadInformationSchema(
+        primaryDefinition.DATABASE_NAME,
+        primaryDefinition.CONNECTION,
+    );
+    const tableData: any = parseSQLToTypeScript(sql, schemaMetadata);
 
     const scopedDatabaseSchemas = scopedDefinitions.map((databaseDefinition) => {
         const isPrimaryScopedDefinition = databaseDefinition.DATABASE_NAME === primaryDefinition.DATABASE_NAME
@@ -1042,9 +1382,9 @@ const main = async () => {
                 DATABASE_NAME: databaseDefinition.DATABASE_NAME,
                 DATABASE_KEY_IDENTIFIER: databaseDefinition.DATABASE_KEY_IDENTIFIER,
                 DATABASE_KEY_PASCAL_CASE: databaseDefinition.DATABASE_KEY_PASCAL_CASE,
-                TABLES: withScopedTableSymbols(
+                RELATIONS: withScopedTableSymbols(
                     databaseDefinition,
-                    tableData.TABLES,
+                    tableData.RELATIONS,
                 ),
             };
         }
@@ -1072,16 +1412,21 @@ const main = async () => {
         }
 
         const scopedSql = fs.readFileSync(scopedDumpPath, 'utf-8');
-        const scopedTableData = parseSQLToTypeScript(scopedSql);
+        const scopedSchemaMetadata = MySQLDump.LoadInformationSchema(
+            databaseDefinition.DATABASE_NAME,
+            databaseDefinition.CONNECTION,
+            databaseDefinition.DATABASE_KEY_IDENTIFIER,
+        );
+        const scopedTableData = parseSQLToTypeScript(scopedSql, scopedSchemaMetadata);
 
         return {
             DATABASE_KEY: databaseDefinition.DATABASE_KEY,
             DATABASE_NAME: databaseDefinition.DATABASE_NAME,
             DATABASE_KEY_IDENTIFIER: databaseDefinition.DATABASE_KEY_IDENTIFIER,
             DATABASE_KEY_PASCAL_CASE: databaseDefinition.DATABASE_KEY_PASCAL_CASE,
-            TABLES: withScopedTableSymbols(
+            RELATIONS: withScopedTableSymbols(
                 databaseDefinition,
-                scopedTableData.TABLES,
+                scopedTableData.RELATIONS,
             ),
         };
     });
@@ -1100,19 +1445,7 @@ const main = async () => {
         console.log("[generateRestBindings] Skipping generated C6.ts type check (C6_SKIP_GENERATED_TSC=1).");
     } else {
         try {
-            execFileSync("npx", [
-                "tsc",
-                path.join(outputDir, "C6.ts"),
-                "--target",
-                "ES2020",
-                "--module",
-                "ES2020",
-                "--moduleResolution",
-                "node",
-                "--esModuleInterop",
-                "--skipLibCheck",
-                "--noEmit",
-            ], { encoding: "utf-8" });
+            typeCheckGeneratedC6(outputDir);
         } catch (e) {
             console.warn('TypeScript type check for generated C6.ts reported errors:', e);
         }

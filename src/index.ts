@@ -7,6 +7,7 @@ export * from "./api/axiosInstance";
 export { default as convertForRequestBody } from "./api/convertForRequestBody";
 export * from "./api/convertForRequestBody";
 export * from "./api/databaseResolver";
+export * from "./api/readOnlyRestOrm";
 export * from "./api/restOrm";
 export { default as restRequest } from "./api/restRequest";
 export * from "./api/restRequest";

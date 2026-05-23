@@ -35,6 +35,11 @@ export default function restRequest<
         const baseConfig = typeof configX === "function" ? configX() : configX;
         const { config } = resolveRestConfigForRequest(baseConfig as any, request as any);
 
+        if ((config.restModel as any)?.READ_ONLY === true && config.requestMethod !== "GET") {
+            const relationName = (config.restModel as any)?.TABLE_NAME ?? "relation";
+            throw new Error(`Relation '${relationName}' is read-only and only supports GET requests.`);
+        }
+
         applyLogLevelDefaults(config, request);
 
         const logContext = getLogContext(config, request);

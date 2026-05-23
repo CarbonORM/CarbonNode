@@ -288,6 +288,8 @@ export type C6RestfulModel<
     PrimaryKey extends (keyof RestTableInterface & string) = keyof RestTableInterface & string
 > = {
     TABLE_NAME: RestShortTableName;
+    RELATION_TYPE?: "TABLE" | "VIEW";
+    READ_ONLY?: boolean;
     PRIMARY: Array<tPrimaryKeys<RestShortTableName, PrimaryKey>>;
     PRIMARY_SHORT: Array<PrimaryKey>;
     COLUMNS: tColumns<RestShortTableName, RestTableInterface>;

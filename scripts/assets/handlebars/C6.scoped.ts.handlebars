@@ -2,10 +2,10 @@
 
 import {
     C6Constants,
+    restRequest,
     restOrm,
 } from "@carbonorm/carbonnode";
 import type {
-    C6RestfulModel,
     iC6Object,
 } from "@carbonorm/carbonnode";
 {{#if CUSTOM_IMPORTS_GENERATED}}{{{CUSTOM_IMPORTS_GENERATED}}}
@@ -18,9 +18,15 @@ import {
 export const SCOPED_C6_BY_DATABASE: Record<string, iC6Object<any>> = {
     {{#each SCOPED_DATABASES}}
     '{{DATABASE_KEY}}': (() => {
-        {{#each TABLES}}
-        const {{SCOPED_TABLE_CONST}}: C6RestfulModel<any, any, any> = {
+        {{#each RELATIONS}}
+        const {{SCOPED_TABLE_CONST}}: Record<string, any> & {
+            TABLE_NAME: string;
+            RELATION_TYPE: 'TABLE' | 'VIEW';
+            READ_ONLY: boolean;
+        } = {
             TABLE_NAME: '{{TABLE_NAME}}',
+            RELATION_TYPE: '{{RELATION_TYPE}}',
+            READ_ONLY: {{READ_ONLY}},
             {{#each COLUMNS_UPPERCASE}}
             {{@key}}: '{{this}}',
             {{/each}}
@@ -78,34 +84,44 @@ export const SCOPED_C6_BY_DATABASE: Record<string, iC6Object<any>> = {
         {{/each}}
 
         const scopedTables = {
-            {{#each TABLES}}
+            {{#each RELATIONS}}
             '{{TABLE_NAME_SHORT}}': {{SCOPED_TABLE_CONST}},
             {{/each}}
-        };
+        } as Record<string, any>;
 
         const scopedC6: iC6Object<any> = {
             ...C6Constants,
             C6VERSION: '{{../C6VERSION}}',
             PREFIX: RestTablePrefix,
-            TABLES: scopedTables,
+            TABLES: scopedTables as any,
             ORM: {},
             ...scopedTables,
         };
 
-        {{#each TABLES}}
+        {{#each RELATIONS}}
         const {{SCOPED_BINDING_CONST}} = {
             ...{{SCOPED_TABLE_CONST}},
+            {{#if READ_ONLY}}
+            Get: (restRequest as any)(() => ({
+                ...GLOBAL_REST_PARAMETERS,
+                C6: scopedC6,
+                restModel: {{SCOPED_TABLE_CONST}} as any{{#if ../../OBJECT_OVERRIDES}},
+                {{{../../OBJECT_OVERRIDES}}}{{/if}},
+                requestMethod: 'GET',
+            }))
+            {{else}}
             ...restOrm<any>(() => ({
                 ...GLOBAL_REST_PARAMETERS,
                 C6: scopedC6,
-                restModel: {{SCOPED_TABLE_CONST}}{{#if ../../OBJECT_OVERRIDES}},
+                restModel: {{SCOPED_TABLE_CONST}} as any{{#if ../../OBJECT_OVERRIDES}},
                 {{{../../OBJECT_OVERRIDES}}}{{/if}}
             }))
+            {{/if}}
         };
         {{/each}}
 
-        scopedC6.ORM = {
-            {{#each TABLES}}
+        (scopedC6 as any).ORM = {
+            {{#each RELATIONS}}
             {{TABLE_NAME_SHORT_PASCAL_CASE}}: {{SCOPED_BINDING_CONST}},
             {{/each}}
         };

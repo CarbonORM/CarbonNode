@@ -19,7 +19,7 @@ CREATE TABLE `city` (
   PRIMARY KEY (`city_id`),
   KEY `idx_fk_country_id` (`country_id`),
   CONSTRAINT `fk_city_country` FOREIGN KEY (`country_id`) REFERENCES `country` (`country_id`) ON DELETE RESTRICT ON UPDATE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=693 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=701 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 **/
 
 export interface iCity {
@@ -38,8 +38,13 @@ const city:
         'city',
         iCity,
         CityPrimaryKeys
-    > = {
+    > & Record<string, any> & {
+        RELATION_TYPE: 'TABLE';
+        READ_ONLY: false;
+    } = {
     TABLE_NAME: 'city',
+    RELATION_TYPE: 'TABLE',
+    READ_ONLY: false,
     CITY_ID: 'city.city_id',
     CITY: 'city.city',
     COUNTRY_ID: 'city.country_id',
@@ -121,6 +126,7 @@ registerC6Table(
     'City',
     city,
     City,
+    'TABLE',
 );
 
 export default City;

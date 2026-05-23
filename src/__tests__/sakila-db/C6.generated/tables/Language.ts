@@ -16,7 +16,7 @@ CREATE TABLE `language` (
   `name` char(20) NOT NULL,
   `last_update` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`language_id`)
-) ENGINE=InnoDB AUTO_INCREMENT=99 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=107 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 **/
 
 export interface iLanguage {
@@ -34,8 +34,13 @@ const language:
         'language',
         iLanguage,
         LanguagePrimaryKeys
-    > = {
+    > & Record<string, any> & {
+        RELATION_TYPE: 'TABLE';
+        READ_ONLY: false;
+    } = {
     TABLE_NAME: 'language',
+    RELATION_TYPE: 'TABLE',
+    READ_ONLY: false,
     LANGUAGE_ID: 'language.language_id',
     NAME: 'language.name',
     LAST_UPDATE: 'language.last_update',
@@ -109,6 +114,7 @@ registerC6Table(
     'Language',
     language,
     Language,
+    'TABLE',
 );
 
 export default Language;

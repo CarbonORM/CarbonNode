@@ -1,10 +1,10 @@
 {
   "name": "@carbonorm/carbonnode",
-  "version": "6.3.1",
+  "version": "6.4.2",
   "browser": "dist/index.umd.js",
   "repository": {
     "type": "git",
-    "url": "https://github.com/CarbonORM/CarbonNode"
+    "url": "git+https://github.com/CarbonORM/CarbonNode.git"
   },
   "exports": {
     ".": {
@@ -88,11 +88,12 @@
     "postinstall": "node ./scripts/setup-git-hooks.mjs"
   },
   "bin": {
-    "generateRestBindings": "./scripts/generateRestBindings.cjs"
+    "generateRestBindings": "scripts/generateRestBindings.cjs"
   },
   "files": [
     "dist",
     "src",
-    "scripts"
+    "scripts",
+    "!src/**/*.mysql.cnf"
   ]
 }

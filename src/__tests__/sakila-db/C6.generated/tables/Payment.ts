@@ -26,7 +26,7 @@ CREATE TABLE `payment` (
   CONSTRAINT `fk_payment_customer` FOREIGN KEY (`customer_id`) REFERENCES `customer` (`customer_id`) ON DELETE RESTRICT ON UPDATE CASCADE,
   CONSTRAINT `fk_payment_rental` FOREIGN KEY (`rental_id`) REFERENCES `rental` (`rental_id`) ON DELETE SET NULL ON UPDATE CASCADE,
   CONSTRAINT `fk_payment_staff` FOREIGN KEY (`staff_id`) REFERENCES `staff` (`staff_id`) ON DELETE RESTRICT ON UPDATE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=16142 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=16150 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 **/
 
 export interface iPayment {
@@ -48,8 +48,13 @@ const payment:
         'payment',
         iPayment,
         PaymentPrimaryKeys
-    > = {
+    > & Record<string, any> & {
+        RELATION_TYPE: 'TABLE';
+        READ_ONLY: false;
+    } = {
     TABLE_NAME: 'payment',
+    RELATION_TYPE: 'TABLE',
+    READ_ONLY: false,
     PAYMENT_ID: 'payment.payment_id',
     CUSTOMER_ID: 'payment.customer_id',
     STAFF_ID: 'payment.staff_id',
@@ -159,6 +164,7 @@ registerC6Table(
     'Payment',
     payment,
     Payment,
+    'TABLE',
 );
 
 export default Payment;

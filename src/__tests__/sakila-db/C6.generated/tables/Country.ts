@@ -16,7 +16,7 @@ CREATE TABLE `country` (
   `country` varchar(50) NOT NULL,
   `last_update` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`country_id`)
-) ENGINE=InnoDB AUTO_INCREMENT=202 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=210 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 **/
 
 export interface iCountry {
@@ -34,8 +34,13 @@ const country:
         'country',
         iCountry,
         CountryPrimaryKeys
-    > = {
+    > & Record<string, any> & {
+        RELATION_TYPE: 'TABLE';
+        READ_ONLY: false;
+    } = {
     TABLE_NAME: 'country',
+    RELATION_TYPE: 'TABLE',
+    READ_ONLY: false,
     COUNTRY_ID: 'country.country_id',
     COUNTRY: 'country.country',
     LAST_UPDATE: 'country.last_update',
@@ -105,6 +110,7 @@ registerC6Table(
     'Country',
     country,
     Country,
+    'TABLE',
 );
 
 export default Country;

@@ -4,7 +4,7 @@ import { SelectQueryBuilder } from '../orm/queries/SelectQueryBuilder';
 import { PostQueryBuilder } from '../orm/queries/PostQueryBuilder';
 import { UpdateQueryBuilder } from '../orm/queries/UpdateQueryBuilder';
 import { DeleteQueryBuilder } from '../orm/queries/DeleteQueryBuilder';
-import { alias, betweenLit, call, distinct, eqLit, fn, inLit, lit, lits, order } from '../orm/queryHelpers';
+import { alias, asc, betweenLit, call, desc, distinct, eqLit, fn, inLit, lit, lits, notInLit, order } from '../orm/queryHelpers';
 import { buildTestConfig, buildBinaryTestConfig, buildBinaryTestConfigFqn, buildTemporalTestConfig } from './fixtures/c6.fixture';
 
 describe('SQL Builders', () => {
@@ -44,6 +44,43 @@ describe('SQL Builders', () => {
     expect(params).toEqual(['%A%', 10, 1]);
   });
 
+  it('builds SELECT joins against read-only view relations', () => {
+    const config = buildTestConfig();
+    config.C6.TABLES.actor_info = {
+      TABLE_NAME: 'actor_info',
+      RELATION_TYPE: 'VIEW',
+      READ_ONLY: true,
+      PRIMARY: [],
+      PRIMARY_SHORT: [],
+      COLUMNS: {
+        'actor_info.actor_id': 'actor_id',
+        'actor_info.film_info': 'film_info',
+      },
+      TYPE_VALIDATION: {},
+      REGEX_VALIDATION: {},
+      LIFECYCLE_HOOKS: { GET: {}, POST: {}, PUT: {}, DELETE: {} },
+      TABLE_REFERENCES: {},
+      TABLE_REFERENCED_BY: {},
+    };
+
+    const qb = new SelectQueryBuilder(config as any, {
+      SELECT: ['actor.first_name', 'ai.film_info'],
+      JOIN: {
+        [C6C.LEFT]: {
+          'actor_info ai': {
+            'ai.actor_id': [C6C.EQUAL, 'actor.actor_id'],
+          },
+        },
+      },
+    } as any, false);
+
+    const { sql, params } = qb.build('actor');
+
+    expect(sql).toContain('LEFT JOIN `actor_info` AS `ai` ON');
+    expect(sql).toContain('(ai.actor_id) = actor.actor_id');
+    expect(params).toEqual([]);
+  });
+
   it('logs SELECT aggregate expressions at DEBUG level', () => {
     const config = buildTestConfig();
     const logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
@@ -74,7 +111,7 @@ describe('SQL Builders', () => {
     expect(params).toEqual(['fallback']);
   });
 
-  it('supports helper builders for fn/call/as/distinct/lit/lits/order', () => {
+  it('supports helper builders for fn/call/as/distinct/lit/lits/order/asc/desc', () => {
     const config = buildTestConfig();
     const qb = new SelectQueryBuilder(config as any, {
       SELECT: [
@@ -84,9 +121,10 @@ describe('SQL Builders', () => {
       ],
       WHERE: {
         'actor.first_name': [C6C.IN, lits(['ALICE', 'BOB'])],
+        'actor.last_name': { ...notInLit(['SMITH', 'DOE']) },
       },
       PAGINATION: {
-        [C6C.ORDER]: [order(fn(C6C.COUNT, 'actor.actor_id'), 'DESC')],
+        [C6C.ORDER]: [desc(fn(C6C.COUNT, 'actor.actor_id')), asc('actor.first_name'), order('actor.last_name', 'DESC')],
         [C6C.LIMIT]: 5,
       },
     } as any, false);
@@ -96,8 +134,9 @@ describe('SQL Builders', () => {
     expect(sql).toContain('COUNT(actor.actor_id) AS cnt');
     expect(sql).toContain('COALESCE(?, actor.last_name)');
     expect(sql).toContain('( actor.first_name IN (?, ?) )');
-    expect(sql).toContain('ORDER BY COUNT(actor.actor_id) DESC');
-    expect(params).toEqual(['N/A', 'ALICE', 'BOB']);
+    expect(sql).toContain('( actor.last_name NOT IN (?, ?) )');
+    expect(sql).toContain('ORDER BY COUNT(actor.actor_id) DESC, actor.first_name ASC, actor.last_name DESC');
+    expect(params).toEqual(['N/A', 'ALICE', 'BOB', 'SMITH', 'DOE']);
   });
 
   it('supports literal-safe WHERE helper builders', () => {

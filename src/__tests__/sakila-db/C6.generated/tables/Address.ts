@@ -26,7 +26,7 @@ CREATE TABLE `address` (
   KEY `idx_fk_city_id` (`city_id`),
   SPATIAL KEY `idx_location` (`location`),
   CONSTRAINT `fk_address_city` FOREIGN KEY (`city_id`) REFERENCES `city` (`city_id`) ON DELETE RESTRICT ON UPDATE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=695 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=703 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 **/
 
 export interface iAddress {
@@ -50,8 +50,13 @@ const address:
         'address',
         iAddress,
         AddressPrimaryKeys
-    > = {
+    > & Record<string, any> & {
+        RELATION_TYPE: 'TABLE';
+        READ_ONLY: false;
+    } = {
     TABLE_NAME: 'address',
+    RELATION_TYPE: 'TABLE',
+    READ_ONLY: false,
     ADDRESS_ID: 'address.address_id',
     ADDRESS: 'address.address',
     ADDRESS2: 'address.address2',
@@ -181,6 +186,7 @@ registerC6Table(
     'Address',
     address,
     Address,
+    'TABLE',
 );
 
 export default Address;

@@ -429,7 +429,7 @@ await Actor.Put({
 CarbonNode exports typed builders for canonical expression tuples and common literal-safe `WHERE` / `HAVING` predicates:
 
 ```ts
-import { fn, call, alias, distinct, lit, eqLit, inLit, betweenLit, order } from "@carbonorm/carbonnode";
+import { fn, call, alias, distinct, lit, eqLit, inLit, notInLit, betweenLit, asc, desc } from "@carbonorm/carbonnode";
 import { C6, Actor } from "./shared/rest/C6";
 
 const response = await Actor.Get({
@@ -441,18 +441,19 @@ const response = await Actor.Get({
   [C6.WHERE]: {
     [Actor.FIRST_NAME]: eqLit("NICK"),
     [Actor.LAST_NAME]: inLit(["WAHLBERG", "CHASE"]),
+    [Actor.ACTOR_ID]: notInLit([1, 2]),
     0: {
       [Actor.LAST_UPDATE]: betweenLit("2006-02-15", "2006-02-16"),
     },
   },
   [C6.PAGINATION]: {
-    [C6.ORDER]: [order(fn(C6.COUNT, Actor.ACTOR_ID), C6.DESC)],
+    [C6.ORDER]: [desc(fn(C6.COUNT, Actor.ACTOR_ID)), asc(Actor.FIRST_NAME)],
     [C6.LIMIT]: 5,
   },
 });
 ```
 
-Use `eqLit()`, `inLit()`, and `betweenLit()` when the comparison value is a string or other non-reference literal that should be wrapped with `C6.LIT` automatically.
+Use `eqLit()`, `inLit()`, `notInLit()`, and `betweenLit()` when the comparison value is a string or other non-reference literal that should be wrapped with `C6.LIT` automatically. Use `asc()` / `desc()` for the common one-direction `ORDER` terms.
 
 ## Singular vs Complex Requests
 
@@ -499,6 +500,7 @@ Recommendation: use generated bindings + axios executor, not manual URL construc
 - `C6.ts` (stable compatibility facade and public entrypoint)
 - `C6.generated/core.ts` (shared runtime state such as `TABLES`, `COLUMNS`, `initialRestfulObjectsState`, and `GLOBAL_REST_PARAMETERS`)
 - `C6.generated/tables/*.ts` (one generated table module per table, including the interface, primary-key type, base model, and REST binding)
+- `C6.generated/views/*.ts` (one generated read-only view module per SQL view, with `Get` only)
 - `C6.generated/scoped.ts` (scoped database bindings)
 - `C6.test.ts` (generated test suite)
 - `C6.mysqldump.sql`
@@ -512,12 +514,19 @@ tools should exclude `C6.generated/**` to avoid publishing noisy internals. Corr
 on that exclusion: re-exporting both `C6.ts` and an individual generated table module resolves to the
 same table export.
 
+SQL views are emitted as readonly relations with `RELATION_TYPE: "VIEW"` and `READ_ONLY: true`.
+They are registered in `TABLES` for query composition and `VIEWS` for view-only discovery, so a
+view can be used anywhere a selectable relation is valid, including `JOIN`; generated REST bindings
+only expose `Get`, and runtime request resolution rejects write methods against read-only models.
+
 Template sources:
 
 - `scripts/assets/handlebars/C6.ts.handlebars`
 - `scripts/assets/handlebars/C6.core.ts.handlebars`
 - `scripts/assets/handlebars/C6.table.ts.handlebars`
 - `scripts/assets/handlebars/C6.tablesIndex.ts.handlebars`
+- `scripts/assets/handlebars/C6.view.ts.handlebars`
+- `scripts/assets/handlebars/C6.viewsIndex.ts.handlebars`
 - `scripts/assets/handlebars/C6.scoped.ts.handlebars`
 - `scripts/assets/handlebars/C6.test.ts.handlebars`
 
