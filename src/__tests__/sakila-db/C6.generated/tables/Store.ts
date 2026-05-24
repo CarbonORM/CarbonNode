@@ -21,7 +21,7 @@ CREATE TABLE `store` (
   KEY `idx_fk_address_id` (`address_id`),
   CONSTRAINT `fk_store_address` FOREIGN KEY (`address_id`) REFERENCES `address` (`address_id`) ON DELETE RESTRICT ON UPDATE CASCADE,
   CONSTRAINT `fk_store_staff` FOREIGN KEY (`manager_staff_id`) REFERENCES `staff` (`staff_id`) ON DELETE RESTRICT ON UPDATE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=40 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=58 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 **/
 
 export interface iStore {
@@ -40,8 +40,13 @@ const store:
         'store',
         iStore,
         StorePrimaryKeys
-    > = {
+    > & Record<string, any> & {
+        RELATION_TYPE: 'TABLE';
+        READ_ONLY: false;
+    } = {
     TABLE_NAME: 'store',
+    RELATION_TYPE: 'TABLE',
+    READ_ONLY: false,
     STORE_ID: 'store.store_id',
     MANAGER_STAFF_ID: 'store.manager_staff_id',
     ADDRESS_ID: 'store.address_id',
@@ -135,6 +140,7 @@ registerC6Table(
     'Store',
     store,
     Store,
+    'TABLE',
 );
 
 export default Store;

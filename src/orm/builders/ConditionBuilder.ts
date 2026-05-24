@@ -184,7 +184,7 @@ export abstract class ConditionBuilder<
             return `:${key}`;
         } else {
             (params as any[]).push(val);
-            return '?';
+            return this.sqlDialect.positionalPlaceholder((params as any[]).length);
         }
     }
 

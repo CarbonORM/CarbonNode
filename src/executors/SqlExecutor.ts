@@ -7,6 +7,8 @@ import { C6Constants as C6C } from "../constants/C6Constants";
 import {
     DetermineResponseDataType,
     iCacheResponse,
+    iPostgresClient,
+    iPostgresQueryResult,
     iRestLifecycleResponse,
     iRestMethods,
     iRestSqlExecutionContext,
@@ -26,6 +28,8 @@ import { loadSqlAllowList, normalizeSqlWith } from "../utils/sqlAllowList";
 import { getLogContext, LogLevel, logWithLevel } from "../utils/logLevel";
 
 const SQL_ALLOWLIST_BLOCKED_CODE = "SQL_ALLOWLIST_BLOCKED";
+
+type SqlConnection = PoolConnection | iPostgresClient;
 
 const fillRandomBytes = (bytes: Uint8Array): void => {
     const cryptoRef = (globalThis as { crypto?: Crypto }).crypto;
@@ -369,7 +373,11 @@ export class SqlExecutor<
         return response;
     }
 
-    private async withConnection<T>(cb: (conn: PoolConnection) => Promise<T>): Promise<T> {
+    private isPostgresRuntime(): boolean {
+        return this.sqlDialect.name === "postgresql" || !!this.config.postgresPool;
+    }
+
+    private async withConnection<T>(cb: (conn: SqlConnection) => Promise<T>): Promise<T> {
         const logContext = getLogContext(this.config, this.request);
         logWithLevel(
             LogLevel.DEBUG,
@@ -377,7 +385,9 @@ export class SqlExecutor<
             console.log,
             `[SQL EXECUTOR] 📡 Getting DB connection`,
         );
-        const conn = await this.config.mysqlPool!.getConnection();
+        const conn = this.isPostgresRuntime()
+            ? await this.config.postgresPool!.connect()
+            : await this.config.mysqlPool!.getConnection();
         try {
             logWithLevel(
                 LogLevel.DEBUG,
@@ -405,8 +415,13 @@ export class SqlExecutor<
     public formatSQLWithParams(sql: string, params: any[] | { [key: string]: any }): string {
         if (Array.isArray(params)) {
             let index = 0;
-            return sql.replace(/\?/g, () => {
-                if (index >= params.length) return '?';
+            return sql.replace(/\?|[$]([0-9]+)/g, (match, pgIndexRaw) => {
+                if (pgIndexRaw) {
+                    const pgIndex = Number(pgIndexRaw) - 1;
+                    if (pgIndex < 0 || pgIndex >= params.length) return match;
+                    return this.formatValue(params[pgIndex]);
+                }
+                if (index >= params.length) return match;
                 const val = params[index++];
                 return this.formatValue(val);
             });
@@ -898,6 +913,21 @@ export class SqlExecutor<
             formatted,
         );
 
+        if (this.isPostgresRuntime()) {
+            if (Array.isArray(queryResult.params)) {
+                return { sql: queryResult.sql, values: queryResult.params };
+            }
+
+            let paramIndex = 0;
+            const values: any[] = [];
+            const sql = queryResult.sql.replace(/:([a-zA-Z0-9_]+)/g, (_match, key) => {
+                values.push((queryResult.params as Record<string, any>)[key]);
+                paramIndex += 1;
+                return `$${paramIndex}`;
+            });
+            return { sql, values };
+        }
+
         const toUnnamed = namedPlaceholders();
         const [sql, values] = toUnnamed(queryResult.sql, queryResult.params);
         return { sql, values };
@@ -910,28 +940,82 @@ export class SqlExecutor<
         logContext: ReturnType<typeof getLogContext>,
     ): DetermineResponseDataType<G['RequestMethod'], G['RestTableInterface']> {
         if (method === C6C.GET) {
+            const rows = this.isPostgresRuntime()
+                ? ((result as iPostgresQueryResult).rows ?? [])
+                : result;
             return {
-                rest: result.map(this.serialize),
+                rest: rows.map(this.serialize),
                 sql: { sql: sqlExecution.sql, values: sqlExecution.values },
             } as DetermineResponseDataType<G['RequestMethod'], G['RestTableInterface']>;
         }
+
+        const affectedRows = this.isPostgresRuntime()
+            ? ((result as iPostgresQueryResult).rowCount ?? 0)
+            : result.affectedRows;
+        const insertId = this.isPostgresRuntime()
+            ? undefined
+            : result.insertId;
 
         logWithLevel(
             LogLevel.DEBUG,
             logContext,
             console.log,
             `[SQL EXECUTOR] ✏️ Rows affected:`,
-            result.affectedRows,
+            affectedRows,
         );
 
+        const postgresRows = this.isPostgresRuntime()
+            ? ((result as iPostgresQueryResult).rows ?? [])
+            : [];
+
         return {
-            affected: result.affectedRows as number,
-            insertId: result.insertId as number,
+            affected: affectedRows as number,
+            insertId: insertId as number | undefined,
             rest: method === C6C.POST
-                ? this.buildPostResponseRows(result.insertId as number | string | undefined)
+                ? (
+                    postgresRows.length > 0
+                        ? postgresRows.map(this.serialize)
+                        : this.buildPostResponseRows(insertId as number | string | undefined)
+                )
                 : [],
             sql: { sql: sqlExecution.sql, values: sqlExecution.values },
         } as DetermineResponseDataType<G['RequestMethod'], G['RestTableInterface']>;
+    }
+
+    private async beginTransaction(conn: SqlConnection): Promise<void> {
+        if (this.isPostgresRuntime()) {
+            await (conn as iPostgresClient).query("BEGIN");
+            return;
+        }
+        await (conn as PoolConnection).beginTransaction();
+    }
+
+    private async commitTransaction(conn: SqlConnection): Promise<void> {
+        if (this.isPostgresRuntime()) {
+            await (conn as iPostgresClient).query("COMMIT");
+            return;
+        }
+        await (conn as PoolConnection).commit();
+    }
+
+    private async rollbackTransaction(conn: SqlConnection): Promise<void> {
+        if (this.isPostgresRuntime()) {
+            await (conn as iPostgresClient).query("ROLLBACK");
+            return;
+        }
+        await (conn as PoolConnection).rollback();
+    }
+
+    private async runSqlStatement(
+        conn: SqlConnection,
+        sqlExecution: iRestSqlExecutionContext,
+    ): Promise<any> {
+        if (this.isPostgresRuntime()) {
+            return await (conn as iPostgresClient).query(sqlExecution.sql, sqlExecution.values);
+        }
+
+        const [result] = await (conn as PoolConnection).query<any>(sqlExecution.sql, sqlExecution.values);
+        return result;
     }
 
     private createLifecycleHookResponse(
@@ -956,7 +1040,7 @@ export class SqlExecutor<
     }
 
     private async executeQueryWithLifecycle(
-        conn: PoolConnection,
+        conn: SqlConnection,
         method: iRestMethods,
         sqlExecution: iRestSqlExecutionContext,
         logContext: ReturnType<typeof getLogContext>,
@@ -973,7 +1057,7 @@ export class SqlExecutor<
                     console.log,
                     `[SQL EXECUTOR] 🧾 Beginning transaction`,
                 );
-                await conn.beginTransaction();
+                await this.beginTransaction(conn);
             }
 
             let allowListStatus: SqlAllowListStatus = "not verified";
@@ -1006,7 +1090,7 @@ export class SqlExecutor<
                     sqlExecution,
                 },
             );
-            const [result] = await conn.query<any>(sqlExecution.sql, sqlExecution.values);
+            const result = await this.runSqlStatement(conn, sqlExecution);
 
             const response = this.createResponseFromQueryResult(
                 method,
@@ -1026,7 +1110,7 @@ export class SqlExecutor<
             );
 
             if (useTransaction) {
-                await conn.commit();
+                await this.commitTransaction(conn);
                 committed = true;
                 logWithLevel(
                     LogLevel.DEBUG,
@@ -1049,7 +1133,7 @@ export class SqlExecutor<
         } catch (err) {
             if (useTransaction && !committed) {
                 try {
-                    await conn.rollback();
+                    await this.rollbackTransaction(conn);
                     logWithLevel(
                         LogLevel.WARN,
                         logContext,

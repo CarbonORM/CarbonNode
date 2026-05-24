@@ -1,10 +1,6 @@
 // noinspection JSUnusedGlobalSymbols,SpellCheckingInspection
 
-import { restOrm } from "@carbonorm/carbonnode";
-import type {
-    C6RestfulModel,
-    OrmGenerics,
-} from "@carbonorm/carbonnode";
+import { restRequest } from "@carbonorm/carbonnode";
 {{#if HAS_GEOJSON_TYPES}}
 import type * as GeoJSON from "geojson";
 {{/if}}
@@ -25,39 +21,21 @@ export interface i{{TABLE_NAME_SHORT_PASCAL_CASE}} {
 {{/each}}
 }
 
-export type {{TABLE_NAME_SHORT_PASCAL_CASE}}PrimaryKeys = {{#if PRIMARY_SHORT.length}}
-    {{#each PRIMARY_SHORT}}
-        '{{this}}'{{#unless @last}} |{{/unless}}
-    {{/each}};
-{{else}}
-    never;
-{{/if}}
+export type {{TABLE_NAME_SHORT_PASCAL_CASE}}PrimaryKeys = never;
 
-const {{TABLE_NAME_SHORT}}:
-    C6RestfulModel<
-        '{{TABLE_NAME_SHORT}}',
-        i{{TABLE_NAME_SHORT_PASCAL_CASE}},
-        {{TABLE_NAME_SHORT_PASCAL_CASE}}PrimaryKeys
-    > & Record<string, any> & {
-        RELATION_TYPE: 'TABLE';
-        READ_ONLY: false;
+const {{TABLE_NAME_SHORT}}: Record<string, any> & {
+        TABLE_NAME: '{{TABLE_NAME_SHORT}}';
+        RELATION_TYPE: 'VIEW';
+        READ_ONLY: true;
     } = {
     TABLE_NAME: '{{TABLE_NAME}}',
-    RELATION_TYPE: 'TABLE',
-    READ_ONLY: false,
+    RELATION_TYPE: 'VIEW',
+    READ_ONLY: true,
     {{#each COLUMNS_UPPERCASE}}
     {{@key}}: '{{this}}',
     {{/each}}
-    PRIMARY: [
-    {{#PRIMARY}}
-        '{{this}}',
-    {{/PRIMARY}}
-    ],
-    PRIMARY_SHORT: [
-    {{#each PRIMARY_SHORT}}
-        '{{this}}',
-    {{/each}}
-    ],
+    PRIMARY: [],
+    PRIMARY_SHORT: [],
     COLUMNS: {
     {{#each COLUMNS}}
         '{{@key}}': '{{this}}',
@@ -84,30 +62,17 @@ const {{TABLE_NAME_SHORT}}:
         POST: {beforeProcessing:{}, beforeExecution:{}, afterExecution:{}, afterCommit:{}},
         DELETE: {beforeProcessing:{}, beforeExecution:{}, afterExecution:{}, afterCommit:{}},
     },
-    TABLE_REFERENCES: {
-        {{#each TABLE_REFERENCES}}'{{@key}}': [{{#this}}{
-            TABLE: '{{TABLE}}',
-            COLUMN: '{{COLUMN}}',
-            CONSTRAINT: '{{CONSTRAINT}}',
-        },{{/this}}],{{/each}}
-    },
-    TABLE_REFERENCED_BY: {
-        {{#each TABLE_REFERENCED_BY}}'{{@key}}': [{{#this}}{
-            TABLE: '{{TABLE}}',
-            COLUMN: '{{COLUMN}}',
-            CONSTRAINT: '{{CONSTRAINT}}',
-        },{{/this}}],{{/each}}
-    }
+    TABLE_REFERENCES: {},
+    TABLE_REFERENCED_BY: {}
 }
 
 export const {{TABLE_NAME_SHORT_PASCAL_CASE}} = {
     ...{{TABLE_NAME_SHORT}},
-    ...restOrm<
-        OrmGenerics<any, '{{TABLE_NAME_SHORT}}', i{{TABLE_NAME_SHORT_PASCAL_CASE}}, {{TABLE_NAME_SHORT_PASCAL_CASE}}PrimaryKeys{{#if INTERFACE_OVERRIDES}}, {{{INTERFACE_OVERRIDES}}}{{/if}}>
-    >(() => ({
+    Get: (restRequest as any)(() => ({
         ...GLOBAL_REST_PARAMETERS,
-        restModel: {{TABLE_NAME_SHORT}}{{#if OBJECT_OVERRIDES}},
-        {{{OBJECT_OVERRIDES}}}{{/if}}
+        restModel: {{TABLE_NAME_SHORT}} as any{{#if OBJECT_OVERRIDES}},
+        {{{OBJECT_OVERRIDES}}}{{/if}},
+        requestMethod: 'GET',
     }))
 }
 
@@ -116,7 +81,7 @@ registerC6Table(
     '{{TABLE_NAME_SHORT_PASCAL_CASE}}',
     {{TABLE_NAME_SHORT}},
     {{TABLE_NAME_SHORT_PASCAL_CASE}},
-    'TABLE',
+    'VIEW',
 );
 
 export default {{TABLE_NAME_SHORT_PASCAL_CASE}};

@@ -55,12 +55,7 @@ export abstract class PaginationBuilder<G extends OrmGenerics> extends JoinBuild
             const pageRaw = pagination[C6Constants.PAGE];
             const pageParsed = parseInt(pageRaw ?? 1, 10);
             const page = isFinite(pageParsed) && pageParsed > 1 ? pageParsed : 1;
-            if (page === 1) {
-                sql += ` LIMIT ${lim}`;
-            } else {
-                const offset = (page - 1) * lim;
-                sql += ` LIMIT ${offset}, ${lim}`;
-            }
+            sql += this.sqlDialect.pagination(lim, page);
         }
 
         logWithLevel(

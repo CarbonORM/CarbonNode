@@ -18,7 +18,7 @@ CREATE TABLE `actor` (
   `last_update` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`actor_id`),
   KEY `idx_actor_last_name` (`last_name`)
-) ENGINE=InnoDB AUTO_INCREMENT=852 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=960 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 **/
 
 export interface iActor {
@@ -37,8 +37,13 @@ const actor:
         'actor',
         iActor,
         ActorPrimaryKeys
-    > = {
+    > & Record<string, any> & {
+        RELATION_TYPE: 'TABLE';
+        READ_ONLY: false;
+    } = {
     TABLE_NAME: 'actor',
+    RELATION_TYPE: 'TABLE',
+    READ_ONLY: false,
     ACTOR_ID: 'actor.actor_id',
     FIRST_NAME: 'actor.first_name',
     LAST_NAME: 'actor.last_name',
@@ -116,6 +121,7 @@ registerC6Table(
     'Actor',
     actor,
     Actor,
+    'TABLE',
 );
 
 export default Actor;

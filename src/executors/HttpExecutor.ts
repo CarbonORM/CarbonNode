@@ -813,7 +813,10 @@ export class HttpExecutor<
                                         .map(part => part.charAt(0).toUpperCase() + part.slice(1))
                                         .join('_');
 
-                                    const RestApi = C6.ORM[ormKey] ?? new Error(`Fetch Dependencies could not find table (${ormKey}) in the set ∉ [ ${Object.keys(C6.ORM).join(', ')} ]`);
+                                    const RestApi = C6.ORM[ormKey];
+                                    if (!RestApi) {
+                                        throw new Error(`Fetch Dependencies could not find table (${ormKey}) in the set ∉ [ ${Object.keys(C6.ORM).join(', ')} ]`);
+                                    }
 
                                     if (debugEnabled) {
                                         console.log('%c Fetch Dependencies will select (' + tableToFetch + ') using GET request', 'color: #33ccff');

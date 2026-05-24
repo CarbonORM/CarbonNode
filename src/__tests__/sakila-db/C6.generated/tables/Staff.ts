@@ -28,7 +28,7 @@ CREATE TABLE `staff` (
   KEY `idx_fk_address_id` (`address_id`),
   CONSTRAINT `fk_staff_address` FOREIGN KEY (`address_id`) REFERENCES `address` (`address_id`) ON DELETE RESTRICT ON UPDATE CASCADE,
   CONSTRAINT `fk_staff_store` FOREIGN KEY (`store_id`) REFERENCES `store` (`store_id`) ON DELETE RESTRICT ON UPDATE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=95 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=113 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 **/
 
 export interface iStaff {
@@ -54,8 +54,13 @@ const staff:
         'staff',
         iStaff,
         StaffPrimaryKeys
-    > = {
+    > & Record<string, any> & {
+        RELATION_TYPE: 'TABLE';
+        READ_ONLY: false;
+    } = {
     TABLE_NAME: 'staff',
+    RELATION_TYPE: 'TABLE',
+    READ_ONLY: false,
     STAFF_ID: 'staff.staff_id',
     FIRST_NAME: 'staff.first_name',
     LAST_NAME: 'staff.last_name',
@@ -205,6 +210,7 @@ registerC6Table(
     'Staff',
     staff,
     Staff,
+    'TABLE',
 );
 
 export default Staff;

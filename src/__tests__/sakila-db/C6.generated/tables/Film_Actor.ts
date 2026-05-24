@@ -38,8 +38,13 @@ const film_actor:
         'film_actor',
         iFilm_Actor,
         Film_ActorPrimaryKeys
-    > = {
+    > & Record<string, any> & {
+        RELATION_TYPE: 'TABLE';
+        READ_ONLY: false;
+    } = {
     TABLE_NAME: 'film_actor',
+    RELATION_TYPE: 'TABLE',
+    READ_ONLY: false,
     ACTOR_ID: 'film_actor.actor_id',
     FILM_ID: 'film_actor.film_id',
     LAST_UPDATE: 'film_actor.last_update',
@@ -115,6 +120,7 @@ registerC6Table(
     'Film_Actor',
     film_actor,
     Film_Actor,
+    'TABLE',
 );
 
 export default Film_Actor;

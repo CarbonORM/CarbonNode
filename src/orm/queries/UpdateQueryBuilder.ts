@@ -25,7 +25,7 @@ export class UpdateQueryBuilder<G extends OrmGenerics> extends PaginationBuilder
         const args = this.request;
         const params = this.useNamedParams ? {} : [];
         this.initAlias(table, args.JOIN);
-        let sql = `UPDATE \`${table}\``;
+        let sql = this.sqlDialect.updateTable(table);
 
         if (args.JOIN) {
             sql += this.buildJoinClauses(args.JOIN, params);
@@ -41,7 +41,7 @@ export class UpdateQueryBuilder<G extends OrmGenerics> extends PaginationBuilder
                 const qualified = `${table}.${trimmed}`;
                 this.assertValidIdentifier(qualified, 'UPDATE SET');
                 const rightSql = this.serializeUpdateValue(val, params, qualified);
-                return `\`${trimmed}\` = ${rightSql}`;
+                return `${this.sqlDialect.assignmentColumn(trimmed)} = ${rightSql}`;
             });
 
         sql += ` SET ${setClauses.join(', ')}`;

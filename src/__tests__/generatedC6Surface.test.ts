@@ -30,12 +30,31 @@ describe("generated C6 compatibility facade", () => {
         expect(generatedC6PublicSurface.TABLES.actor).toBe(
             generatedC6PublicSurface.C6.TABLES.actor,
         );
+        expect(generatedC6PublicSurface.Actor_Info).toBe(
+            (generatedC6PublicSurface.C6.ORM as Record<string, unknown>).Actor_Info,
+        );
+        expect(generatedC6PublicSurface.TABLES.actor_info).toMatchObject({
+            RELATION_TYPE: "VIEW",
+            READ_ONLY: true,
+        });
+        expect(generatedC6PublicSurface.VIEWS.actor_info).toBe(
+            generatedC6PublicSurface.TABLES.actor_info,
+        );
+        expect(typeof generatedC6PublicSurface.Actor_Info.Get).toBe("function");
+        expect("Post" in generatedC6PublicSurface.Actor_Info).toBe(false);
+        expect("Put" in generatedC6PublicSurface.Actor_Info).toBe(false);
+        expect("Delete" in generatedC6PublicSurface.Actor_Info).toBe(false);
         expect(typeof generatedC6PublicSurface.C6.IMPORT).toBe("function");
         await expect(generatedC6PublicSurface.C6.IMPORT("actor")).resolves.toMatchObject({
             default: generatedC6PublicSurface.Actor,
         });
+        await expect(generatedC6PublicSurface.C6.IMPORT("actor_info")).resolves.toMatchObject({
+            default: generatedC6PublicSurface.Actor_Info,
+        });
         expect(generatedC6PublicSurface.COLUMNS["actor.actor_id"]).toBe("actor_id");
+        expect(generatedC6PublicSurface.COLUMNS["actor_info.film_info"]).toBe("film_info");
         expect(generatedC6PublicSurface.state.actor).toBeUndefined();
+        expect(generatedC6PublicSurface.state.actor_info).toBeUndefined();
     });
 
     it("type-checks public C6 imports and accidental double barrels", () => {
@@ -43,17 +62,8 @@ describe("generated C6 compatibility facade", () => {
             "npx",
             [
                 "tsc",
-                "src/__tests__/fixtures/generatedC6PublicImports.ts",
-                "src/__tests__/fixtures/generatedC6DoubleBarrel.ts",
-                "--target",
-                "ES2020",
-                "--module",
-                "ES2020",
-                "--moduleResolution",
-                "node",
-                "--esModuleInterop",
-                "--skipLibCheck",
-                "--noEmit",
+                "--project",
+                "src/__tests__/fixtures/generatedC6Typecheck.tsconfig.json",
             ],
             {
                 cwd: process.cwd(),
@@ -74,20 +84,36 @@ describe("generated C6 compatibility facade", () => {
         ).toEqual([]);
     });
 
+    it("uses final view SQL instead of mysqldump temporary view placeholders", () => {
+        const viewPath = path.join(
+            process.cwd(),
+            "src/__tests__/sakila-db/C6.generated/views/Film_List.ts",
+        );
+        const content = fs.readFileSync(viewPath, "utf-8");
+
+        expect(content).toContain("CREATE VIEW `film_list` AS select");
+        expect(content).toContain("group_concat");
+        expect(content).not.toContain("CREATE VIEW `film_list` AS SELECT");
+        expect(content).not.toContain(" 1 AS `FID`");
+    });
+
     it("imports GeoJSON only in generated table modules that use GeoJSON types", () => {
         const tablesRoot = path.join(process.cwd(), "src/__tests__/sakila-db/C6.generated/tables");
+        const viewsRoot = path.join(process.cwd(), "src/__tests__/sakila-db/C6.generated/views");
         const geoJsonImport = 'import type * as GeoJSON from "geojson";';
 
-        for (const fileName of fs.readdirSync(tablesRoot)) {
-            if (!fileName.endsWith(".ts") || fileName === "index.ts") {
-                continue;
+        for (const root of [tablesRoot, viewsRoot]) {
+            for (const fileName of fs.readdirSync(root)) {
+                if (!fileName.endsWith(".ts") || fileName === "index.ts") {
+                    continue;
+                }
+
+                const content = fs.readFileSync(path.join(root, fileName), "utf-8");
+                const contentWithoutGeoJsonImport = content.replace(`${geoJsonImport}\n`, "");
+                const usesGeoJsonType = /\bGeoJSON\./.test(contentWithoutGeoJsonImport);
+
+                expect(content.includes(geoJsonImport), fileName).toBe(usesGeoJsonType);
             }
-
-            const content = fs.readFileSync(path.join(tablesRoot, fileName), "utf-8");
-            const contentWithoutGeoJsonImport = content.replace(`${geoJsonImport}\n`, "");
-            const usesGeoJsonType = /\bGeoJSON\./.test(contentWithoutGeoJsonImport);
-
-            expect(content.includes(geoJsonImport), fileName).toBe(usesGeoJsonType);
         }
     });
 });

@@ -27,7 +27,7 @@ CREATE TABLE `rental` (
   CONSTRAINT `fk_rental_customer` FOREIGN KEY (`customer_id`) REFERENCES `customer` (`customer_id`) ON DELETE RESTRICT ON UPDATE CASCADE,
   CONSTRAINT `fk_rental_inventory` FOREIGN KEY (`inventory_id`) REFERENCES `inventory` (`inventory_id`) ON DELETE RESTRICT ON UPDATE CASCADE,
   CONSTRAINT `fk_rental_staff` FOREIGN KEY (`staff_id`) REFERENCES `staff` (`staff_id`) ON DELETE RESTRICT ON UPDATE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=16142 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=16160 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 **/
 
 export interface iRental {
@@ -49,8 +49,13 @@ const rental:
         'rental',
         iRental,
         RentalPrimaryKeys
-    > = {
+    > & Record<string, any> & {
+        RELATION_TYPE: 'TABLE';
+        READ_ONLY: false;
+    } = {
     TABLE_NAME: 'rental',
+    RELATION_TYPE: 'TABLE',
+    READ_ONLY: false,
     RENTAL_ID: 'rental.rental_id',
     RENTAL_DATE: 'rental.rental_date',
     INVENTORY_ID: 'rental.inventory_id',
@@ -164,6 +169,7 @@ registerC6Table(
     'Rental',
     rental,
     Rental,
+    'TABLE',
 );
 
 export default Rental;

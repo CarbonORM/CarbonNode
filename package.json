@@ -1,10 +1,10 @@
 {
   "name": "@carbonorm/carbonnode",
-  "version": "6.3.1",
+  "version": "6.4.2",
   "browser": "dist/index.umd.js",
   "repository": {
     "type": "git",
-    "url": "https://github.com/CarbonORM/CarbonNode"
+    "url": "git+https://github.com/CarbonORM/CarbonNode.git"
   },
   "exports": {
     ".": {
@@ -31,7 +31,8 @@
   "peerDependencies": {
     "axios": "^1.10.0",
     "express": "^5.1.0",
-    "mysql2": "^3.14.1"
+    "mysql2": "^3.14.1",
+    "pg": "^8.21.0"
   },
   "peerDependenciesMeta": {
     "axios": {
@@ -45,14 +46,17 @@
     },
     "mysql2": {
       "optional": true
+    },
+    "pg": {
+      "optional": true
     }
   },
   "publishConfig": {
     "access": "public"
   },
   "devDependencies": {
-    "@carbonorm/rollup-plugin-postcss": "^3.0.0",
     "@carbonorm/barrelsby": "^1.0.0",
+    "@carbonorm/rollup-plugin-postcss": "^3.0.0",
     "@jest/globals": "^29.7.0",
     "@rollup/plugin-commonjs": "^28",
     "@rollup/plugin-json": "^6.1.0",
@@ -67,6 +71,7 @@
     "deepmerge": "^4.3.1",
     "express": "^5.1.0",
     "mysql2": "^3.14.1",
+    "pg": "^8.21.0",
     "postcss": "^8.4.27",
     "postcss-nested": "^6.0.1",
     "postcss-simple-vars": "^7.0.1",
@@ -88,11 +93,12 @@
     "postinstall": "node ./scripts/setup-git-hooks.mjs"
   },
   "bin": {
-    "generateRestBindings": "./scripts/generateRestBindings.cjs"
+    "generateRestBindings": "scripts/generateRestBindings.cjs"
   },
   "files": [
     "dist",
     "src",
-    "scripts"
+    "scripts",
+    "!src/**/*.mysql.cnf"
   ]
 }

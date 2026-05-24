@@ -124,6 +124,9 @@ export const eqLit = <T>(value: T): [typeof C6C.EQUAL, [typeof C6C.LIT, T]] =>
 export const inLit = <T>(values: readonly T[]): Record<typeof C6C.IN, Array<[typeof C6C.LIT, T]>> =>
     ({ [C6C.IN]: lits(values) } as Record<typeof C6C.IN, Array<[typeof C6C.LIT, T]>>);
 
+export const notInLit = <T>(values: readonly T[]): Record<typeof C6C.NOT_IN, Array<[typeof C6C.LIT, T]>> =>
+    ({ [C6C.NOT_IN]: lits(values) } as Record<typeof C6C.NOT_IN, Array<[typeof C6C.LIT, T]>>);
+
 export const betweenLit = <Start, End>(
     start: Start,
     end: End,
@@ -136,3 +139,9 @@ export const order = (
     expression: SQLExpression,
     direction: OrderDirection = C6C.ASC as OrderDirection,
 ): OrderTerm => [expression, direction];
+
+export const asc = (expression: SQLExpression): OrderTerm =>
+    order(expression, C6C.ASC as OrderDirection);
+
+export const desc = (expression: SQLExpression): OrderTerm =>
+    order(expression, C6C.DESC as OrderDirection);

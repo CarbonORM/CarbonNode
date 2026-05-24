@@ -35,16 +35,21 @@ export default function restRequest<
         const baseConfig = typeof configX === "function" ? configX() : configX;
         const { config } = resolveRestConfigForRequest(baseConfig as any, request as any);
 
+        if ((config.restModel as any)?.READ_ONLY === true && config.requestMethod !== "GET") {
+            const relationName = (config.restModel as any)?.TABLE_NAME ?? "relation";
+            throw new Error(`Relation '${relationName}' is read-only and only supports GET requests.`);
+        }
+
         applyLogLevelDefaults(config, request);
 
         const logContext = getLogContext(config, request);
 
-        if (!config.mysqlPool && !config.axios) {
-            throw new Error("No execution method available: neither mysqlPool nor axios instance provided in config.");
+        if (!config.mysqlPool && !config.postgresPool && !config.axios) {
+            throw new Error("No execution method available: neither mysqlPool, postgresPool, nor axios instance provided in config.");
         }
 
         // SQL path if on Node with a provided pool
-        if (config.mysqlPool) {
+        if (config.mysqlPool || config.postgresPool) {
             logWithLevel(LogLevel.DEBUG, logContext, console.log, "Using SQL Executor");
             const {SqlExecutor} = await import('../executors/SqlExecutor');
             const sanitizedRequest = stripDatabaseKeyFromRequest(request);

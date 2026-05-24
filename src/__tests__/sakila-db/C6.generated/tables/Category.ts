@@ -16,7 +16,7 @@ CREATE TABLE `category` (
   `name` varchar(25) NOT NULL,
   `last_update` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`category_id`)
-) ENGINE=InnoDB AUTO_INCREMENT=109 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=127 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 **/
 
 export interface iCategory {
@@ -34,8 +34,13 @@ const category:
         'category',
         iCategory,
         CategoryPrimaryKeys
-    > = {
+    > & Record<string, any> & {
+        RELATION_TYPE: 'TABLE';
+        READ_ONLY: false;
+    } = {
     TABLE_NAME: 'category',
+    RELATION_TYPE: 'TABLE',
+    READ_ONLY: false,
     CATEGORY_ID: 'category.category_id',
     NAME: 'category.name',
     LAST_UPDATE: 'category.last_update',
@@ -105,6 +110,7 @@ registerC6Table(
     'Category',
     category,
     Category,
+    'TABLE',
 );
 
 export default Category;

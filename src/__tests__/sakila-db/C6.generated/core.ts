@@ -27,6 +27,13 @@ import type { iPayment } from "./tables/Payment";
 import type { iRental } from "./tables/Rental";
 import type { iStaff } from "./tables/Staff";
 import type { iStore } from "./tables/Store";
+import type { iActor_Info } from "./views/Actor_Info";
+import type { iCustomer_List } from "./views/Customer_List";
+import type { iFilm_List } from "./views/Film_List";
+import type { iNicer_But_Slower_Film_List } from "./views/Nicer_But_Slower_Film_List";
+import type { iSales_By_Film_Category } from "./views/Sales_By_Film_Category";
+import type { iSales_By_Store } from "./views/Sales_By_Store";
+import type { iStaff_List } from "./views/Staff_List";
 
 export const RestTablePrefix = '';
 
@@ -46,7 +53,14 @@ export type RestTableNames = 'actor'
  | 'payment'
  | 'rental'
  | 'staff'
- | 'store';
+ | 'store'
+ | 'actor_info'
+ | 'customer_list'
+ | 'film_list'
+ | 'nicer_but_slower_film_list'
+ | 'sales_by_film_category'
+ | 'sales_by_store'
+ | 'staff_list';
 
 export type RestShortTableNames = 'actor'
  | 'address'
@@ -64,7 +78,30 @@ export type RestShortTableNames = 'actor'
  | 'payment'
  | 'rental'
  | 'staff'
- | 'store';
+ | 'store'
+ | 'actor_info'
+ | 'customer_list'
+ | 'film_list'
+ | 'nicer_but_slower_film_list'
+ | 'sales_by_film_category'
+ | 'sales_by_store'
+ | 'staff_list';
+
+export type RestViewNames = 'actor_info'
+ | 'customer_list'
+ | 'film_list'
+ | 'nicer_but_slower_film_list'
+ | 'sales_by_film_category'
+ | 'sales_by_store'
+ | 'staff_list';
+
+export type RestShortViewNames = 'actor_info'
+ | 'customer_list'
+ | 'film_list'
+ | 'nicer_but_slower_film_list'
+ | 'sales_by_film_category'
+ | 'sales_by_store'
+ | 'staff_list';
 
 export type RestTableInterfaces = iActor
  | iAddress
@@ -82,13 +119,21 @@ export type RestTableInterfaces = iActor
  | iPayment
  | iRental
  | iStaff
- | iStore;
+ | iStore
+ | iActor_Info
+ | iCustomer_List
+ | iFilm_List
+ | iNicer_But_Slower_Film_List
+ | iSales_By_Film_Category
+ | iSales_By_Store
+ | iStaff_List;
 
 export const TABLES = {} as Record<RestShortTableNames, C6RestfulModel<any, any, any>>;
+export const VIEWS = {} as Record<RestShortViewNames, C6RestfulModel<any, any, any>>;
 
 export const C6Core: iC6Object<RestTableInterfaces> = {
     ...C6Constants,
-    C6VERSION: '6.3.1',
+    C6VERSION: '6.4.2',
     IMPORT: async (tableName: string): Promise<iDynamicApiImport> => {
         tableName = tableName.toLowerCase();
 
@@ -112,12 +157,16 @@ export const C6Core: iC6Object<RestTableInterfaces> = {
                 .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
                 .join("_");
 
+        const relation = TABLES[tableName as RestShortTableNames];
+        const moduleDir = relation?.RELATION_TYPE === 'VIEW' ? 'views' : 'tables';
+
         return import(
-            /* @vite-ignore */ `./tables/${toPascalUnderscore(tableName)}`
+            /* @vite-ignore */ `./${moduleDir}/${toPascalUnderscore(tableName)}`
         );
     },
     PREFIX: RestTablePrefix,
     TABLES: TABLES as any,
+    VIEWS: VIEWS as any,
     ORM: {},
 };
 
@@ -142,6 +191,13 @@ export interface iRestfulObjectArrayTypes {
     rental: tStatefulApiData<iRental>,
     staff: tStatefulApiData<iStaff>,
     store: tStatefulApiData<iStore>,
+    actor_info: tStatefulApiData<iActor_Info>,
+    customer_list: tStatefulApiData<iCustomer_List>,
+    film_list: tStatefulApiData<iFilm_List>,
+    nicer_but_slower_film_list: tStatefulApiData<iNicer_But_Slower_Film_List>,
+    sales_by_film_category: tStatefulApiData<iSales_By_Film_Category>,
+    sales_by_store: tStatefulApiData<iSales_By_Store>,
+    staff_list: tStatefulApiData<iStaff_List>,
 }
 
 export type tRestfulObjectArrayValues = iRestfulObjectArrayTypes[keyof iRestfulObjectArrayTypes];
@@ -164,6 +220,13 @@ export const initialRestfulObjectsState: iRestfulObjectArrayTypes = {
     rental: undefined,
     staff: undefined,
     store: undefined,
+    actor_info: undefined,
+    customer_list: undefined,
+    film_list: undefined,
+    nicer_but_slower_film_list: undefined,
+    sales_by_film_category: undefined,
+    sales_by_store: undefined,
+    staff_list: undefined,
 };
 
 export const COLUMNS = {
@@ -184,6 +247,13 @@ export const COLUMNS = {
 'rental.rental_id': 'rental_id','rental.rental_date': 'rental_date','rental.inventory_id': 'inventory_id','rental.customer_id': 'customer_id','rental.return_date': 'return_date','rental.staff_id': 'staff_id','rental.last_update': 'last_update',
 'staff.staff_id': 'staff_id','staff.first_name': 'first_name','staff.last_name': 'last_name','staff.address_id': 'address_id','staff.picture': 'picture','staff.email': 'email','staff.store_id': 'store_id','staff.active': 'active','staff.username': 'username','staff.password': 'password','staff.last_update': 'last_update',
 'store.store_id': 'store_id','store.manager_staff_id': 'manager_staff_id','store.address_id': 'address_id','store.last_update': 'last_update',
+'actor_info.actor_id': 'actor_id','actor_info.first_name': 'first_name','actor_info.last_name': 'last_name','actor_info.film_info': 'film_info',
+'customer_list.ID': 'ID','customer_list.name': 'name','customer_list.address': 'address','customer_list.zip code': 'zip code','customer_list.phone': 'phone','customer_list.city': 'city','customer_list.country': 'country','customer_list.notes': 'notes','customer_list.SID': 'SID',
+'film_list.FID': 'FID','film_list.title': 'title','film_list.description': 'description','film_list.category': 'category','film_list.price': 'price','film_list.length': 'length','film_list.rating': 'rating','film_list.actors': 'actors',
+'nicer_but_slower_film_list.FID': 'FID','nicer_but_slower_film_list.title': 'title','nicer_but_slower_film_list.description': 'description','nicer_but_slower_film_list.category': 'category','nicer_but_slower_film_list.price': 'price','nicer_but_slower_film_list.length': 'length','nicer_but_slower_film_list.rating': 'rating','nicer_but_slower_film_list.actors': 'actors',
+'sales_by_film_category.category': 'category','sales_by_film_category.total_sales': 'total_sales',
+'sales_by_store.store': 'store','sales_by_store.manager': 'manager','sales_by_store.total_sales': 'total_sales',
+'staff_list.ID': 'ID','staff_list.name': 'name','staff_list.address': 'address','staff_list.zip code': 'zip code','staff_list.phone': 'phone','staff_list.city': 'city','staff_list.country': 'country','staff_list.SID': 'SID',
 };
 
 export const GLOBAL_REST_PARAMETERS: Omit<iRest<
@@ -198,8 +268,12 @@ export const registerC6Table = (
     bindingName: string,
     tableModel: Record<string, any>,
     restBinding: Record<string, any>,
+    relationType: 'TABLE' | 'VIEW' = 'TABLE',
 ) => {
     (TABLES as Record<string, C6RestfulModel<any, any, any>>)[shortName] = tableModel as C6RestfulModel<any, any, any>;
+    if (relationType === 'VIEW') {
+        (VIEWS as Record<string, C6RestfulModel<any, any, any>>)[shortName] = tableModel as C6RestfulModel<any, any, any>;
+    }
     (C6Core as Record<string, unknown>)[shortName] = tableModel;
     (C6Core.ORM as Record<string, unknown>)[bindingName] = restBinding;
 };

@@ -21,7 +21,7 @@ CREATE TABLE `inventory` (
   KEY `idx_store_id_film_id` (`store_id`,`film_id`),
   CONSTRAINT `fk_inventory_film` FOREIGN KEY (`film_id`) REFERENCES `film` (`film_id`) ON DELETE RESTRICT ON UPDATE CASCADE,
   CONSTRAINT `fk_inventory_store` FOREIGN KEY (`store_id`) REFERENCES `store` (`store_id`) ON DELETE RESTRICT ON UPDATE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=4674 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=4692 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 **/
 
 export interface iInventory {
@@ -40,8 +40,13 @@ const inventory:
         'inventory',
         iInventory,
         InventoryPrimaryKeys
-    > = {
+    > & Record<string, any> & {
+        RELATION_TYPE: 'TABLE';
+        READ_ONLY: false;
+    } = {
     TABLE_NAME: 'inventory',
+    RELATION_TYPE: 'TABLE',
+    READ_ONLY: false,
     INVENTORY_ID: 'inventory.inventory_id',
     FILM_ID: 'inventory.film_id',
     STORE_ID: 'inventory.store_id',
@@ -127,6 +132,7 @@ registerC6Table(
     'Inventory',
     inventory,
     Inventory,
+    'TABLE',
 );
 
 export default Inventory;

@@ -79,9 +79,10 @@ export abstract class JoinBuilder<G extends OrmGenerics> extends ConditionBuilde
             const indexes = values
                 .map(value => String(value ?? '').trim())
                 .filter(Boolean)
-                .map(value => `\`${value.replace(/`/g, '``')}\``);
+                .map(value => value.replace(/`/g, ''));
             if (!indexes.length) return;
-            clauses.push(`${keyword} (${indexes.join(', ')})`);
+            const clause = this.sqlDialect.indexHintClause(keyword, indexes);
+            if (clause) clauses.push(clause);
         };
 
         for (const [key, rawValue] of Object.entries(normalizedSpec)) {
@@ -216,7 +217,7 @@ export abstract class JoinBuilder<G extends OrmGenerics> extends ConditionBuilde
                     const normalizedSql = this.integrateSubSelectParams(subSql, subParams, params);
 
                     const formatted = normalizedSql.trim().split('\n').map(line => `  ${line}`).join('\n');
-                    const joinSql = `(\n${formatted}\n) AS \`${alias}\``;
+                    const joinSql = `(\n${formatted}\n) ${this.sqlDialect.formatDerivedTableAlias(alias)}`;
                     const onClause = this.buildBooleanJoinedConditions(conditions, true, params);
                     sql += ` ${joinKind} JOIN ${joinSql}`;
                     if (onClause) {
@@ -228,8 +229,7 @@ export abstract class JoinBuilder<G extends OrmGenerics> extends ConditionBuilde
                         this.registerAlias(alias, table);
                     }
                     const hintClause = this.getIndexHintClause(table, alias);
-                    const baseJoinSql = alias ? `\`${table}\` AS \`${alias}\`` : `\`${table}\``;
-                    const joinSql = hintClause ? `${baseJoinSql} ${hintClause}` : baseJoinSql;
+                    const joinSql = this.sqlDialect.formatJoinedTable(table, alias, hintClause);
                     const onClause = this.buildBooleanJoinedConditions(conditions, true, params);
                     sql += ` ${joinKind} JOIN ${joinSql}`;
                     if (onClause) {
