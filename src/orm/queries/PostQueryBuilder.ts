@@ -73,8 +73,8 @@ export class PostQueryBuilder<G extends OrmGenerics> extends ConditionBuilder<G>
             rowPlaceholders.push(`(${placeholders.join(', ')})`);
         }
 
-        let sql = `${verb} INTO \`${table}\` (
-            ${keys.map(k => `\`${this.trimTablePrefix(table, k)}\``).join(', ')}
+        let sql = `${this.sqlDialect.insertInto(verb, table)} (
+            ${this.sqlDialect.columnList(keys.map(k => this.trimTablePrefix(table, k)))}
          ) VALUES
             ${rowPlaceholders.join(',\n            ')}`;
 
@@ -85,9 +85,13 @@ export class PostQueryBuilder<G extends OrmGenerics> extends ConditionBuilder<G>
                 throw new Error(`Update data must be an array of keys to update, got: ${JSON.stringify(updateData)}`);
             }
 
-            const updateClause = updateData.map(k => `\`${k}\` = VALUES(\`${k}\`)`).join(', ');
-            sql += ` ON DUPLICATE KEY UPDATE ${updateClause}`;
+            const updateColumns = updateData.map(k => this.trimTablePrefix(table, String(k)));
+            const conflictColumns = (this.config.restModel.PRIMARY_SHORT ?? [])
+                .map(column => this.trimTablePrefix(table, String(column)));
+            sql += this.sqlDialect.upsertUpdateClause(updateColumns, conflictColumns);
         }
+
+        sql += this.sqlDialect.insertReturningClause();
 
         return {sql, params};
     }

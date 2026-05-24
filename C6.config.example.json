@@ -2,6 +2,7 @@
   "databases": [
     {
       "alias": "app",
+      "dialect": "mysql",
       "host": "127.0.0.1",
       "port": 3306,
       "user": "root",
@@ -12,6 +13,7 @@
     },
     {
       "alias": "billing",
+      "dialect": "mysql",
       "host": "10.0.0.12",
       "port": 3306,
       "user": "billing_user",
@@ -22,6 +24,7 @@
     },
     {
       "alias": "analytics",
+      "dialect": "mysql",
       "host": "analytics-db.internal",
       "port": 3306,
       "user": "analytics_user",

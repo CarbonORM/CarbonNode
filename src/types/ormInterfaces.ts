@@ -6,6 +6,7 @@ import {JoinType, OrderTerm, SQLComparisonOperator, SQLExpression} from "./mysql
 import type {CarbonReact, iStateAdapter} from "@carbonorm/carbonreact";
 import type {OrmGenerics} from "./ormGenerics";
 import {restOrm} from "../api/restOrm";
+import type {SqlDialect, SqlDialectName} from "../orm/dialects/SqlDialect";
 
 
 type RestOrmFactory = typeof restOrm<OrmGenerics<any>>;
@@ -222,8 +223,24 @@ export type iRestWebsocketPayload = {
 
 export type tWebsocketBroadcast = (payload: iRestWebsocketPayload) => void | Promise<void>;
 
+export interface iPostgresQueryResult<Row = any> {
+    rows?: Row[];
+    rowCount?: number | null;
+}
+
+export interface iPostgresClient {
+    query: (sql: string, values?: any[]) => Promise<iPostgresQueryResult> | iPostgresQueryResult;
+    release: () => void;
+}
+
+export interface iPostgresPool {
+    connect: () => Promise<iPostgresClient> | iPostgresClient;
+}
+
 export interface iDatabaseRuntimeOptions {
+    sqlDialect?: SqlDialectName | SqlDialect;
     mysqlPool?: Pool;
+    postgresPool?: iPostgresPool;
     axios?: AxiosInstance;
     restURL?: string;
     withCredentials?: boolean;
@@ -237,7 +254,7 @@ export interface iDatabaseRuntimeOptions {
     sqlQueryNormalizer?: (sql: string) => string;
 }
 
-export type iDatabaseRuntimeConfig = Pool | (iDatabaseRuntimeOptions & Record<string, any>);
+export type iDatabaseRuntimeConfig = Pool | iPostgresPool | (iDatabaseRuntimeOptions & Record<string, any>);
 
 export interface iRest<
     RestShortTableName extends string = any,
@@ -253,6 +270,7 @@ export interface iRest<
     reactBootstrap?: CarbonReact<any, any>;
     stateAdapter?: iStateAdapter<any>;
     requestMethod: iRestMethods;
+    sqlDialect?: SqlDialectName | SqlDialect;
     clearCache?: () => void;
     skipPrimaryCheck?: boolean;
     websocketBroadcast?: tWebsocketBroadcast;
@@ -262,6 +280,7 @@ export interface iRest<
     sqlQueryNormalizer?: (sql: string) => string;
     databases?: Record<string, iDatabaseRuntimeConfig>;
     defaultDatabase?: string;
+    postgresPool?: iPostgresPool;
 }
 
 export interface iConstraint {

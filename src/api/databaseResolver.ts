@@ -11,6 +11,7 @@ type iDatabaseSelectableConfig = {
     databases?: Record<string, iDatabaseRuntimeConfig>;
     defaultDatabase?: string;
     mysqlPool?: Pool;
+    postgresPool?: any;
     axios?: any;
     restURL?: string;
     withCredentials?: boolean;
@@ -24,6 +25,9 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 
 const isMysqlPoolLike = (value: unknown): value is Pool =>
     !!value && typeof (value as Pool).getConnection === "function";
+
+const isPostgresPoolLike = (value: unknown): boolean =>
+    !!value && typeof (value as { connect?: unknown }).connect === "function";
 
 const normalizeDatabaseKey = (raw: unknown, origin: string): string => {
     if (typeof raw !== "string") {
@@ -83,12 +87,23 @@ const mergeDatabaseEntry = <
         return {
             ...baseConfig,
             mysqlPool: entry,
+            postgresPool: undefined,
+            axios: undefined,
+        };
+    }
+
+    if (isPostgresPoolLike(entry)) {
+        return {
+            ...baseConfig,
+            mysqlPool: undefined,
+            postgresPool: entry,
+            sqlDialect: "postgresql",
             axios: undefined,
         };
     }
 
     if (!isRecord(entry)) {
-        throw new Error("Database configuration entries must be a mysql pool or a configuration object.");
+        throw new Error("Database configuration entries must be a mysql pool, postgres pool, or a configuration object.");
     }
 
     const merged = {
@@ -97,14 +112,22 @@ const mergeDatabaseEntry = <
     } as T;
 
     const hasMysqlField = hasOwn(entry, "mysqlPool");
+    const hasPostgresField = hasOwn(entry, "postgresPool");
     const hasAxiosField = hasOwn(entry, "axios");
     const mysqlPool = (entry as Record<string, unknown>).mysqlPool;
+    const postgresPool = (entry as Record<string, unknown>).postgresPool;
     const axios = (entry as Record<string, unknown>).axios;
 
-    if (hasMysqlField && !hasAxiosField && mysqlPool) {
+    if (hasMysqlField && !hasPostgresField && !hasAxiosField && mysqlPool) {
         merged.axios = undefined;
-    } else if (hasAxiosField && !hasMysqlField && axios) {
+        merged.postgresPool = undefined;
+    } else if (hasPostgresField && !hasMysqlField && !hasAxiosField && postgresPool) {
+        merged.axios = undefined;
         merged.mysqlPool = undefined;
+        (merged as any).sqlDialect = (merged as any).sqlDialect ?? "postgresql";
+    } else if (hasAxiosField && !hasMysqlField && !hasPostgresField && axios) {
+        merged.mysqlPool = undefined;
+        merged.postgresPool = undefined;
     }
 
     return merged;

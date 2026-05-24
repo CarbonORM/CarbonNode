@@ -21,11 +21,14 @@ type iDatabaseConnection = {
     pass: string;
 };
 
+type tDatabaseDialect = 'mysql' | 'postgresql';
+
 type iScopedDatabaseAliasDefinition = {
     DATABASE_KEY: string;
     DATABASE_NAME: string;
     DATABASE_KEY_IDENTIFIER: string;
     DATABASE_KEY_PASCAL_CASE: string;
+    DIALECT: tDatabaseDialect;
 };
 
 type iScopedDatabaseDefinition = iScopedDatabaseAliasDefinition & {
@@ -41,6 +44,7 @@ type iGeneratorDatabaseConfigEntry = {
     passEnv?: string;
     dbname?: string;
     dbnames?: string[];
+    dialect?: tDatabaseDialect;
 };
 
 type iGeneratorConfig = {
@@ -142,6 +146,15 @@ const parseConfigDbNames = (entry: iGeneratorDatabaseConfigEntry): string[] => {
     throw new Error(`Database alias '${entry.alias}' must provide 'dbname' or a non-empty 'dbnames' array.`);
 };
 
+const parseConfigDialect = (entry: iGeneratorDatabaseConfigEntry): tDatabaseDialect => {
+    const raw = String(entry.dialect ?? 'mysql').trim().toLowerCase();
+    if (raw === 'mysql' || raw === 'postgresql') {
+        return raw;
+    }
+
+    throw new Error(`Database alias '${entry.alias}' has unsupported dialect '${entry.dialect}'. Use 'mysql' or 'postgresql'.`);
+};
+
 const aliasForConfigDbName = (
     baseAlias: string,
     dbName: string,
@@ -164,9 +177,10 @@ const buildScopedDefinitionsFromConfig = (
     const scopedDefinitions: iScopedDatabaseDefinition[] = [];
     for (const entry of config.databases) {
         const baseAlias = ensureString(entry.alias, "databases[].alias");
+        const dialect = parseConfigDialect(entry);
         const host = ensureString(entry.host, `databases[${baseAlias}].host`);
         const user = ensureString(entry.user, `databases[${baseAlias}].user`);
-        const port = String(entry.port ?? "3306").trim();
+        const port = String(entry.port ?? (dialect === 'postgresql' ? "5432" : "3306")).trim();
         if (port.length === 0) {
             throw new Error(`databases[${baseAlias}].port must be non-empty when provided.`);
         }
@@ -181,6 +195,7 @@ const buildScopedDefinitionsFromConfig = (
                 DATABASE_NAME: dbName,
                 DATABASE_KEY_IDENTIFIER: aliasIdentifier,
                 DATABASE_KEY_PASCAL_CASE: toPascalCaseFromIdentifier(aliasIdentifier),
+                DIALECT: dialect,
                 CONNECTION: {
                     host,
                     port,
@@ -256,8 +271,13 @@ const buildConfigInteractively = async (): Promise<iGeneratorConfig> => {
 
         while (true) {
             const alias = ensureString(await askQuestion(rl, "Database alias (e.g. app): "), "alias");
+            const dialect = parseConfigDialect({
+                alias,
+                dialect: (await askQuestion(rl, "Dialect (mysql/postgresql, default mysql): ")) || "mysql",
+            } as iGeneratorDatabaseConfigEntry);
             const host = ensureString(await askQuestion(rl, "Host (e.g. 127.0.0.1): "), "host");
-            const port = (await askQuestion(rl, "Port (default 3306): ")) || "3306";
+            const defaultPort = dialect === "postgresql" ? "5432" : "3306";
+            const port = (await askQuestion(rl, `Port (default ${defaultPort}): `)) || defaultPort;
             const user = ensureString(await askQuestion(rl, "User: "), "user");
             const pass = ensureString(await askQuestion(rl, "Password: "), "pass");
             const dbnamesRaw = ensureString(
@@ -267,6 +287,7 @@ const buildConfigInteractively = async (): Promise<iGeneratorConfig> => {
 
             databases.push({
                 alias,
+                dialect,
                 host,
                 port,
                 user,
@@ -569,6 +590,150 @@ class MySQLDump {
 
 }
 
+class PostgreSQLDump {
+    static PgDump(
+        pgDump: string = 'pg_dump',
+        outputFile = '',
+        databaseName: string = MySQLDump.DB_NAME,
+        connection: iDatabaseConnection = {
+            user: MySQLDump.DB_USER,
+            pass: MySQLDump.DB_PASS,
+            host: MySQLDump.DB_HOST,
+            port: MySQLDump.DB_PORT,
+        },
+    ) {
+        if (outputFile === '') {
+            outputFile = path.join(MySQLDump.OUTPUT_DIR, 'C6.pg_dump.sql');
+        }
+
+        const tempOutputFile = `${outputFile}.tmp`;
+        const env = {
+            ...process.env,
+            PGPASSWORD: connection.pass,
+        };
+
+        try {
+            const args = [
+                '--schema-only',
+                '--no-owner',
+                '--no-privileges',
+                '--host', connection.host,
+                '--port', connection.port,
+                '--username', connection.user,
+                '--dbname', databaseName,
+                '--file', tempOutputFile,
+            ];
+            execFileSync(pgDump, args, { encoding: 'utf-8', env });
+            if (fs.existsSync(tempOutputFile)) {
+                fs.renameSync(tempOutputFile, outputFile);
+            }
+        } catch (error) {
+            if (fs.existsSync(tempOutputFile)) {
+                fs.unlinkSync(tempOutputFile);
+            }
+            if (fs.existsSync(outputFile)) {
+                console.warn(`[generateRestBindings] pg_dump for '${databaseName}' failed. Reusing existing dump file at ${outputFile}.`);
+            } else {
+                console.warn(`[generateRestBindings] pg_dump output not found at ${outputFile}. If running in CI/no-DB environment, ensure a prebuilt dump file exists at this path.`);
+            }
+        }
+
+        return outputFile;
+    }
+
+    static LoadInformationSchema(
+        databaseName: string = MySQLDump.DB_NAME,
+        connection: iDatabaseConnection = {
+            user: MySQLDump.DB_USER,
+            pass: MySQLDump.DB_PASS,
+            host: MySQLDump.DB_HOST,
+            port: MySQLDump.DB_PORT,
+        },
+    ): iSchemaMetadata {
+        const query = `
+            SELECT
+                c.table_name,
+                CASE WHEN t.table_type = 'VIEW' THEN 'VIEW' ELSE 'BASE TABLE' END AS table_type,
+                c.column_name,
+                c.data_type,
+                COALESCE(c.udt_name, c.data_type) AS column_type,
+                c.is_nullable,
+                CASE
+                    WHEN c.is_identity = 'YES' THEN 'auto_increment'
+                    WHEN c.column_default LIKE 'nextval(%' THEN 'auto_increment'
+                    ELSE ''
+                END AS extra
+            FROM information_schema.columns c
+            JOIN information_schema.tables t
+                ON t.table_schema = c.table_schema
+                AND t.table_name = c.table_name
+            WHERE c.table_schema = 'public'
+            ORDER BY c.table_name, c.ordinal_position
+        `;
+
+        try {
+            const stdout = execFileSync(
+                'psql',
+                [
+                    '--host', connection.host,
+                    '--port', connection.port,
+                    '--username', connection.user,
+                    '--dbname', databaseName,
+                    '--tuples-only',
+                    '--no-align',
+                    '--field-separator', '\t',
+                    '--command', query,
+                ],
+                {
+                    encoding: 'utf-8',
+                    env: {
+                        ...process.env,
+                        PGPASSWORD: connection.pass,
+                    },
+                },
+            );
+
+            const schemaMetadata: iSchemaMetadata = {};
+            for (const line of stdout.split(/\r?\n/)) {
+                if (!line.trim()) continue;
+                const [
+                    tableName,
+                    tableType,
+                    columnName,
+                    dataType,
+                    columnType,
+                    isNullable,
+                    extra,
+                ] = line.split('\t');
+
+                if (!tableName || !columnName) continue;
+
+                if (!schemaMetadata[tableName]) {
+                    schemaMetadata[tableName] = {
+                        TABLE_TYPE: tableType || 'BASE TABLE',
+                        COLUMNS: [],
+                    };
+                }
+
+                schemaMetadata[tableName].COLUMNS.push({
+                    TABLE_NAME: tableName,
+                    TABLE_TYPE: tableType || 'BASE TABLE',
+                    COLUMN_NAME: columnName,
+                    DATA_TYPE: dataType || '',
+                    COLUMN_TYPE: columnType || dataType || '',
+                    IS_NULLABLE: isNullable || 'YES',
+                    EXTRA: extra || '',
+                });
+            }
+
+            return schemaMetadata;
+        } catch (error) {
+            console.warn(`[generateRestBindings] PostgreSQL information_schema lookup for '${databaseName}' failed. Falling back to dump-derived metadata where possible.`);
+            return {};
+        }
+    }
+}
+
 let pathRuntimeReference = '';
 
 /*type ColumnInfo = {
@@ -614,11 +779,13 @@ function determineTypeScriptType(mysqlType: string, enumValues?: string[]): stri
         // String & Temporal
         case 'char':
         case 'varchar':
+        case 'character':
         case 'text':
         case 'tinytext':
         case 'mediumtext':
         case 'longtext':
         case 'set':
+        case 'uuid':
             return 'string';
 
         // Numeric
@@ -627,6 +794,8 @@ function determineTypeScriptType(mysqlType: string, enumValues?: string[]): stri
         case 'mediumint':
         case 'int':
         case 'integer':
+        case 'serial':
+        case 'bigserial':
         case 'bigint':
         case 'decimal':
         case 'dec':
@@ -643,6 +812,7 @@ function determineTypeScriptType(mysqlType: string, enumValues?: string[]): stri
 
         // JSON
         case 'json':
+        case 'jsonb':
             return 'any';
 
         // GeoJSON
@@ -707,6 +877,119 @@ const parseSQLToTypeScript = (sql: string, schemaMetadata: iSchemaMetadata = {})
     } = {};
 
     let references: foreignKeyInfo[] = [];
+
+    const normalizeSqlIdentifier = (identifier: string): string =>
+        identifier.trim().replace(/^["`]|["`]$/g, '');
+
+    const normalizeQualifiedSqlIdentifier = (identifier: string): string => {
+        const parts = identifier
+            .split('.')
+            .map(part => normalizeSqlIdentifier(part))
+            .filter(Boolean);
+
+        return parts[parts.length - 1] || normalizeSqlIdentifier(identifier);
+    };
+
+    const normalizeSqlIdentifierList = (identifierList: string): string[] =>
+        identifierList
+            .split(',')
+            .map(identifier => normalizeQualifiedSqlIdentifier(identifier.trim()))
+            .filter(Boolean);
+
+    const splitSqlDefinitionList = (definitionList: string): string[] => {
+        const definitions: string[] = [];
+        let current = '';
+        let depth = 0;
+        let quote: string | null = null;
+
+        for (let i = 0; i < definitionList.length; i++) {
+            const char = definitionList[i];
+            const previous = definitionList[i - 1];
+
+            if ((char === "'" || char === '"') && previous !== '\\') {
+                quote = quote === char ? null : quote ?? char;
+            }
+
+            if (!quote) {
+                if (char === '(') depth++;
+                if (char === ')') depth = Math.max(0, depth - 1);
+                if (char === ',' && depth === 0) {
+                    if (current.trim()) definitions.push(current.trim());
+                    current = '';
+                    continue;
+                }
+            }
+
+            current += char;
+        }
+
+        if (current.trim()) definitions.push(current.trim());
+        return definitions;
+    };
+
+    const normalizePostgresColumnType = (rawType: string): { type: string; length: string } => {
+        const cleanedType = rawType
+            .replace(/\s+COLLATE\s+("[^"]+"|\S+)/i, '')
+            .trim();
+        const lengthMatch = cleanedType.match(/\(([^)]+)\)/);
+        const length = lengthMatch ? lengthMatch[1] : '';
+        const withoutLength = cleanedType.replace(/\(.+?\)/, '').toLowerCase().replace(/\s+/g, ' ').trim();
+
+        if (withoutLength === 'character varying') return { type: 'varchar', length };
+        if (withoutLength === 'character') return { type: 'char', length };
+        if (withoutLength === 'timestamp without time zone' || withoutLength === 'timestamp with time zone') return { type: 'timestamp', length };
+        if (withoutLength === 'time without time zone' || withoutLength === 'time with time zone') return { type: 'time', length };
+        if (withoutLength === 'double precision') return { type: 'double', length };
+        if (withoutLength === 'integer') return { type: 'int', length };
+
+        return {
+            type: withoutLength.split(' ')[0] || 'text',
+            length,
+        };
+    };
+
+    const postgresPrimaryKeysByTable = new Map<string, string[]>();
+    const rememberPostgresPrimaryKeys = (tableName: string, columns: string[]) => {
+        if (columns.length > 0) {
+            postgresPrimaryKeysByTable.set(tableName, columns);
+        }
+    };
+
+    const postgresIdentityColumns = new Set<string>();
+    const postgresAlterIdentityRegex = /ALTER\s+TABLE\s+(?:ONLY\s+)?((?:"[^"]+"|[A-Za-z_][A-Za-z0-9_$]*)(?:\.(?:"[^"]+"|[A-Za-z_][A-Za-z0-9_$]*))?)\s+ALTER\s+COLUMN\s+("[^"]+"|[A-Za-z_][A-Za-z0-9_$]*)\s+ADD\s+GENERATED\s+(?:ALWAYS|BY\s+DEFAULT)\s+AS\s+IDENTITY/gim;
+    let postgresAlterIdentityMatch: RegExpExecArray | null;
+    while ((postgresAlterIdentityMatch = postgresAlterIdentityRegex.exec(sql))) {
+        postgresIdentityColumns.add(
+            `${normalizeQualifiedSqlIdentifier(postgresAlterIdentityMatch[1])}.${normalizeSqlIdentifier(postgresAlterIdentityMatch[2])}`,
+        );
+    }
+
+    const postgresAlterPrimaryKeyRegex = /ALTER\s+TABLE\s+(?:ONLY\s+)?((?:"[^"]+"|[A-Za-z_][A-Za-z0-9_$]*)(?:\.(?:"[^"]+"|[A-Za-z_][A-Za-z0-9_$]*))?)\s+ADD\s+CONSTRAINT\s+(?:"[^"]+"|[A-Za-z_][A-Za-z0-9_$]*)\s+PRIMARY\s+KEY\s*\(([^)]+)\)/gim;
+    let postgresAlterPrimaryKeyMatch: RegExpExecArray | null;
+    while ((postgresAlterPrimaryKeyMatch = postgresAlterPrimaryKeyRegex.exec(sql))) {
+        rememberPostgresPrimaryKeys(
+            normalizeQualifiedSqlIdentifier(postgresAlterPrimaryKeyMatch[1]),
+            normalizeSqlIdentifierList(postgresAlterPrimaryKeyMatch[2]),
+        );
+    }
+
+    const postgresAlterForeignKeyRegex = /ALTER\s+TABLE\s+(?:ONLY\s+)?((?:"[^"]+"|[A-Za-z_][A-Za-z0-9_$]*)(?:\.(?:"[^"]+"|[A-Za-z_][A-Za-z0-9_$]*))?)\s+ADD\s+CONSTRAINT\s+("[^"]+"|[A-Za-z_][A-Za-z0-9_$]*)\s+FOREIGN\s+KEY\s*\(([^)]+)\)\s+REFERENCES\s+((?:"[^"]+"|[A-Za-z_][A-Za-z0-9_$]*)(?:\.(?:"[^"]+"|[A-Za-z_][A-Za-z0-9_$]*))?)\s*\(([^)]+)\)(?:\s+ON\s+DELETE\s+([A-Z ]+?))?(?:\s+ON\s+UPDATE\s+([A-Z ]+?))?(?:;|\s+NOT\s+VALID|\s*$)/gim;
+    let postgresAlterForeignKeyMatch: RegExpExecArray | null;
+    while ((postgresAlterForeignKeyMatch = postgresAlterForeignKeyRegex.exec(sql))) {
+        const localColumns = normalizeSqlIdentifierList(postgresAlterForeignKeyMatch[3]);
+        const foreignColumns = normalizeSqlIdentifierList(postgresAlterForeignKeyMatch[5]);
+
+        localColumns.forEach((localColumn, index) => {
+            references.push({
+                TABLE: normalizeQualifiedSqlIdentifier(postgresAlterForeignKeyMatch![1]),
+                CONSTRAINT: normalizeSqlIdentifier(postgresAlterForeignKeyMatch![2]),
+                FOREIGN_KEY: localColumn,
+                REFERENCES: `${normalizeQualifiedSqlIdentifier(postgresAlterForeignKeyMatch![4])}.${foreignColumns[index] ?? foreignColumns[0]}`,
+                ON_DELETE: postgresAlterForeignKeyMatch![6]?.trim() || '',
+                ON_UPDATE: postgresAlterForeignKeyMatch![7]?.trim() || '',
+            });
+        });
+    }
 
     const columnInfoFromMetadata = (column: iSchemaColumnMetadata) => {
         const fullType = (column.COLUMN_TYPE || column.DATA_TYPE || 'text').trim();
@@ -893,6 +1176,121 @@ const parseSQLToTypeScript = (sql: string, schemaMetadata: iSchemaMetadata = {})
 
         tableData[tableName] = tsModel;
 
+    }
+
+    const postgresTableMatches = sql.matchAll(/CREATE\s+TABLE\s+((?:"[^"]+"|[A-Za-z_][A-Za-z0-9_$]*)(?:\.(?:"[^"]+"|[A-Za-z_][A-Za-z0-9_$]*))?)\s*\(([\s\S]*?)\);/gim);
+
+    for (const tableMatch of postgresTableMatches) {
+        const tableName = normalizeQualifiedSqlIdentifier(tableMatch[1]);
+        if (tableData[tableName]) continue;
+
+        const columnDefinitions = tableMatch[2];
+        const columns = {};
+
+        for (const line of splitSqlDefinitionList(columnDefinitions)) {
+            if (/^(CONSTRAINT|PRIMARY\s+KEY|FOREIGN\s+KEY|UNIQUE|CHECK|EXCLUDE)\b/i.test(line)) {
+                const inlinePrimaryKeyMatch = line.match(/PRIMARY\s+KEY\s*\(([^)]+)\)/i);
+                if (inlinePrimaryKeyMatch) {
+                    rememberPostgresPrimaryKeys(tableName, normalizeSqlIdentifierList(inlinePrimaryKeyMatch[1]));
+                }
+                continue;
+            }
+
+            const match = line.match(/^\s*("[^"]+"|[A-Za-z_][A-Za-z0-9_$]*)\s+([\s\S]+?)\s*$/);
+            if (!match) continue;
+
+            const name = normalizeSqlIdentifier(match[1]);
+            const rest = match[2].replace(/,$/, '').trim();
+            const constraintMatch = rest.match(/\s+(?:CONSTRAINT\s+\S+\s+)?(?:NOT\s+NULL|NULL|DEFAULT\b|PRIMARY\s+KEY\b|REFERENCES\b|CHECK\b|GENERATED\b|COLLATE\b)/i);
+            const fullTypeRaw = (constraintMatch ? rest.slice(0, constraintMatch.index) : rest).trim();
+            const { type, length } = normalizePostgresColumnType(fullTypeRaw);
+            const defaultMatch = rest.match(/\bDEFAULT\s+((?:'[^']*')|(?:"[^"]*")|[^,\s]+(?:\([^)]*\))?)/i);
+
+            columns[name] = {
+                type,
+                length,
+                srid: null,
+                enumValues: null,
+                notNull: /\bNOT\s+NULL\b/i.test(rest) || /\bPRIMARY\s+KEY\b/i.test(rest),
+                autoIncrement: /^(?:serial|bigserial|smallserial)$/i.test(type)
+                    || /\bnextval\s*\(/i.test(rest)
+                    || /\bGENERATED\s+(?:ALWAYS|BY\s+DEFAULT)\s+AS\s+IDENTITY\b/i.test(rest)
+                    || postgresIdentityColumns.has(`${tableName}.${name}`),
+                defaultValue: defaultMatch ? defaultMatch[1] : '',
+            };
+
+            if (/\bPRIMARY\s+KEY\b/i.test(rest)) {
+                rememberPostgresPrimaryKeys(tableName, [name]);
+            }
+        }
+
+        const primaryKeys = postgresPrimaryKeysByTable.get(tableName) ?? [];
+        const primaryKeysType = primaryKeys.length > 0
+            ? primaryKeys.map(pk => `'${pk}'`).join(' | ')
+            : 'never';
+
+        let REACT_IMPORT: false | string = false, CARBON_REACT_INSTANCE: false | string = false;
+
+        if (argMap['--react']) {
+            const reactArgSplit = argMap['--react'].split(';')
+            if (reactArgSplit.length !== 2) {
+                console.error("React requires two arguments, the import and the carbon react instance statement. Example: --react 'import CustomCarbonReactApplication from \"src/CustomCarbonReactApplication.tsx\"; CustomCarbonReactApplication.instance'");
+                process.exit(1);
+            }
+            [REACT_IMPORT, CARBON_REACT_INSTANCE] = reactArgSplit;
+        }
+
+        const tsModel = {
+            RELATIVE_OUTPUT_DIR: pathRuntimeReference,
+            TABLE_NAME: tableName,
+            RELATION_TYPE: 'TABLE' as const,
+            READ_ONLY: false,
+            TABLE_DEFINITION: tableMatch[0].replace(/\*\//g, '* /'),
+            TABLE_CONSTRAINT: references,
+            REST_URL_EXPRESSION: argMap['--restUrlExpression'] || '"/rest/"',
+            TABLE_NAME_SHORT: tableName.replace(MySQLDump.DB_PREFIX, ''),
+            TABLE_NAME_LOWER: tableName.toLowerCase(),
+            TABLE_NAME_UPPER: tableName.toUpperCase(),
+            TABLE_NAME_PASCAL_CASE: tableName.split('_').map(capitalizeFirstLetter).join('_'),
+            TABLE_NAME_SHORT_PASCAL_CASE: tableName.replace(MySQLDump.DB_PREFIX, '').split('_').map(capitalizeFirstLetter).join('_'),
+            PRIMARY: primaryKeys.map(pk => `${tableName}.${pk}`),
+            PRIMARY_SHORT: primaryKeys,
+            PRIMARY_KEYS_TYPE: primaryKeysType,
+            COLUMNS: {},
+            COLUMNS_UPPERCASE: {},
+            TYPE_VALIDATION: {},
+            REGEX_VALIDATION: {},
+            TABLE_REFERENCES: {},
+            TABLE_REFERENCED_BY: {},
+            HAS_GEOJSON_TYPES: false,
+            REACT_IMPORT: REACT_IMPORT,
+            CARBON_REACT_INSTANCE: CARBON_REACT_INSTANCE,
+        };
+
+        for (const colName in columns) {
+            tsModel.COLUMNS[`${tableName}.${colName}`] = colName;
+            tsModel.COLUMNS_UPPERCASE[toConstantIdentifier(colName)] = tableName + '.' + colName;
+
+            const typescript_type = determineTypeScriptType(columns[colName].type.toLowerCase(), columns[colName].enumValues);
+
+            if (typescript_type.includes('GeoJSON.')) {
+                tsModel.HAS_GEOJSON_TYPES = true;
+            }
+
+            tsModel.TYPE_VALIDATION[`${tableName}.${colName}`] = {
+                COLUMN_NAME: colName,
+                MYSQL_TYPE: columns[colName].type.toLowerCase(),
+                TYPESCRIPT_TYPE: typescript_type,
+                TYPESCRIPT_TYPE_IS_STRING: typescript_type === 'string' || typescript_type.includes("'"),
+                TYPESCRIPT_TYPE_IS_NUMBER: 'number' === typescript_type,
+                MAX_LENGTH: columns[colName].length,
+                AUTO_INCREMENT: columns[colName].autoIncrement,
+                NOT_NULL: columns[colName].notNull,
+                SKIP_COLUMN_IN_POST: !columns[colName].notNull && !columns[colName].defaultValue,
+            };
+        }
+
+        tableData[tableName] = tsModel;
     }
 
     const viewDefinitions = new Map<string, string>();
@@ -1346,16 +1744,23 @@ const main = async () => {
     createDirIfNotExists(MySQLDump.OUTPUT_DIR);
     pathRuntimeReference = MySQLDump.RELATIVE_OUTPUT_DIR.replace(/(^\/(src\/)?)|(\/+$)/g, '');
 
-    const dumpFileLocation = MySQLDump.MySQLDump(
-        'mysqldump',
-        false,
-        true,
-        '',
-        '',
-        '',
-        primaryDefinition.DATABASE_NAME,
-        primaryDefinition.CONNECTION,
-    );
+    const dumpFileLocation = primaryDefinition.DIALECT === 'postgresql'
+        ? PostgreSQLDump.PgDump(
+            'pg_dump',
+            '',
+            primaryDefinition.DATABASE_NAME,
+            primaryDefinition.CONNECTION,
+        )
+        : MySQLDump.MySQLDump(
+            'mysqldump',
+            false,
+            true,
+            '',
+            '',
+            '',
+            primaryDefinition.DATABASE_NAME,
+            primaryDefinition.CONNECTION,
+        );
 
     if (!fs.existsSync(dumpFileLocation)) {
         throw new Error(`[generateRestBindings] Missing base dump at ${dumpFileLocation}.`);
@@ -1363,10 +1768,15 @@ const main = async () => {
 
     // use dumpFileLocation to get sql
     const sql = fs.readFileSync(dumpFileLocation, 'utf-8');
-    const schemaMetadata = MySQLDump.LoadInformationSchema(
-        primaryDefinition.DATABASE_NAME,
-        primaryDefinition.CONNECTION,
-    );
+    const schemaMetadata = primaryDefinition.DIALECT === 'postgresql'
+        ? PostgreSQLDump.LoadInformationSchema(
+            primaryDefinition.DATABASE_NAME,
+            primaryDefinition.CONNECTION,
+        )
+        : MySQLDump.LoadInformationSchema(
+            primaryDefinition.DATABASE_NAME,
+            primaryDefinition.CONNECTION,
+        );
     const tableData: any = parseSQLToTypeScript(sql, schemaMetadata);
 
     const scopedDatabaseSchemas = scopedDefinitions.map((databaseDefinition) => {
@@ -1391,19 +1801,28 @@ const main = async () => {
 
         const scopedDumpFile = path.join(
             MySQLDump.OUTPUT_DIR,
-            `C6.${databaseDefinition.DATABASE_KEY_IDENTIFIER}.mysqldump.sql`,
+            databaseDefinition.DIALECT === 'postgresql'
+                ? `C6.${databaseDefinition.DATABASE_KEY_IDENTIFIER}.pg_dump.sql`
+                : `C6.${databaseDefinition.DATABASE_KEY_IDENTIFIER}.mysqldump.sql`,
         );
-        const scopedDumpPath = MySQLDump.MySQLDump(
-            'mysqldump',
-            false,
-            true,
-            scopedDumpFile,
-            '',
-            '',
-            databaseDefinition.DATABASE_NAME,
-            databaseDefinition.CONNECTION,
-            databaseDefinition.DATABASE_KEY_IDENTIFIER,
-        );
+        const scopedDumpPath = databaseDefinition.DIALECT === 'postgresql'
+            ? PostgreSQLDump.PgDump(
+                'pg_dump',
+                scopedDumpFile,
+                databaseDefinition.DATABASE_NAME,
+                databaseDefinition.CONNECTION,
+            )
+            : MySQLDump.MySQLDump(
+                'mysqldump',
+                false,
+                true,
+                scopedDumpFile,
+                '',
+                '',
+                databaseDefinition.DATABASE_NAME,
+                databaseDefinition.CONNECTION,
+                databaseDefinition.DATABASE_KEY_IDENTIFIER,
+            );
 
         if (!fs.existsSync(scopedDumpPath)) {
             throw new Error(
@@ -1412,11 +1831,16 @@ const main = async () => {
         }
 
         const scopedSql = fs.readFileSync(scopedDumpPath, 'utf-8');
-        const scopedSchemaMetadata = MySQLDump.LoadInformationSchema(
-            databaseDefinition.DATABASE_NAME,
-            databaseDefinition.CONNECTION,
-            databaseDefinition.DATABASE_KEY_IDENTIFIER,
-        );
+        const scopedSchemaMetadata = databaseDefinition.DIALECT === 'postgresql'
+            ? PostgreSQLDump.LoadInformationSchema(
+                databaseDefinition.DATABASE_NAME,
+                databaseDefinition.CONNECTION,
+            )
+            : MySQLDump.LoadInformationSchema(
+                databaseDefinition.DATABASE_NAME,
+                databaseDefinition.CONNECTION,
+                databaseDefinition.DATABASE_KEY_IDENTIFIER,
+            );
         const scopedTableData = parseSQLToTypeScript(scopedSql, scopedSchemaMetadata);
 
         return {

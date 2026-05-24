@@ -25,6 +25,7 @@ export * from "./orm/builders/ConditionBuilder";
 export * from "./orm/builders/ExpressionSerializer";
 export * from "./orm/builders/JoinBuilder";
 export * from "./orm/builders/PaginationBuilder";
+export * from "./orm/dialects/SqlDialect";
 export * from "./orm/queries/DeleteQueryBuilder";
 export * from "./orm/queries/PostQueryBuilder";
 export * from "./orm/queries/SelectQueryBuilder";

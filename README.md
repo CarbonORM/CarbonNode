@@ -9,7 +9,7 @@
 
 # CarbonNode
 
-CarbonNode is a typed MySQL ORM runtime plus code generator for REST bindings.
+CarbonNode is a typed SQL ORM runtime plus code generator for REST bindings, with MySQL support and PostgreSQL runtime/generator support.
 
 It is built for:
 
@@ -107,7 +107,7 @@ Each `dbnames` entry creates a generated scoped namespace. If one entry has mult
 
 Example above yields `C6.analytics` and `C6.analytics_app`.
 
-Starter template: `./rest.config.example.json`.
+Starter template: `./C6.config.example.json`.
 TS starter template: `./C6.config.example.ts`.
 
 Beginner-friendly TS setup (recommended when you want env/vault secrets):
@@ -126,7 +126,7 @@ export BILLING_DB_PASS='replace-me'
 export ANALYTICS_DB_PASS='replace-me'
 ```
 
-3. Open `C6.config.ts` and update `host`, `user`, `dbnames`, and `primaryAlias` for your databases.
+3. Open `C6.config.ts` and update `host`, `user`, `dbnames`, `primaryAlias`, and `dialect` for your databases. Use `dialect: "postgresql"` for PostgreSQL targets; omitted dialects default to MySQL.
 
 4. Generate bindings.
 
@@ -161,6 +161,23 @@ GLOBAL_REST_PARAMETERS.mysqlPool = mysql.createPool({
   database: "sakila",
 });
 ```
+
+PostgreSQL runtime execution is available by providing a `pg` pool and selecting the PostgreSQL SQL dialect:
+
+```ts
+import { Pool } from "pg";
+import { GLOBAL_REST_PARAMETERS } from "./shared/rest/C6";
+
+GLOBAL_REST_PARAMETERS.postgresPool = new Pool({
+  host: "127.0.0.1",
+  user: "postgres",
+  password: "password",
+  database: "app",
+});
+GLOBAL_REST_PARAMETERS.sqlDialect = "postgresql";
+```
+
+Current PostgreSQL support covers runtime SQL building/execution for the canonical expression grammar, basic CRUD shapes, `RETURNING *` for inserts, `ON CONFLICT` upserts when primary-key metadata is available, and inner-join deletes via `DELETE ... USING`. MySQL-only forms such as `REPLACE` and MySQL index hints fail explicitly; non-inner or derived-table delete joins should use a `WHERE` subselect for now. Binding generation supports `dialect: "postgresql"` in `C6.config.*`, uses `pg_dump`/`psql` when available, and can reuse a prebuilt `C6.pg_dump.sql` in CI or no-database environments.
 
 #### SQL executor mode with multiple databases (request-scoped)
 
@@ -263,12 +280,12 @@ const result = await Actor.Get({
 ```mermaid
 flowchart LR
     Client["App Code\nActor.Get(...)"] --> Request["restRequest facade"]
-    Request -->|"mysqlPool configured"| SQL["SqlExecutor"] --> DB[("MySQL")]
-    Request -->|"no mysqlPool"| HTTP["HttpExecutor"] --> REST["/api/rest/:table"]
+    Request -->|"mysqlPool/postgresPool configured"| SQL["SqlExecutor"] --> DB[("SQL Database")]
+    Request -->|"no SQL pool"| HTTP["HttpExecutor"] --> REST["/api/rest/:table"]
     REST --> Express["ExpressHandler"] --> SQL
 ```
 
-`restRequest` chooses SQL executor when `mysqlPool` is present; otherwise it uses HTTP executor.
+`restRequest` chooses SQL executor when `mysqlPool` or `postgresPool` is present; otherwise it uses HTTP executor.
 
 ## C6 + CarbonReact State Management
 
@@ -503,10 +520,10 @@ Recommendation: use generated bindings + axios executor, not manual URL construc
 - `C6.generated/views/*.ts` (one generated read-only view module per SQL view, with `Get` only)
 - `C6.generated/scoped.ts` (scoped database bindings)
 - `C6.test.ts` (generated test suite)
-- `C6.mysqldump.sql`
+- `C6.mysqldump.sql` for MySQL generation, or `C6.pg_dump.sql` for PostgreSQL generation
 - `C6.mysqldump.json`
-- `C6.mysql.cnf`
-- `C6.<databaseKey>.mysqldump.sql` for each resolved config database alias
+- `C6.mysql.cnf` for MySQL generation
+- `C6.<databaseKey>.mysqldump.sql` or `C6.<databaseKey>.pg_dump.sql` for each resolved non-primary config database alias
 
 `C6.ts` re-exports the selected public symbols from `C6.generated/**`, so existing imports such as
 `import { C6, Actor, type iActor, TABLES } from "./rest/C6"` remain the public contract. Auto-barrel
@@ -716,6 +733,7 @@ Flag migration:
 - `--port` -> `databases[].port`
 - `--dbname` -> `databases[].dbname` / `databases[].dbnames[]`
 - `--databases` (legacy alias map) -> explicit `databases[]` entries in config
+- PostgreSQL targets should also set `databases[].dialect` to `"postgresql"`.
 
 Behavior changes:
 

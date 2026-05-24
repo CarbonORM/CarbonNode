@@ -33,6 +33,7 @@ export default async () => ({
     databases: [
         {
             alias: "app",
+            dialect: "mysql",
             host: "127.0.0.1",
             port: 3306,
             user: "root",
@@ -44,6 +45,7 @@ export default async () => ({
         },
         {
             alias: "billing",
+            dialect: "mysql",
             host: "10.0.0.12",
             port: 3306,
             user: "billing_user",
@@ -55,6 +57,7 @@ export default async () => ({
         },
         {
             alias: "analytics",
+            dialect: "mysql",
             host: "analytics-db.internal",
             port: 3306,
             user: "analytics_user",
@@ -64,6 +67,19 @@ export default async () => ({
             }),
             dbnames: ["analytics", "app"],
         },
+        // PostgreSQL example:
+        // {
+        //     alias: "postgres_app",
+        //     dialect: "postgresql",
+        //     host: "127.0.0.1",
+        //     port: 5432,
+        //     user: "postgres",
+        //     pass: await resolveDbPassword({
+        //         passEnv: "POSTGRES_APP_DB_PASS",
+        //         // vaultPath: "kv/data/postgres_app/postgresql",
+        //     }),
+        //     dbnames: ["postgres_app"],
+        // },
     ],
     primaryAlias: "app",
     prefix: "",

@@ -25,7 +25,7 @@ export class SelectQueryBuilder<G extends OrmGenerics> extends PaginationBuilder
             .map((f: any) => this.buildAggregateField(f, params))
             .join(', ');
 
-        let sql = `SELECT ${selectFields} FROM \`${table}\``;
+        let sql = `SELECT ${selectFields} ${this.sqlDialect.selectFrom(table)}`;
         const baseIndexHint = this.getIndexHintClause(table);
         if (baseIndexHint) {
             sql += ` ${baseIndexHint}`;
@@ -53,7 +53,7 @@ export class SelectQueryBuilder<G extends OrmGenerics> extends PaginationBuilder
         if (args.PAGINATION) {
             sql += this.buildPaginationClause(args.PAGINATION, params);
         } else if (!isSubSelect) {
-            sql += ` LIMIT 100`;
+            sql += this.sqlDialect.defaultLimit();
         }
 
         return { sql, params };
