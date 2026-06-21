@@ -32,6 +32,26 @@ CREATE TABLE `film` (
   CONSTRAINT `fk_film_language` FOREIGN KEY (`language_id`) REFERENCES `language` (`language_id`) ON DELETE RESTRICT ON UPDATE CASCADE,
   CONSTRAINT `fk_film_language_original` FOREIGN KEY (`original_language_id`) REFERENCES `language` (`language_id`) ON DELETE RESTRICT ON UPDATE CASCADE
 ) ENGINE=InnoDB AUTO_INCREMENT=1110 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+CREATE DEFINER=`root`@`localhost` TRIGGER `ins_film` AFTER INSERT ON `film` FOR EACH ROW BEGIN
+    INSERT INTO film_text (film_id, title, description)
+        VALUES (new.film_id, new.title, new.description);
+  END;
+
+CREATE DEFINER=`root`@`localhost` TRIGGER `upd_film` AFTER UPDATE ON `film` FOR EACH ROW BEGIN
+    IF (old.title != new.title) OR (old.description != new.description) OR (old.film_id != new.film_id)
+    THEN
+        UPDATE film_text
+            SET title=new.title,
+                description=new.description,
+                film_id=new.film_id
+        WHERE film_id=old.film_id;
+    END IF;
+  END;
+
+CREATE DEFINER=`root`@`localhost` TRIGGER `del_film` AFTER DELETE ON `film` FOR EACH ROW BEGIN
+    DELETE FROM film_text WHERE film_id = old.film_id;
+  END;
 **/
 
 export interface iFilm {
@@ -182,6 +202,35 @@ const film:
     },
     REGEX_VALIDATION: {
     },
+    TRIGGERS: [
+        {
+            TRIGGER_NAME: "ins_film",
+            EVENT_MANIPULATION: "INSERT",
+            ACTION_TIMING: "AFTER",
+            EVENT_OBJECT_TABLE: "film",
+            ACTION_STATEMENT: "BEGIN\n    INSERT INTO film_text (film_id, title, description)\n        VALUES (new.film_id, new.title, new.description);\n  END",
+            CREATE_STATEMENT: "CREATE DEFINER=`root`@`localhost` TRIGGER `ins_film` AFTER INSERT ON `film` FOR EACH ROW BEGIN\n    INSERT INTO film_text (film_id, title, description)\n        VALUES (new.film_id, new.title, new.description);\n  END;",
+            DEFINER: "`root`@`localhost`",
+        },
+        {
+            TRIGGER_NAME: "upd_film",
+            EVENT_MANIPULATION: "UPDATE",
+            ACTION_TIMING: "AFTER",
+            EVENT_OBJECT_TABLE: "film",
+            ACTION_STATEMENT: "BEGIN\n    IF (old.title != new.title) OR (old.description != new.description) OR (old.film_id != new.film_id)\n    THEN\n        UPDATE film_text\n            SET title=new.title,\n                description=new.description,\n                film_id=new.film_id\n        WHERE film_id=old.film_id;\n    END IF;\n  END",
+            CREATE_STATEMENT: "CREATE DEFINER=`root`@`localhost` TRIGGER `upd_film` AFTER UPDATE ON `film` FOR EACH ROW BEGIN\n    IF (old.title != new.title) OR (old.description != new.description) OR (old.film_id != new.film_id)\n    THEN\n        UPDATE film_text\n            SET title=new.title,\n                description=new.description,\n                film_id=new.film_id\n        WHERE film_id=old.film_id;\n    END IF;\n  END;",
+            DEFINER: "`root`@`localhost`",
+        },
+        {
+            TRIGGER_NAME: "del_film",
+            EVENT_MANIPULATION: "DELETE",
+            ACTION_TIMING: "AFTER",
+            EVENT_OBJECT_TABLE: "film",
+            ACTION_STATEMENT: "BEGIN\n    DELETE FROM film_text WHERE film_id = old.film_id;\n  END",
+            CREATE_STATEMENT: "CREATE DEFINER=`root`@`localhost` TRIGGER `del_film` AFTER DELETE ON `film` FOR EACH ROW BEGIN\n    DELETE FROM film_text WHERE film_id = old.film_id;\n  END;",
+            DEFINER: "`root`@`localhost`",
+        },
+    ],
     LIFECYCLE_HOOKS: {
         GET: {beforeProcessing:{}, beforeExecution:{}, afterExecution:{}, afterCommit:{}},
         PUT: {beforeProcessing:{}, beforeExecution:{}, afterExecution:{}, afterCommit:{}},

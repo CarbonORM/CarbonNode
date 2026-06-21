@@ -17,6 +17,10 @@ import {
 
 /**
 {{{TABLE_DEFINITION}}}
+{{#each TRIGGERS}}
+
+{{{CREATE_STATEMENT}}}
+{{/each}}
 **/
 
 export interface i{{TABLE_NAME_SHORT_PASCAL_CASE}} {
@@ -78,6 +82,19 @@ const {{TABLE_NAME_SHORT}}:
         '{{@key}}': '{{this}}',
     {{/each}}
     },
+    TRIGGERS: [
+    {{#each TRIGGERS}}
+        {
+            TRIGGER_NAME: {{{json TRIGGER_NAME}}},
+            EVENT_MANIPULATION: {{{json EVENT_MANIPULATION}}},
+            ACTION_TIMING: {{{json ACTION_TIMING}}},
+            EVENT_OBJECT_TABLE: {{{json EVENT_OBJECT_TABLE}}},
+            ACTION_STATEMENT: {{{json ACTION_STATEMENT}}},
+            CREATE_STATEMENT: {{{json CREATE_STATEMENT}}},
+            DEFINER: {{{json DEFINER}}},
+        },
+    {{/each}}
+    ],
     LIFECYCLE_HOOKS: {
         GET: {beforeProcessing:{}, beforeExecution:{}, afterExecution:{}, afterCommit:{}},
         PUT: {beforeProcessing:{}, beforeExecution:{}, afterExecution:{}, afterCommit:{}},

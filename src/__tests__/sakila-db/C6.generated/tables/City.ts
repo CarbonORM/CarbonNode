@@ -89,6 +89,8 @@ const city:
     },
     REGEX_VALIDATION: {
     },
+    TRIGGERS: [
+    ],
     LIFECYCLE_HOOKS: {
         GET: {beforeProcessing:{}, beforeExecution:{}, afterExecution:{}, afterCommit:{}},
         PUT: {beforeProcessing:{}, beforeExecution:{}, afterExecution:{}, afterCommit:{}},

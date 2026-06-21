@@ -851,6 +851,16 @@ const parseSQLToTypeScript = (sql: string, schemaMetadata: iSchemaMetadata = {})
 
     const tableMatches = sql.matchAll(/CREATE\s+TABLE\s+`?(\w+)`?\s+\(((.|\n)+?)\)\s*(ENGINE=.+?);/gm);
 
+    type TriggerMetadata = {
+        TRIGGER_NAME: string;
+        EVENT_MANIPULATION: 'INSERT' | 'UPDATE' | 'DELETE';
+        ACTION_TIMING: 'BEFORE' | 'AFTER';
+        EVENT_OBJECT_TABLE: string;
+        ACTION_STATEMENT: string;
+        CREATE_STATEMENT: string;
+        DEFINER: string | null;
+    };
+
     let tableData: {
         [TableName: string]: {
             RELATIVE_OUTPUT_DIR: string,
@@ -872,11 +882,84 @@ const parseSQLToTypeScript = (sql: string, schemaMetadata: iSchemaMetadata = {})
             COLUMNS_UPPERCASE: {},
             TYPE_VALIDATION: {},
             REGEX_VALIDATION: {},
+            TRIGGERS?: TriggerMetadata[],
             HAS_GEOJSON_TYPES?: boolean,
         }
     } = {};
 
     let references: foreignKeyInfo[] = [];
+
+    const sanitizeSqlForGeneratedComment = (value: string): string =>
+        value.replace(/\*\//g, '* /').trim();
+
+    const unwrapMysqlExecutableComments = (value: string): string =>
+        value.replace(/\/\*!\d{5}\s+([\s\S]*?)\*\//g, (_match, body) => {
+            return body.trim();
+        });
+
+    const normalizeTriggerStatementTerminator = (value: string): string => {
+        const trimmed = value.trim().replace(/\s*(?:\/\/|;;)\s*$/g, '');
+        return trimmed.endsWith(';') ? trimmed : `${trimmed};`;
+    };
+
+    const findMysqlTriggerStatementEnd = (normalizedSql: string, actionStart: number): number => {
+        const actionRemainder = normalizedSql.slice(actionStart);
+        const firstToken = actionRemainder.match(/^\s*(\w+)/)?.[1]?.toUpperCase() ?? '';
+
+        if (firstToken === 'BEGIN') {
+            const endRegex = /\bEND\s*(?:;;|\/\/|;)/gi;
+            endRegex.lastIndex = actionStart;
+            const endMatch = endRegex.exec(normalizedSql);
+            if (endMatch) {
+                return endMatch.index + endMatch[0].length;
+            }
+        }
+
+        const semicolonIndex = normalizedSql.indexOf(';', actionStart);
+        return semicolonIndex === -1 ? normalizedSql.length : semicolonIndex + 1;
+    };
+
+    const extractMysqlTriggers = (rawSql: string): TriggerMetadata[] => {
+        const normalizedSql = unwrapMysqlExecutableComments(rawSql)
+            .replace(/^\s*DELIMITER\s+\S+\s*$/gim, '');
+        const triggerRegex = /CREATE\s+(?:DEFINER\s*=\s*((?:`[^`]+`|'[^']+'|"[^"]+"|[^\s]+)(?:\s*@\s*(?:`[^`]+`|'[^']+'|"[^"]+"|[^\s]+))?)\s+)?TRIGGER\s+`?([^`\s]+)`?\s+(BEFORE|AFTER)\s+(INSERT|UPDATE|DELETE)\s+ON\s+`?([^`\s]+)`?\s+FOR\s+EACH\s+ROW\s+/gi;
+        const triggers: TriggerMetadata[] = [];
+        let triggerMatch: RegExpExecArray | null;
+
+        while ((triggerMatch = triggerRegex.exec(normalizedSql))) {
+            const statementStart = triggerMatch.index;
+            const actionStart = triggerRegex.lastIndex;
+            const statementEnd = findMysqlTriggerStatementEnd(normalizedSql, actionStart);
+            const createStatement = normalizeTriggerStatementTerminator(
+                normalizedSql.slice(statementStart, statementEnd),
+            );
+            const actionStatement = normalizedSql
+                .slice(actionStart, statementEnd)
+                .trim()
+                .replace(/\s*(?:\/\/|;;|;)\s*$/g, '');
+
+            triggers.push({
+                TRIGGER_NAME: triggerMatch[2],
+                ACTION_TIMING: triggerMatch[3].toUpperCase() as 'BEFORE' | 'AFTER',
+                EVENT_MANIPULATION: triggerMatch[4].toUpperCase() as 'INSERT' | 'UPDATE' | 'DELETE',
+                EVENT_OBJECT_TABLE: triggerMatch[5],
+                ACTION_STATEMENT: actionStatement,
+                CREATE_STATEMENT: sanitizeSqlForGeneratedComment(createStatement),
+                DEFINER: triggerMatch[1]?.replace(/\s*@\s*/g, '@') ?? null,
+            });
+
+            triggerRegex.lastIndex = statementEnd;
+        }
+
+        return triggers;
+    };
+
+    const triggersByTable = extractMysqlTriggers(sql).reduce((byTable, trigger) => {
+        const tableTriggers = byTable.get(trigger.EVENT_OBJECT_TABLE) ?? [];
+        tableTriggers.push(trigger);
+        byTable.set(trigger.EVENT_OBJECT_TABLE, tableTriggers);
+        return byTable;
+    }, new Map<string, TriggerMetadata[]>());
 
     const normalizeSqlIdentifier = (identifier: string): string =>
         identifier.trim().replace(/^["`]|["`]$/g, '');
@@ -1126,7 +1209,7 @@ const parseSQLToTypeScript = (sql: string, schemaMetadata: iSchemaMetadata = {})
             READ_ONLY: false,
             TABLE_DEFINITION: tableMatch[0].replace(/\/\*!([0-9]{5}) ([^*]+)\*\//g, (_match, _version, body) => {
                 return `/!* ${body.trim()} *!/`;
-            }),
+            }).replace(/\*\//g, '* /'),
             TABLE_CONSTRAINT: references,
             REST_URL_EXPRESSION: argMap['--restUrlExpression'] || '"/rest/"',
             TABLE_NAME_SHORT: tableName.replace(MySQLDump.DB_PREFIX, ''),
@@ -1144,6 +1227,7 @@ const parseSQLToTypeScript = (sql: string, schemaMetadata: iSchemaMetadata = {})
             TABLE_REFERENCES: {},
             TABLE_REFERENCED_BY: {},
             HAS_GEOJSON_TYPES: false,
+            TRIGGERS: triggersByTable.get(tableName) ?? [],
             REACT_IMPORT: REACT_IMPORT,
             CARBON_REACT_INSTANCE: CARBON_REACT_INSTANCE,
         };
@@ -1263,6 +1347,7 @@ const parseSQLToTypeScript = (sql: string, schemaMetadata: iSchemaMetadata = {})
             TABLE_REFERENCES: {},
             TABLE_REFERENCED_BY: {},
             HAS_GEOJSON_TYPES: false,
+            TRIGGERS: [],
             REACT_IMPORT: REACT_IMPORT,
             CARBON_REACT_INSTANCE: CARBON_REACT_INSTANCE,
         };
@@ -1526,6 +1611,8 @@ const writeGeneratedBindings = (outputDir: string, tableData: any) => {
     const templatesDir = path.resolve(__dirname, 'assets/handlebars');
     const readTemplate = (templateName: string) =>
         fs.readFileSync(path.join(templatesDir, templateName), 'utf-8');
+
+    Handlebars.registerHelper('json', (value) => JSON.stringify(value ?? null));
 
     const c6Template = Handlebars.compile(readTemplate('C6.ts.handlebars'));
     const c6CoreTemplate = Handlebars.compile(readTemplate('C6.core.ts.handlebars'));

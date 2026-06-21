@@ -13,6 +13,14 @@ const minimalSchemaDump = `CREATE TABLE \`actor\` (
   PRIMARY KEY (\`actor_id\`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;`;
 
+const schemaDumpWithTrigger = `${minimalSchemaDump}
+
+/*!50003 CREATE*/ /*!50017 DEFINER=\`root\`@\`localhost\`*/ /*!50003 TRIGGER \`actor_set_first_name\` BEFORE INSERT ON \`actor\` FOR EACH ROW BEGIN
+  IF NEW.first_name IS NULL THEN
+    SET NEW.first_name = 'UNKNOWN';
+  END IF;
+END */;;`;
+
 const minimalPostgresSchemaDump = `CREATE TABLE public.actor (
     actor_id integer NOT NULL,
     first_name character varying(45) NOT NULL,
@@ -350,6 +358,67 @@ describe("generateRestBindings config validation", () => {
             expect(output).toMatch(/Successfully created CarbonORM bindings/i);
             const generatedC6Path = path.join(outputDir, "C6.ts");
             expect(fs.existsSync(generatedC6Path)).toBe(true);
+        } finally {
+            fs.rmSync(tempDir, { recursive: true, force: true });
+        }
+    });
+
+    it("includes table trigger DDL and metadata in generated table bindings", () => {
+        const tempDir = makeTempDir();
+        try {
+            const outputDir = path.join(tempDir, "generated");
+            fs.mkdirSync(outputDir, { recursive: true });
+            fs.writeFileSync(
+                path.join(outputDir, "C6.mysqldump.sql"),
+                schemaDumpWithTrigger,
+            );
+
+            const configPath = path.join(tempDir, "C6.config.json");
+            writeJson(configPath, {
+                databases: [
+                    {
+                        alias: "app",
+                        host: "127.0.0.1",
+                        port: 1,
+                        user: "root",
+                        pass: "password",
+                        dbnames: ["sakila"],
+                    },
+                ],
+            });
+
+            const { status, output } = runGenerator(
+                ["--config", configPath, "--output", outputDir],
+                tempDir,
+            );
+
+            expect(status).toBe(0);
+            expect(output).toMatch(/Successfully created CarbonORM bindings/i);
+
+            const generatedActorPath = path.join(outputDir, "C6.generated", "tables", "Actor.ts");
+            const actorSource = fs.readFileSync(generatedActorPath, "utf-8");
+            expect(actorSource).toMatch(/CREATE(?: DEFINER=`root`@`localhost`)? TRIGGER `actor_set_first_name`/);
+            expect(actorSource).toContain("TRIGGER_NAME: \"actor_set_first_name\"");
+            expect(actorSource).toContain("EVENT_MANIPULATION: \"INSERT\"");
+            expect(actorSource).toContain("ACTION_TIMING: \"BEFORE\"");
+            expect(actorSource).toContain("EVENT_OBJECT_TABLE: \"actor\"");
+            expect(actorSource).toContain("SET NEW.first_name = 'UNKNOWN'");
+
+            const generatedMetadata = JSON.parse(
+                fs.readFileSync(path.join(outputDir, "C6.mysqldump.json"), "utf-8"),
+            );
+            const actorMetadata = Object.values(generatedMetadata.TABLES as Record<string, any>)
+                .find((table: any) => table.TABLE_NAME === "actor") as any;
+            expect(actorMetadata.TRIGGERS).toMatchObject([
+                {
+                    TRIGGER_NAME: "actor_set_first_name",
+                    EVENT_MANIPULATION: "INSERT",
+                    ACTION_TIMING: "BEFORE",
+                    EVENT_OBJECT_TABLE: "actor",
+                    DEFINER: "`root`@`localhost`",
+                },
+            ]);
+            expect(actorMetadata.TRIGGERS[0].ACTION_STATEMENT).toContain("SET NEW.first_name");
         } finally {
             fs.rmSync(tempDir, { recursive: true, force: true });
         }

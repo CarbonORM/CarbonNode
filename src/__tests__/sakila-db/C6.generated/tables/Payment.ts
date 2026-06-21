@@ -27,6 +27,8 @@ CREATE TABLE `payment` (
   CONSTRAINT `fk_payment_rental` FOREIGN KEY (`rental_id`) REFERENCES `rental` (`rental_id`) ON DELETE SET NULL ON UPDATE CASCADE,
   CONSTRAINT `fk_payment_staff` FOREIGN KEY (`staff_id`) REFERENCES `staff` (`staff_id`) ON DELETE RESTRICT ON UPDATE CASCADE
 ) ENGINE=InnoDB AUTO_INCREMENT=16160 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+CREATE DEFINER=`root`@`localhost` TRIGGER `payment_date` BEFORE INSERT ON `payment` FOR EACH ROW SET NEW.payment_date = NOW();
 **/
 
 export interface iPayment {
@@ -123,6 +125,17 @@ const payment:
     },
     REGEX_VALIDATION: {
     },
+    TRIGGERS: [
+        {
+            TRIGGER_NAME: "payment_date",
+            EVENT_MANIPULATION: "INSERT",
+            ACTION_TIMING: "BEFORE",
+            EVENT_OBJECT_TABLE: "payment",
+            ACTION_STATEMENT: "SET NEW.payment_date = NOW()",
+            CREATE_STATEMENT: "CREATE DEFINER=`root`@`localhost` TRIGGER `payment_date` BEFORE INSERT ON `payment` FOR EACH ROW SET NEW.payment_date = NOW();",
+            DEFINER: "`root`@`localhost`",
+        },
+    ],
     LIFECYCLE_HOOKS: {
         GET: {beforeProcessing:{}, beforeExecution:{}, afterExecution:{}, afterCommit:{}},
         PUT: {beforeProcessing:{}, beforeExecution:{}, afterExecution:{}, afterCommit:{}},
