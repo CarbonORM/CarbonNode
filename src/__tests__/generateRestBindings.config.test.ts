@@ -403,6 +403,7 @@ describe("generateRestBindings config validation", () => {
             expect(actorSource).toContain("ACTION_TIMING: \"BEFORE\"");
             expect(actorSource).toContain("EVENT_OBJECT_TABLE: \"actor\"");
             expect(actorSource).toContain("SET NEW.first_name = 'UNKNOWN'");
+            expect(actorSource).not.toMatch(/[ \t]+$/m);
 
             const generatedMetadata = JSON.parse(
                 fs.readFileSync(path.join(outputDir, "C6.mysqldump.json"), "utf-8"),

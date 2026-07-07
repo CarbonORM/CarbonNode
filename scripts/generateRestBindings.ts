@@ -1611,6 +1611,11 @@ const writeGeneratedBindings = (outputDir: string, tableData: any) => {
     const templatesDir = path.resolve(__dirname, 'assets/handlebars');
     const readTemplate = (templateName: string) =>
         fs.readFileSync(path.join(templatesDir, templateName), 'utf-8');
+    const cleanGeneratedSource = (source: string) =>
+        `${source.replace(/[ \t]+(\r?\n)/g, "$1").trimEnd()}\n`;
+    const writeGeneratedSource = (filePath: string, source: string) => {
+        fs.writeFileSync(filePath, cleanGeneratedSource(source));
+    };
 
     Handlebars.registerHelper('json', (value) => JSON.stringify(value ?? null));
 
@@ -1632,15 +1637,15 @@ const writeGeneratedBindings = (outputDir: string, tableData: any) => {
     createDirIfNotExists(tablesDir);
     createDirIfNotExists(viewsDir);
 
-    fs.writeFileSync(path.join(outputDir, 'C6.ts'), c6Template(tableData));
-    fs.writeFileSync(path.join(outputDir, 'C6.test.ts'), c6TestTemplate(tableData));
-    fs.writeFileSync(path.join(generatedDir, 'core.ts'), c6CoreTemplate(tableData));
-    fs.writeFileSync(path.join(generatedDir, 'scoped.ts'), c6ScopedTemplate(tableData));
-    fs.writeFileSync(path.join(tablesDir, 'index.ts'), c6TablesIndexTemplate(tableData));
-    fs.writeFileSync(path.join(viewsDir, 'index.ts'), c6ViewsIndexTemplate(tableData));
+    writeGeneratedSource(path.join(outputDir, 'C6.ts'), c6Template(tableData));
+    writeGeneratedSource(path.join(outputDir, 'C6.test.ts'), c6TestTemplate(tableData));
+    writeGeneratedSource(path.join(generatedDir, 'core.ts'), c6CoreTemplate(tableData));
+    writeGeneratedSource(path.join(generatedDir, 'scoped.ts'), c6ScopedTemplate(tableData));
+    writeGeneratedSource(path.join(tablesDir, 'index.ts'), c6TablesIndexTemplate(tableData));
+    writeGeneratedSource(path.join(viewsDir, 'index.ts'), c6ViewsIndexTemplate(tableData));
 
     for (const table of tableData.TABLES) {
-        fs.writeFileSync(
+        writeGeneratedSource(
             path.join(tablesDir, `${table.TABLE_NAME_SHORT_PASCAL_CASE}.ts`),
             c6TableTemplate({
                 ...tableData,
@@ -1650,7 +1655,7 @@ const writeGeneratedBindings = (outputDir: string, tableData: any) => {
     }
 
     for (const view of tableData.VIEWS) {
-        fs.writeFileSync(
+        writeGeneratedSource(
             path.join(viewsDir, `${view.TABLE_NAME_SHORT_PASCAL_CASE}.ts`),
             c6ViewTemplate({
                 ...tableData,
