@@ -1,7 +1,7 @@
 ![npm](https://img.shields.io/npm/v/%40carbonorm%2Fcarbonnode)
 ![License](https://img.shields.io/npm/l/%40carbonorm%2Fcarbonnode)
 ![Size](https://img.shields.io/github/languages/code-size/carbonorm/carbonnode)
-![Documentation](https://img.shields.io/website?down_color=lightgrey&down_message=Offline&up_color=green&up_message=Online&url=https%3A%2F%2Fcarbonorm.dev)
+![Documentation](https://img.shields.io/website?down_color=lightgrey&down_message=Offline&up_color=green&up_message=Online&url=https%3A%2F%2Fcarbonorm.miles.systems%2F)
 ![Monthly Downloads](https://img.shields.io/npm/dm/%40carbonorm%2Fcarbonnode)
 ![All Downloads](https://img.shields.io/npm/dt/%40carbonorm%2Fcarbonnode)
 ![Star](https://img.shields.io/github/stars/carbonorm/carbonnode?style=social)
