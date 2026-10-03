@@ -107,10 +107,6 @@ export const
         getEnvLogLevel() ??
         LogLevel.WARN;
 
-    if (context?.request?.debug && base < LogLevel.DEBUG) {
-        return LogLevel.DEBUG;
-    }
-
     return base;
 };
 

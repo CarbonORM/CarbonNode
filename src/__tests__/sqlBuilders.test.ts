@@ -496,6 +496,7 @@ describe('SQL Builders', () => {
       sqlDialect: 'postgresql',
     };
     const qb = new DeleteQueryBuilder(config as any, {
+      WHERE: {'actor.actor_id': 5},
       JOIN: {
         [C6C.LEFT]: {
           'film_actor fa': {

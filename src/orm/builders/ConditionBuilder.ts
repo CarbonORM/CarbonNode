@@ -29,6 +29,12 @@ export abstract class ConditionBuilder<
     }
 
     protected registerAlias(alias: string, table: string): void {
+        if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(alias)) {
+            throw new Error(`Invalid JOIN alias '${alias}'.`);
+        }
+        if (!isDerivedTableKey(table) && !Object.prototype.hasOwnProperty.call(this.config.C6?.TABLES ?? {}, table)) {
+            throw new Error(`Unknown JOIN table '${table}'.`);
+        }
         this.aliasMap[alias] = table;
         if (isDerivedTableKey(table)) {
             this.derivedAliases.add(alias);
@@ -46,7 +52,7 @@ export abstract class ConditionBuilder<
     }
 
     protected isColumnRef(ref: string): boolean {
-        if (typeof ref !== 'string' || !ref.includes('.')) return false;
+        if (typeof ref !== 'string' || !/^[A-Za-z_][A-Za-z0-9_]*\.[A-Za-z_][A-Za-z0-9_]*$/.test(ref)) return false;
 
         const [prefix, column] = ref.split('.', 2);
         const tableName = this.aliasMap[prefix] || prefix;
@@ -59,7 +65,7 @@ export abstract class ConditionBuilder<
         if (!table) return false;
 
         const fullKey = `${tableName}.${column}`;
-        if (table.COLUMNS && (fullKey in table.COLUMNS)) return true;
+        if (table.COLUMNS && (Object.prototype.hasOwnProperty.call(table.COLUMNS, fullKey))) return true;
         if (table.COLUMNS && Object.values(table.COLUMNS).includes(column)) return true;
 
         return false;
@@ -80,7 +86,6 @@ export abstract class ConditionBuilder<
             }
             if (/^[A-Za-z_][A-Za-z0-9_]*\.[A-Za-z_][A-Za-z0-9_]*$/.test(trimmed)) {
                 this.assertValidIdentifier(trimmed, 'SQL reference');
-                return true;
             }
             return false;
         }
@@ -154,6 +159,7 @@ export abstract class ConditionBuilder<
             }
             return false;
         }
+        if (!/^[A-Za-z_][A-Za-z0-9_]*\.[A-Za-z_][A-Za-z0-9_]*$/.test(val)) return false;
         const [prefix, column] = val.split('.');
         const tableName = this.aliasMap[prefix] ?? prefix;
         if (isDerivedTableKey(tableName) || this.derivedAliases.has(prefix)) {
@@ -165,7 +171,7 @@ export abstract class ConditionBuilder<
         const fullKey = `${tableName}.${column}`;
 
         return (
-            fullKey in table.COLUMNS ||
+            Object.prototype.hasOwnProperty.call(table.COLUMNS, fullKey) ||
             Object.values(table.COLUMNS).includes(column)
         );
     }
@@ -773,6 +779,9 @@ export abstract class ConditionBuilder<
 
         if (typeof value === 'object' && value !== null) {
             const entries = Object.entries(value);
+            if (!entries.length || entries.some(([op]) => !this.isOperator(op))) {
+                throw new Error('Column condition objects must contain comparison operators.');
+            }
             if (entries.length === 1) {
                 const [op, operand] = entries[0];
                 if (this.isOperator(op)) {
@@ -909,7 +918,7 @@ export abstract class ConditionBuilder<
 
     buildWhereClause(whereArg: any, params: any[] | Record<string, any>): string {
         const clause = this.buildBooleanJoinedConditions(whereArg, true, params);
-        if (!clause) return '';
+        if (!clause) throw new Error('WHERE must contain a predicate.');
 
         let trimmed = clause.trim();
         const upper = trimmed.toUpperCase();

@@ -76,9 +76,9 @@ export function normalizeSingularRequest<
   if (request == null || typeof request !== 'object') return request;
 
   const complexShapeKeys: Set<string> = new Set([
+    C6C.DELETE,
     C6C.SELECT,
     C6C.UPDATE,
-    C6C.DELETE,
     C6C.WHERE,
     C6C.JOIN,
     C6C.GROUP_BY,
@@ -88,9 +88,9 @@ export function normalizeSingularRequest<
 
   const specialKeys: Set<string> = new Set([
     C6C.DB,
+    C6C.DELETE,
     C6C.SELECT,
     C6C.UPDATE,
-    C6C.DELETE,
     C6C.WHERE,
     C6C.JOIN,
     C6C.ORDER,
@@ -103,7 +103,26 @@ export function normalizeSingularRequest<
   // Determine if the request is already complex (has any special key besides PAGINATION)
   const keys = Object.keys(request as any);
   const hasComplexKeys = keys.some(k => complexShapeKeys.has(k));
-  if (hasComplexKeys) return request; // already complex
+  if (hasComplexKeys) {
+    if (requestMethod === C6C.POST) return request;
+    const result: any = {...request};
+    const primaryConditions: Record<string, any> = {};
+    for (const full of restModel.PRIMARY ?? []) {
+      const short = restModel.COLUMNS[full] ?? full.split('.').pop()!;
+      const value = result[full] ?? result[short];
+      if (value !== undefined && value !== null) {
+        primaryConditions[full] = [C6C.EQUAL, [C6C.LIT, value]];
+        delete result[full];
+        delete result[short];
+      }
+    }
+    if (Object.keys(primaryConditions).length) {
+      result[C6C.WHERE] = result[C6C.WHERE]
+        ? {[C6C.AND]: [result[C6C.WHERE], primaryConditions]}
+        : primaryConditions;
+    }
+    return Object.keys(primaryConditions).length ? result : request;
+  }
 
   // We treat it as singular when it's not complex.
   // For GET, PUT, DELETE only

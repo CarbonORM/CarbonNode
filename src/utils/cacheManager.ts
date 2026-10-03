@@ -10,18 +10,14 @@ export const apiRequestCache = new Map<string, iCacheAPI>();
 export const userCustomClearCache: (() => void)[] = [];
 
 // -----------------------------------------------------------------------------
-// Cache Key Generator (safe, fixed-size ~40 chars)
-// -----------------------------------------------------------------------------
-// -----------------------------------------------------------------------------
-// Browser-safe deterministic hash (FNV-1a)
-// -----------------------------------------------------------------------------
-function fnv1a(str: string): string {
-    let h = 0x811c9dc5;
-    for (let i = 0; i < str.length; i++) {
-        h ^= str.charCodeAt(i);
-        h = (h * 0x01000193) >>> 0;
-    }
-    return h.toString(16);
+// Cache keys retain the complete canonical request to avoid hash collisions.
+const backendIds = new WeakMap<object, number>();
+let nextBackendId = 0;
+export function scopedCacheRequest(config: any, request: unknown, transport: 'sql' | 'http'): unknown {
+    const backend = transport === 'sql' ? (config.mysqlPool ?? config.postgresPool) : config.axios;
+    if (backend && !backendIds.has(backend)) backendIds.set(backend, ++nextBackendId);
+    return [transport, backend ? backendIds.get(backend) : null, config.restURL ?? '',
+        config.cacheScope, config.sqlAllowListPath ?? '', request];
 }
 
 function makeCacheKey(
@@ -30,7 +26,7 @@ function makeCacheKey(
     requestData: unknown,
 ): string {
     const raw = JSON.stringify([method, tableName, sortQueryValue(requestData)]);
-    return fnv1a(raw);
+    return raw;
 }
 
 // -----------------------------------------------------------------------------

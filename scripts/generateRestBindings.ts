@@ -1,8 +1,14 @@
 #!/usr/bin/env node
 
-const {execFileSync, execSync} = require('child_process');
+const {execFileSync} = require('child_process');
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
+const noDatabase = () => process.env.C6_NO_DB === '1' || argMap['--no-db'] === '1';
+const credentialDirs: string[] = [];
+process.on('exit', () => {
+    for (const directory of credentialDirs) fs.rmSync(directory, {recursive: true, force: true});
+});
 const readline = require('readline');
 const Handlebars = require('handlebars');
 import {version} from '../package.json';
@@ -386,12 +392,13 @@ class MySQLDump {
         cnfTag: string = '',
     ) {
 
+        const optionValue = (value: string) => JSON.stringify(String(value));
         const cnf = [
             '[client]',
-            `user = ${connection.user}`,
-            `password = ${connection.pass}`,
-            `host = ${connection.host}`,
-            `port = ${connection.port}`,
+            `user = ${optionValue(connection.user)}`,
+            `password = ${optionValue(connection.pass)}`,
+            `host = ${optionValue(connection.host)}`,
+            `port = ${optionValue(connection.port)}`,
             '',
         ];
 
@@ -399,16 +406,17 @@ class MySQLDump {
 
         if ('' === cnfFile) {
 
-            const suffix = cnfTag ? `.${sanitizeIdentifier(cnfTag)}` : '';
-            cnfFile = path.join(this.OUTPUT_DIR, `C6${suffix}.mysql.cnf`);
+            const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'carbonnode-mysql-'));
+            credentialDirs.push(directory);
+            cnfFile = path.join(directory, 'client.cnf');
 
         }
 
         try {
 
-            fs.writeFileSync(cnfFile, cnf.join('\n'));
+            fs.writeFileSync(cnfFile, cnf.join('\n'), {mode: 0o600});
 
-            fs.chmodSync(cnfFile, 0o750);
+            fs.chmodSync(cnfFile, 0o600);
 
             console.log(`Successfully created C6.mysql.cnf file in (${cnfFile})`);
 
@@ -450,21 +458,34 @@ class MySQLDump {
             console.warn("MysqlDump is running with --no-create-info and --no-data. Why?");
         }
 
-        const defaultsExtraFile = this.buildCNF(connection, "", cnfTag);
-
-        const hexBlobOption = data ? '--hex-blob ' : '--no-data ';
-
-        const createInfoOption = schemas ? '' : ' --no-create-info ';
-
-        const tempOutputFile = `${outputFile}.tmp`;
-        const cmd = `${mysqldump} --defaults-extra-file="${defaultsExtraFile}" ${otherOption} --set-gtid-purged="OFF" --skip-add-locks --lock-tables=false --single-transaction --quick ${createInfoOption}${hexBlobOption}${databaseName} ${specificTable} > '${tempOutputFile}'`;
-
-        const succeeded = this.executeAndCheckStatus(cmd, false);
-        if (succeeded && fs.existsSync(tempOutputFile)) {
-            fs.renameSync(tempOutputFile, outputFile);
-        } else if (fs.existsSync(tempOutputFile)) {
-            fs.unlinkSync(tempOutputFile);
+        if (noDatabase()) {
+            if (!fs.existsSync(outputFile)) throw new Error(`Missing offline dump at ${outputFile}.`);
+            return (this.mysqldump = outputFile);
         }
+        const defaultsExtraFile = this.buildCNF(connection, "", cnfTag);
+        const tempOutputFile = `${outputFile}.tmp`;
+        let succeeded = false;
+        let outputFd: number | undefined;
+        try {
+            outputFd = fs.openSync(tempOutputFile, 'w', 0o600);
+            execFileSync(mysqldump, [
+                `--defaults-extra-file=${defaultsExtraFile}`,
+                ...otherOption.split(/\s+/).filter(Boolean),
+                '--set-gtid-purged=OFF', '--skip-add-locks', '--lock-tables=false',
+                '--single-transaction', '--quick',
+                ...(schemas ? [] : ['--no-create-info']),
+                data ? '--hex-blob' : '--no-data', '--', databaseName,
+                ...(specificTable ? [specificTable] : []),
+            ], {stdio: ['ignore', outputFd, 'pipe']});
+            succeeded = true;
+        } catch {
+            console.warn('[generateRestBindings] mysqldump failed.');
+        } finally {
+            if (outputFd !== undefined) fs.closeSync(outputFd);
+            fs.rmSync(defaultsExtraFile, {force: true});
+        }
+        if (succeeded) fs.renameSync(tempOutputFile, outputFile);
+        else fs.rmSync(tempOutputFile, {force: true});
 
         if (!succeeded && fs.existsSync(outputFile)) {
             console.warn(`[generateRestBindings] mysqldump for '${databaseName}' failed. Reusing existing dump file at ${outputFile}.`);
@@ -488,6 +509,7 @@ class MySQLDump {
         },
         cnfTag: string = "",
     ): iSchemaMetadata {
+        if (noDatabase()) return {};
         const defaultsExtraFile = this.buildCNF(connection, "", cnfTag);
         const escapedDatabaseName = databaseName.replace(/\\/g, "\\\\").replace(/'/g, "''");
         const query = `
@@ -562,32 +584,6 @@ class MySQLDump {
 
     }
 
-    static executeAndCheckStatus(command: string, exitOnFailure = true, output: any[] = []): boolean {
-
-        try {
-
-            const stdout = execSync(command, {encoding: 'utf-8'});
-
-            output.push(stdout);
-
-            return true;
-
-        } catch (e) {
-
-            console.log(`Command output::`, e);
-
-            if (exitOnFailure) {
-
-                process.exit(1);
-
-            }
-
-            return false;
-
-        }
-
-    }
-
 }
 
 class PostgreSQLDump {
@@ -606,6 +602,10 @@ class PostgreSQLDump {
             outputFile = path.join(MySQLDump.OUTPUT_DIR, 'C6.pg_dump.sql');
         }
 
+        if (noDatabase()) {
+            if (!fs.existsSync(outputFile)) throw new Error(`Missing offline dump at ${outputFile}.`);
+            return outputFile;
+        }
         const tempOutputFile = `${outputFile}.tmp`;
         const env = {
             ...process.env,
@@ -650,6 +650,7 @@ class PostgreSQLDump {
             port: MySQLDump.DB_PORT,
         },
     ): iSchemaMetadata {
+        if (noDatabase()) return {};
         const query = `
             SELECT
                 c.table_name,
@@ -1227,7 +1228,10 @@ const parseSQLToTypeScript = (sql: string, schemaMetadata: iSchemaMetadata = {})
             TABLE_REFERENCES: {},
             TABLE_REFERENCED_BY: {},
             HAS_GEOJSON_TYPES: false,
-            TRIGGERS: triggersByTable.get(tableName) ?? [],
+            TRIGGERS: (triggersByTable.get(tableName) ?? []).map(trigger =>
+                argMap['--includeTriggerDefinitions'] === '1' ? trigger : {
+                    ...trigger, ACTION_STATEMENT: '', CREATE_STATEMENT: '', DEFINER: null,
+                }),
             REACT_IMPORT: REACT_IMPORT,
             CARBON_REACT_INSTANCE: CARBON_REACT_INSTANCE,
         };

@@ -12,6 +12,9 @@ export class SelectQueryBuilder<G extends OrmGenerics> extends PaginationBuilder
         table: string,
         isSubSelect: boolean = false
     ): SqlBuilderResult {
+        if (!Object.prototype.hasOwnProperty.call(this.config.C6?.TABLES ?? {}, table)) {
+            throw new Error(`Unknown SELECT table '${table}'.`);
+        }
         this.aliasMap = {};
         // reset any previously collected SELECT aliases (from AggregateBuilder)
         // @ts-ignore
@@ -40,9 +43,8 @@ export class SelectQueryBuilder<G extends OrmGenerics> extends PaginationBuilder
         }
 
         if (args.GROUP_BY) {
-            const groupBy = Array.isArray(args.GROUP_BY)
-                ? args.GROUP_BY.join(', ')
-                : args.GROUP_BY;
+            const groupTerms = Array.isArray(args.GROUP_BY) ? args.GROUP_BY : [args.GROUP_BY];
+            const groupBy = groupTerms.map((term: any) => this.buildAggregateField(term, params)).join(', ');
             sql += ` GROUP BY ${groupBy}`;
         }
 

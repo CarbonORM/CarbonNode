@@ -824,7 +824,7 @@ carbonnode:
 
 This project uses Git hooks via `postinstall`:
 
-- `post-commit`: builds project
+- `pre-commit`: builds project and blocks commits on build failure
 - `post-push`: publishes to npm when version changes
 - `npm install` runs `postinstall` to ensure hooks are configured
 
@@ -833,3 +833,45 @@ This project uses Git hooks via `postinstall`:
 Report issues at:
 
 - [CarbonNode Issues](https://github.com/CarbonORM/CarbonNode/issues)
+
+## Security behavior and migration
+
+The [October 2026 finding review](docs/security-review-2026-10-03.md) distinguishes
+historical findings, intentional SQL grammar, SQL-allowlist mitigations, and fixes.
+
+- GET response caching now requires a nonempty `cacheScope` in trusted runtime
+  configuration. Use a scope unique to the authenticated principal, tenant, and
+  permission version, and rotate it when any of those change. Do not take it from
+  request JSON. Keys also distinguish SQL pools/HTTP clients and REST URLs.
+  SQL requests with lifecycle hooks bypass result caching so authorization hooks
+  always run. `cacheResults: false` still disables caching.
+- UPDATE and DELETE require a nonempty WHERE predicate. Trusted server code may
+  set `allowUnfilteredWrites: true` for intentional unfiltered writes. A client
+  JSON field cannot grant this permission. URL primary keys constrain complex
+  requests with AND and are always bound as literal values.
+- SQL allowlisting remains optional and should be configured on production REST
+  endpoints. The final SQL is checked again after mutable execution hooks.
+  An allowlist constrains query shapes; applications must still authorize users
+  and bind ownership/tenant values. Bare strings remain references in the SQL
+  expression grammar; wrap literal data in `[C6C.LIT, value]` or use `eqLit`.
+- Express responses omit SQL metadata and internal exception messages. Logs
+  retain the server error. Request `debug` cannot raise the configured log level;
+  INFO SQL logs contain status indicators, with SQL text available at DEBUG.
+- Websocket broadcasts contain identity/invalidation metadata by default, with
+  empty REQUEST and no RESPONSE row data. Set trusted `websocketIncludeRows: true`
+  only for callbacks that authorize recipients and redact sensitive fields.
+- Dependency fetching rejects traversals exceeding 8 levels or 100 requests and
+  skips repeated table/filter requests. Pagination `next()` advances the page.
+- Generator credentials use private temporary files and are removed on exit.
+  `C6_NO_DB=1` or `--no-db 1` uses existing dumps without invoking database tools;
+  CI alone does not disable database generation. Trigger bodies and definers are
+  omitted by default; `--includeTriggerDefinitions 1` is an explicit opt-in for
+  server-only generated artifacts. Raw schema dumps still contain schema details
+  and should not be shipped to browsers.
+- Generator expressions such as `restUrlExpression`, custom imports, and override
+  expressions are trusted source code. Do not populate them from untrusted input.
+  SQL views remain generated read-only relations; only approve intended view
+  query shapes in the SQL allowlist and enforce caller authorization separately.
+- The CommonJS export uses a `.cjs` extension. Regenerate bindings to receive
+  generator fixes. Existing installed applications do not change merely because
+  this repository's fixes merge.

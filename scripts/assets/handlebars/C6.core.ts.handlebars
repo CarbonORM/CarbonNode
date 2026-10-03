@@ -18,7 +18,7 @@ import type { i{{TABLE_NAME_SHORT_PASCAL_CASE}} } from "./tables/{{TABLE_NAME_SH
 {{/if}}
 {{/RELATIONS}}
 
-export const RestTablePrefix = '{{{PREFIX}}}';
+export const RestTablePrefix = {{{json PREFIX}}};
 
 export type RestTableNames = {{{RestTableNames}}};
 
@@ -43,12 +43,12 @@ export const C6Core: iC6Object<RestTableInterfaces> = {
             throw Error('Table (' + table + ') does not exist in the TABLES object. Possible values include (' + Object.keys(TABLES).join(', ') + ')');
         };
 
-        if (!TABLES[tableName as RestShortTableNames]) {
+        if (!Object.prototype.hasOwnProperty.call(TABLES, tableName)) {
             if (!tableName.startsWith(RestTablePrefix.toLowerCase())) {
                 error(tableName);
             }
             tableName = removePrefixIfExists(tableName, RestTablePrefix);
-            if (!TABLES[tableName as RestShortTableNames]) {
+            if (!Object.prototype.hasOwnProperty.call(TABLES, tableName)) {
                 error(tableName);
             }
         }

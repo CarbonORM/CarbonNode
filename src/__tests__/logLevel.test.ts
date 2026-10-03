@@ -47,8 +47,8 @@ describe("log level resolution", () => {
         expect(resolveLogLevel({logLevel: "TRACE" as any})).toBe(LogLevel.TRACE);
     });
 
-    it("bumps request debug to DEBUG when base level is lower", () => {
-        expect(resolveLogLevel({logLevel: LogLevel.ERROR, request: {debug: true}})).toBe(LogLevel.DEBUG);
+    it("does not let request debug raise configured logging", () => {
+        expect(resolveLogLevel({logLevel: LogLevel.ERROR, request: {debug: true}})).toBe(LogLevel.ERROR);
         expect(resolveLogLevel({logLevel: LogLevel.TRACE, request: {debug: true}})).toBe(LogLevel.TRACE);
     });
 });

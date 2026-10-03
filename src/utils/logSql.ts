@@ -101,6 +101,6 @@ export default function logSql(
     const cacheText = cacheLabel(options.cacheStatus);
     const allowListText = allowListLabel(options.allowListStatus);
     console.log(
-        `${versionColor}[${version}]${C.RESET} ${cacheText} ${allowListText} ${preText}${labelColor}[${method}]${C.RESET} ${colorSql(options.sql)}`,
+        `${versionColor}[${version}]${C.RESET} ${cacheText} ${allowListText} ${preText}${labelColor}[${method}]${C.RESET} ${shouldLog(LogLevel.DEBUG, options.context) ? colorSql(options.sql) : "[SQL hidden; enable DEBUG]"}`,
     );
 }
