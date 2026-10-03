@@ -248,6 +248,12 @@ export interface iDatabaseRuntimeOptions {
     reactBootstrap?: CarbonReact<any, any>;
     stateAdapter?: iStateAdapter<any>;
     websocketBroadcast?: tWebsocketBroadcast;
+    /** Opt in only when the broadcast callback authorizes every recipient. */
+    websocketIncludeRows?: boolean;
+    /** Trusted identity/tenant scope. Rotate on permission changes; never copy from REST input. */
+    cacheScope?: string;
+    /** Trusted opt-in for intentional UPDATE/DELETE statements without WHERE. */
+    allowUnfilteredWrites?: boolean;
     logLevel?: number;
     verbose?: boolean;
     sqlAllowListPath?: string;
@@ -274,6 +280,12 @@ export interface iRest<
     clearCache?: () => void;
     skipPrimaryCheck?: boolean;
     websocketBroadcast?: tWebsocketBroadcast;
+    /** Opt in only when the broadcast callback authorizes every recipient. */
+    websocketIncludeRows?: boolean;
+    /** Trusted identity/tenant scope. Rotate on permission changes; never copy from REST input. */
+    cacheScope?: string;
+    /** Trusted opt-in for intentional UPDATE/DELETE statements without WHERE. */
+    allowUnfilteredWrites?: boolean;
     logLevel?: number;
     verbose?: boolean;
     sqlAllowListPath?: string;
@@ -393,3 +405,7 @@ export interface tC6RestApi {
         DELETE: Function;
     };
 }
+
+/** @deprecated Use C6RestfulModel. */
+export type iC6RestfulModel<T extends string, R extends Record<string, any> = any,
+    P extends keyof R & string = keyof R & string> = C6RestfulModel<T, R, P>;

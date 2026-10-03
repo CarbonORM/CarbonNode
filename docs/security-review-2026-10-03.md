@@ -1,0 +1,70 @@
+# CarbonNode Security Cloud review — 2026-10-03
+
+Reviewed 54 commit-scan findings against `origin/main` at `a88936e` and the fixes in this PR. Findings refer to historical commits; a `new` scan status does not establish that the same path still exists today.
+
+The SQL allowlist is an optional production control. It can block unapproved query shapes, including view queries and injected SQL, but does not bind user/tenant identity, partition caches, sanitize broadcasts, or protect generator/CI execution. Those issues are fixed independently. Intentional expression syntax and trusted generator code options are preserved.
+
+## Findings
+
+| Finding (commit-scan ID) | Disposition | Evidence / change |
+| --- | --- | --- |
+| Generated SQL views are exposed through REST GET (`e97abbab979c81919a60c4cf124fcea8`) | Configuration-dependent; preserved | Generated views are intentional read-only relations. Production SQL allowlisting rejects unapproved view query shapes. This does not replace per-caller authorization, and deployments without an allowlist must explicitly restrict their REST surface. |
+| Arbitrary column names inject code into generated tests (`eb39fca72d908191bcabb013bb232d8c`) | Already marked fixed | Existing Security Cloud resolution retained; no reopening. |
+| Raw DDL in generated tests enables TS code injection (`3c8c19267e148191aec4097bf54a92bd`) | Already marked fixed | Existing Security Cloud resolution retained; no reopening. |
+| Raw SQL schema embedded in generated TypeScript (`8b1748000ed48191ba49e2d74d589611`) | Already marked fixed | Existing Security Cloud resolution retained; no reopening. |
+| Direct SQL executor allows SQL injection (`79f7366a714081918f746e0192066867`) | Historical implementation replaced | The referenced carbonSqlExecutor.ts is absent on current main. Current execution uses the expression builders and bound parameters. This change also hardens references, GROUP_BY, JOINs and subselect table validation. |
+| Express handler exposes SQL injection via REST input (`193458e6ef4c81918e7e2e1ba329d5b0`) | Fixed in this PR | GROUP_BY uses the expression serializer; references, joins, and subselect sources are validated. |
+| GET response cache can leak data across users (`0b179146da7c81918e055856da640955`) | Fixed in this PR | Trusted cacheScope required; backend/endpoint isolation, full canonical keys, lifecycle bypass prevention, and allowlist revalidation. |
+| PUT/DELETE primary-key check falls through to table-wide SQL (`6e269a9f0a948191877acb6bacb9bb2e`) | Fixed in this PR | URL/root primary keys constrain WHERE using bound literals. Empty/unfiltered writes fail unless trusted configuration opts in. |
+| POST upsert builder allows SQL injection (`7628e723949c81919673e6ee74dbb48d`) | Already marked fixed | Existing Security Cloud resolution retained; no reopening. |
+| Object WHERE values can drop DELETE filters (`32f08f03d328819186b381378ec1bdb2`) | Fixed in this PR | Malformed column-condition objects throw instead of silently discarding predicates. |
+| Column-like values bypass WHERE parameter binding (`f7f9e7a7b08c8191bb9ba46e528e75d8`) | Intentional grammar; unsafe identity path fixed | Bare strings intentionally denote references (AGENTS.md). Literal values use LIT/eqLit. Singular and URL primary keys are bound literals, including complex requests; do not reinterpret all reference strings as data. |
+| Aliased reference check permits suffixed raw SQL (`e38e47b4328c8191bfd56cc7d06939a3`) | Fixed in this PR | Exact reference syntax, own column membership, and validated JOIN aliases/types/tables. |
+| JOIN aliases can be trusted as raw SQL references (`787b25949f388191b225f3773a792ad1`) | Fixed in this PR | Exact reference syntax, own column membership, and validated JOIN aliases/types/tables. |
+| PUT UPDATE column names allow SQL injection (`d6884fc804748191b6018c55ca11984a`) | Already marked fixed | Existing Security Cloud resolution retained; no reopening. |
+| GitHub Actions shell injection can expose npm token (`42746a6b4888819180653f6a6aa8eff3`) | Fixed in this PR | Package metadata is passed through environment variables instead of interpolated into shell source. |
+| Unpinned third-party action in npm publish workflow (`119357fc70e881918b40d0572f08d551`) | Fixed in this PR | All release actions are pinned to upstream commit SHAs. |
+| Extended query parser exposes GET SQL injection (`676ec08a5aac8191b8e3b53a85ac44a0`) | Historical ORDER path already removed | The canonical grammar rejects legacy ORDER object maps and validates direction tokens. Extended parsing is required for supported nested requests; SQL allowlisting remains available. |
+| Client WHERE can override URL primary key (`5c04fe5b24848191a48ff1b9a8e553e1`) | Fixed in this PR | URL/root primary keys constrain WHERE using bound literals. Empty/unfiltered writes fail unless trusted configuration opts in. |
+| No-WHERE PUT/DELETE can execute after 400 response (`bc40b75566688191aa1b472e670f212c`) | Fixed in this PR | URL/root primary keys constrain WHERE using bound literals. Empty/unfiltered writes fail unless trusted configuration opts in. |
+| FQ primary keys can trigger unscoped complex PUTs (`0ccfd70206ac81919c24f850b762f729`) | Fixed in this PR | URL/root primary keys constrain WHERE using bound literals. Empty/unfiltered writes fail unless trusted configuration opts in. |
+| URL primary key can be overridden in singular writes (`d065f64b43f08191b0ebe5d719dde4ba`) | Fixed in this PR | URL/root primary keys constrain WHERE using bound literals. Empty/unfiltered writes fail unless trusted configuration opts in. |
+| Unvalidated subselect FROM enables SQL injection (`9fcabbe16e648191b8866138d618bade`) | Fixed in this PR | Subselect tables must be registered C6 tables; raw identifier injection fails. |
+| 32-bit cache keys allow cross-query response collisions (`77b33808f8448191bcfe3274384f17ff`) | Fixed in this PR | Trusted cacheScope required; backend/endpoint isolation, full canonical keys, lifecycle bypass prevention, and allowlist revalidation. |
+| DELETE marker can turn singular deletes into full-table deletes (`68c3377b1fbc8191a9051ee75904fb87`) | Fixed in this PR | URL/root primary keys constrain WHERE using bound literals. Empty/unfiltered writes fail unless trusted configuration opts in. |
+| Server-side GET cache can leak cross-user data (`0bec1b9ef33c8191bafc9438104b988a`) | Fixed in this PR | Trusted cacheScope required; backend/endpoint isolation, full canonical keys, lifecycle bypass prevention, and allowlist revalidation. |
+| SQL GET cache leaks across selected databases (`337ade4e19988191a04249c8a2ca78ef`) | Fixed in this PR | Trusted cacheScope required; backend/endpoint isolation, full canonical keys, lifecycle bypass prevention, and allowlist revalidation. |
+| Generated bindings expose trigger DDL and definers (`a70f6d1e9fec8191b1b9c0dad09266a5`) | Fixed in this PR | Trigger bodies/definers are omitted by default; trusted --includeTriggerDefinitions 1 enables server-only artifacts. |
+| PostgreSQL subselect placeholders are not renumbered (`a7f6312ca7b48191b5f234bfd15b6bb0`) | Fixed in this PR | Positional subquery binds are offset; named binds are replaced once without prefix/cascade collisions. |
+| Global REST cache can leak GET responses across contexts (`c1ed61aa51588191af7ed417a7677bf9`) | Fixed in this PR | Trusted cacheScope required; backend/endpoint isolation, full canonical keys, lifecycle bypass prevention, and allowlist revalidation. |
+| Shell injection in generateRestBindings mysqldump command (`8cb494223e548191b944decd08dc1888`) | Fixed in this PR | mysqldump is invoked with execFileSync and an argv array, with no shell. |
+| Raw prefix interpolation in generated C6 source (`c7aa83ba685481919089551b9fb1d621`) | Fixed in this PR | The generated prefix is JSON-escaped as data. |
+| Raw restUrlExpression enables generated-code injection (`43346ba5b0e48191a184132b64b82b9e`) | Trusted source-code option; preserved | Same trusted-expression contract as the related generator finding. Treat generator configuration as source code. |
+| REST responses disclose generated SQL and errors (`4fe4b045620481918bb2248d4d474de6`) | Fixed in this PR | Express strips SQL metadata and returns a generic error while retaining server diagnostics. |
+| Recursive dependency fetch can amplify requests (`73f9e0414e688191b50a0d5b98c3111d`) | Fixed in this PR | Shared traversal budget caps depth and requests, and repeated table/filter pairs are skipped. |
+| Publish workflow now runs on all main-branch pushes (`d247dad894408191bdd1ba52202f7533`) | Fixed in this PR | Publish workflow runs only when package.json changes on main; existing-version check remains. |
+| Generator writes DB credentials into tracked output (`722d5350f8d48191a568511a64f05fd3`) | Fixed in this PR | MySQL defaults files use mode 0600 inside private temporary directories and are cleaned up on exit. |
+| Websocket broadcasts expose write payload contents (`7be7d28324b08191a1bc6ab46864cd50`) | Fixed in this PR | Broadcasts default to identity/invalidation metadata; full rows require trusted opt-in. |
+| Client debug flag can force sensitive SQL debug logging (`c88dccd2d9148191b22ff9ee2d7e8958`) | Fixed in this PR | Request flags cannot raise configured server logging; REST debug input is discarded. |
+| Mutable SQL hook can bypass SQL allowlist (`b6bed62f5f888191898c01fb2d483a86`) | Fixed in this PR | The final statement is allowlist-validated after beforeExecution hooks. |
+| Express REST handler exposes raw exception messages (`cf36968859988191a46c5892f2dcd80c`) | Fixed in this PR | Express strips SQL metadata and returns a generic error while retaining server diagnostics. |
+| Postinstall silently rewrites Git hooks path (`9fc0bcfbb3c88191938e2360d57fe938`) | Fixed in this PR | Hook setup requires a .git entry at the package root, preventing mutation of consumer repositories. |
+| C6.IMPORT table allowlist bypass via prototype keys (`ec66ad1f5b408191af9b3c0cae9ba993`) | Fixed in this PR | Generated imports use own-property membership for both direct and prefixed table names. |
+| SQL statements now logged at INFO level (`4677dcf0385c819180ef1ec7d4ca90d1`) | Fixed in this PR | INFO logs retain verification/cache status; SQL text requires DEBUG. |
+| UUIDv7 primary keys expose creation timestamps (`93e135694980819184fb02fe8d96e1e2`) | Intentional identifier format; preserved | UUIDv7 embeds creation time by design. IDs are not credentials or authorization controls. Supply an application-generated opaque primary key if timestamp disclosure is unsuitable. |
+| Package type breaks CommonJS build entry (`05623a2e0c84819199e9f445a5b1cde5`) | Fixed in this PR | CommonJS output/export now uses the .cjs extension; Node require smoke test added. |
+| Published generateRestBindings bin fails without shebang (`7297a469e2c0819189c14746c50a7add`) | Already marked fixed | Existing Security Cloud resolution retained; no reopening. |
+| Generated CRUD named exports removed (`52bd188c97a08191891acd4acf30c501`) | Historical API migration; preserved | Current version 6 generates per-table objects with Get/Put/Post/Delete and exports those objects through shared barrels. Restoring four identical generic method names in every module would make those barrels ambiguous. Use Actor.Get or the corresponding generated table object. |
+| Raw restUrlExpression injects generated TypeScript (`b3fdd7f84ae08191aa48ba62b98004d8`) | Trusted source-code option; preserved | restUrlExpression is deliberately TypeScript, alongside custom imports and override expressions. It must come from trusted build configuration, never request input. This is documented; it is not a remote REST injection path. |
+| Public C6 model type rename breaks TypeScript consumers (`f9f651aaa490819188441f0ff7d72d8e`) | Fixed in this PR | Deprecated iC6RestfulModel type alias restores compatibility. |
+| Hook setup script still checks removed pre-push hook (`0747ebcdcbd081918dd1666a4c874694`) | Fixed in this PR | Build hook runs before commit, and the read-only validation script checks the actual pre-commit hook. |
+| Post-commit build no longer blocks bad commits (`fb83a6baef0881918472d49297e4dc7f`) | Fixed in this PR | Build hook runs before commit, and the read-only validation script checks the actual pre-commit hook. |
+| No security issue; no-db generation flag regressed (`22ace417cf248191aa9096e3880613fc`) | Fixed in this PR | Explicit no-db flag/env skips database clients and preserves existing schema dumps. |
+| Pagination next callback repeats the same page (`21fcae94a14c8191be1842d39196cd5d`) | Fixed in this PR | next() creates the next-page request and terminates on a short response. |
+| getEnvDebug ignores new process-first precedence (`062d25753a248191a43f463ade3b9248`) | Fixed in this PR | Debug lookup follows process-first precedence and distinguishes absent runtime values from false. |
+
+## Verification and rollout
+
+`npm test` runs the package builds, binding generation, unit tests, generated-binding tests, and MySQL HTTP integration tests. Added regressions exercise route/WHERE identity, cache boundaries and old-hash collisions, allowlist changes and post-hook mutations, malformed SQL references, PostgreSQL nested binds, bounded dependencies, pagination, disclosure defaults, generated imports, shell arguments, temporary credentials, offline generation, CommonJS loading, and dependency-install hook isolation.
+
+The two opt-in live PostgreSQL suites are environment-dependent; mocked PostgreSQL executor and query serialization coverage run normally. Final full run: 266 passed, 2 opt-in live PostgreSQL tests skipped. Source typechecking with `--skipLibCheck` passes; plain `tsc --noEmit` encounters existing CarbonReact/react-router dependency declaration errors. Migration controls and intentionally preserved behavior are documented in README.md. No package version bump is included; merging this change is not proof that downstream applications have upgraded.

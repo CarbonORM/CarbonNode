@@ -23,11 +23,11 @@ describe("SqlExecutor cache eviction", () => {
 
     const baseConfig = buildTestConfig() as any;
 
+    const mysqlPool = {getConnection: vi.fn(async () => conn)};
     const actorSql = restOrm<any>(() => ({
       ...baseConfig,
-      mysqlPool: {
-        getConnection: vi.fn(async () => conn),
-      },
+      mysqlPool,
+      cacheScope: 'test-user',
       verbose: false,
     }));
 

@@ -40,6 +40,7 @@ export * from "./utils/apiHelpers";
 export * from "./utils/cacheManager";
 export { default as colorSql } from "./utils/colorSql";
 export * from "./utils/colorSql";
+export * from "./utils/dependencyTraversal";
 export * from "./utils/determineRuntimeJsType";
 export * from "./utils/logLevel";
 export { default as logSql } from "./utils/logSql";

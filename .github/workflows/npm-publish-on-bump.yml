@@ -3,6 +3,7 @@ name: Publish to npm on version bump (registry check)
 on:
   push:
     branches: [ main ]
+    paths: [ package.json ]
 
 permissions:
   id-token: write  # Required for OIDC
@@ -17,12 +18,12 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           fetch-depth: 0
 
       - name: Setup Node
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: '25'
           registry-url: 'https://registry.npmjs.org'
@@ -31,7 +32,7 @@ jobs:
 
       - run: npm whoami || echo "OIDC mode (expected)"
 
-      - uses: shogo82148/actions-setup-mysql@v1
+      - uses: shogo82148/actions-setup-mysql@1d4ebc60ba1227dd13fc7e6ba845bd3997928d75 # v1
         with:
           mysql-version: "8.0"
           root-password: password
@@ -74,10 +75,11 @@ jobs:
       # Private/scoped packages: npm view will use NODE_AUTH_TOKEN if provided.
       - name: Check if version already published
         id: exists
+        env:
+          NAME: ${{ steps.pkg.outputs.name }}
+          VER: ${{ steps.pkg.outputs.version }}
         run: |
           set -euo pipefail
-          NAME="${{ steps.pkg.outputs.name }}"
-          VER="${{ steps.pkg.outputs.version }}"
 
           if npm view "$NAME@$VER" version >/dev/null 2>&1; then
             echo "published=true"  >> "$GITHUB_OUTPUT"

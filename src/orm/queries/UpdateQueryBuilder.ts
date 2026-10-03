@@ -21,6 +21,9 @@ export class UpdateQueryBuilder<G extends OrmGenerics> extends PaginationBuilder
     build(
         table: string,
     ): SqlBuilderResult {
+        if (!this.request.WHERE && this.config.allowUnfilteredWrites !== true) {
+            throw new Error('UPDATE/DELETE requires WHERE; use trusted allowUnfilteredWrites for intentional bulk writes.');
+        }
         this.aliasMap = {};
         const args = this.request;
         const params = this.useNamedParams ? {} : [];

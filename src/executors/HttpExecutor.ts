@@ -1,3 +1,4 @@
+import {reserveDependency} from "../utils/dependencyTraversal";
 import type {AxiosPromise, AxiosResponse} from "axios";
 import isLocal from "../variables/isLocal";
 import isTest from "../variables/isTest";
@@ -13,13 +14,13 @@ import {
     PUT, RequestQueryBody
 } from "../types/ormInterfaces";
 import {removeInvalidKeys, removePrefixIfExists, TestRestfulResponse} from "../utils/apiHelpers";
-import {checkCache, evictCacheEntry, setCache, userCustomClearCache} from "../utils/cacheManager";
+import {scopedCacheRequest, checkCache, evictCacheEntry, setCache, userCustomClearCache} from "../utils/cacheManager";
 import type { SqlAllowListStatus } from "../utils/logSql";
 import {normalizeRequestOrder} from "../utils/normalizeSingularRequest";
 import {sortAndSerializeQueryObject} from "../utils/sortAndSerializeQueryObject";
 import {notifyToast} from "../utils/toastRuntime";
 import {Executor} from "./Executor";
-import {toastOptions, toastOptionsDevs} from "variables/toastOptions";
+import {toastOptions, toastOptionsDevs} from "../variables/toastOptions";
 import {getLogContext, LogLevel, logWithLevel, shouldLog} from "../utils/logLevel";
 
 export class HttpExecutor<
@@ -228,7 +229,7 @@ export class HttpExecutor<
 
             const {
                 debug,
-                cacheResults = (C6.GET === requestMethod),
+                cacheResults: requestedCacheResults = (C6.GET === requestMethod),
                 skipReactBootstrap = false,
                 dataInsertMultipleRows,
                 success,
@@ -246,6 +247,10 @@ export class HttpExecutor<
                 console.groupEnd();
             }
 
+            const cacheResults = requestedCacheResults && requestMethod === GET
+                && typeof this.config.cacheScope === 'string' && this.config.cacheScope.length > 0
+                && !Object.values(this.config.restModel.LIFECYCLE_HOOKS.GET ?? {}).some(group =>
+                    group && Object.keys(group).length > 0);
             let cachingConfirmed = false;
 
             // determine if we need to paginate.
@@ -276,12 +281,8 @@ export class HttpExecutor<
 
             // The problem with creating cache keys with a stringified object is the order of keys matters and it's possible for the same query to be stringified differently.
             // Here we ensure the key order will be identical between two of the same requests. https://stackoverflow.com/questions/5467129/sort-javascript-object-by-key
-            const cacheRequestData = JSON.parse(JSON.stringify(query ?? {})) as RequestQueryBody<
-                G['RequestMethod'],
-                G['RestTableInterface'],
-                G['CustomAndRequiredFields'],
-                G['RequestTableOverrides']
-            >;
+            const cacheRequestData = scopedCacheRequest(this.config,
+                JSON.parse(JSON.stringify(query ?? {})), 'http');
             const cacheAllowListStatus: SqlAllowListStatus = this.config.sqlAllowListPath
                 ? "allowed"
                 : "not verified";
@@ -614,7 +615,12 @@ export class HttpExecutor<
                             hasNext = pageLimit !== 1 && got === pageLimit;
 
                             if (hasNext) {
-                                responseData.next = apiRequest as () => Promise<
+                                const nextPage = Number(query[C6.PAGINATION][C6.PAGE]) + 1;
+                                const nextRequest = {
+                                    ...query,
+                                    [C6.PAGINATION]: {...query[C6.PAGINATION], [C6.PAGE]: nextPage},
+                                };
+                                responseData.next = () => new HttpExecutor<G>(this.config, nextRequest).execute() as Promise<
                                     DetermineResponseDataType<'GET', G['RestTableInterface']>
                                 >;
                             } else {
@@ -864,7 +870,7 @@ export class HttpExecutor<
 
                                     // this is a dynamic call to the rest api, any generated table may resolve with (RestApi)
                                     // todo - using value to avoid joins.... but. maybe this should be a parameterizable option -- think race conditions; its safer to join
-                                    apiRequestPromises.push(RestApi.Get({
+                                    const dependencyRequest: any = {
                                             [C6.WHERE]: Object.keys(fetchReferences[tableToFetch]).reduce((sum, column) => {
 
                                                     fetchReferences[tableToFetch][column] = fetchReferences[tableToFetch][column].flat(Infinity)
@@ -893,8 +899,10 @@ export class HttpExecutor<
 
                                                 }, {}),
                                             fetchDependencies: nextFetchDependencies
-                                        }
-                                    ));
+                                        };
+                                    if (reserveDependency(this.request, tableToFetch, dependencyRequest)) {
+                                        apiRequestPromises.push(RestApi.Get(dependencyRequest));
+                                    }
 
                                 }
 

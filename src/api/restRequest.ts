@@ -32,7 +32,7 @@ export default function restRequest<
         >,
     ): Promise<DetermineResponseDataType<G['RequestMethod'], G['RestTableInterface']>> => {
 
-        const baseConfig = typeof configX === "function" ? configX() : configX;
+        const baseConfig = {...(typeof configX === "function" ? configX() : configX)};
         const { config } = resolveRestConfigForRequest(baseConfig as any, request as any);
 
         if ((config.restModel as any)?.READ_ONLY === true && config.requestMethod !== "GET") {

@@ -18,7 +18,7 @@ import namedPlaceholders from 'named-placeholders';
 import type { PoolConnection } from 'mysql2/promise';
 import { Buffer } from 'buffer';
 import { Executor } from "./Executor";
-import {checkCache, evictCacheEntry, setCache} from "../utils/cacheManager";
+import {scopedCacheRequest, checkCache, evictCacheEntry, setCache} from "../utils/cacheManager";
 import logSql, {
     SqlAllowListStatus,
 } from "../utils/logSql";
@@ -739,9 +739,9 @@ export class SqlExecutor<
                 TABLE_NAME: this.config.restModel.TABLE_NAME as string,
                 TABLE_PREFIX: this.config.C6?.PREFIX ?? "",
                 METHOD: this.config.requestMethod,
-                REQUEST: normalizedRequest,
+                REQUEST: this.config.websocketIncludeRows === true ? normalizedRequest : {},
                 REQUEST_PRIMARY_KEY: this.extractPrimaryKeyValues(),
-                RESPONSE: responseRest,
+                RESPONSE: this.config.websocketIncludeRows === true ? responseRest : undefined,
                 RESPONSE_PRIMARY_KEY: responsePrimaryKey,
             },
         };
@@ -783,13 +783,16 @@ export class SqlExecutor<
         const tableName = this.config.restModel.TABLE_NAME;
         const logContext = getLogContext(this.config, this.request);
         const cacheResults = method === C6C.GET
-            && (this.request.cacheResults ?? true);
+            && typeof this.config.cacheScope === 'string' && this.config.cacheScope.length > 0
+            && (this.request.cacheResults ?? true)
+            && !Object.values(this.config.restModel.LIFECYCLE_HOOKS.GET ?? {}).some(group =>
+                group && Object.keys(group).length > 0);
         const cacheAllowListStatus: SqlAllowListStatus = this.config.sqlAllowListPath
             ? "allowed"
             : "not verified";
 
         const cacheRequestData = cacheResults
-            ? JSON.parse(JSON.stringify(this.request ?? {}))
+            ? scopedCacheRequest(this.config, JSON.parse(JSON.stringify(this.request ?? {})), 'sql')
             : undefined;
 
         const requestArgumentsSerialized = cacheResults
@@ -816,6 +819,8 @@ export class SqlExecutor<
                 cacheAllowListStatus,
             );
             if (cachedRequest) {
+                const currentSql = this.buildSqlExecutionContext(method, tableName, logContext);
+                await this.validateSqlAllowList(currentSql.sql);
                 const cachedData = (await cachedRequest).data;
                 if (evictFromCache
                     && cachedData
@@ -1090,6 +1095,8 @@ export class SqlExecutor<
                     sqlExecution,
                 },
             );
+            // Hooks may rewrite SQL; approve the statement that actually reaches the driver.
+            await this.validateSqlAllowList(sqlExecution.sql);
             const result = await this.runSqlStatement(conn, sqlExecution);
 
             const response = this.createResponseFromQueryResult(

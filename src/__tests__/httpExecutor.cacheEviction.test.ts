@@ -16,11 +16,13 @@ describe("HttpExecutor cache eviction", () => {
   const buildOrm = (get: ReturnType<typeof vi.fn>) => {
     const baseConfig = buildTestConfig() as any;
 
+    const axios = {get};
     return restOrm<any>(() => ({
       ...baseConfig,
       requestMethod: C6C.GET,
       restURL: "http://127.0.0.1:9999/rest/",
-      axios: { get },
+      axios,
+      cacheScope: 'test-user',
       verbose: false,
     }));
   };

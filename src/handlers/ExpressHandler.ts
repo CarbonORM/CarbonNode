@@ -48,7 +48,8 @@ export function ExpressHandler<
             const treatAsGet = incomingMethod === 'POST' && methodOverride === 'GET';
 
             const method: iRestMethods = treatAsGet ? 'GET' : incomingMethod;
-            const payload: any = treatAsGet ? {...(req.body as any)} : (method === 'GET' ? req.query : req.body);
+            const payload: any = {...(treatAsGet ? req.body : (method === 'GET' ? req.query : req.body))};
+            delete payload.debug;
 
             // Query strings are text; coerce known boolean controls.
             if (typeof payload?.cacheResults === "string") {
@@ -78,7 +79,7 @@ export function ExpressHandler<
             const { config } = resolveDatabaseSelection(baseConfig as any, payload);
             const { C6 } = config;
 
-            if (!(table in C6.TABLES)) {
+            if (!Object.prototype.hasOwnProperty.call(C6.TABLES, table)) {
                 res.status(400).json({error: `Invalid table: ${table}`});
                 return;
             }
@@ -121,16 +122,20 @@ export function ExpressHandler<
 
             const primaryKeyName = primaryKeys[0];
 
-            // If a primary key was provided in the URL, merge it into the payload.
-            // Support both complex requests using WHERE and singular requests
-            // where the primary key lives at the root of the payload.
-            if (primary) {
-                if (payload[C6C.WHERE]) {
-                    payload[C6C.WHERE][primaryKeyName] =
-                        payload[C6C.WHERE][primaryKeyName] ?? primary;
+            // URL identity is authoritative, including complex WHERE requests.
+            if (primary !== undefined) {
+                const shortKey = resolveShortKey(primaryKeyName, 0);
+                if (payload[C6C.WHERE] || payload[C6C.SELECT] || payload[C6C.UPDATE] || payload[C6C.DELETE]) {
+                    const existing = payload[C6C.WHERE];
+                    const routeCondition = { [primaryKeyName]: [C6C.EQUAL, [C6C.LIT, primary]] };
+                    payload[C6C.WHERE] = existing
+                        ? { [C6C.AND]: [existing, routeCondition] }
+                        : routeCondition;
+                    delete payload[shortKey];
+                    delete payload[primaryKeyName];
                 } else {
-                    (payload as any)[primaryKeyName] =
-                        (payload as any)[primaryKeyName] ?? primary;
+                    delete payload[shortKey];
+                    payload[primaryKeyName] = primary;
                 }
             }
 
@@ -140,12 +145,13 @@ export function ExpressHandler<
                 restModel: C6.TABLES[table]
             })(payload);
 
-            res.status(200).json({success: true, ...response});
+            const {sql: _sql, ...publicResponse} = response as any;
+            res.status(200).json({success: true, ...publicResponse});
 
         } catch (err) {
             const message = err instanceof Error ? err.message : String(err);
             logWithLevel(LogLevel.ERROR, undefined, console.error, message);
-            res.status(500).json({success: false, error: message});
+            res.status(500).json({success: false, error: "Request failed"});
         }
     };
 }

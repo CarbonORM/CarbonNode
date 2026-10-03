@@ -388,7 +388,7 @@ describe("generateRestBindings config validation", () => {
             });
 
             const { status, output } = runGenerator(
-                ["--config", configPath, "--output", outputDir],
+                ["--config", configPath, "--output", outputDir, "--includeTriggerDefinitions", "1"],
                 tempDir,
             );
 
@@ -521,5 +521,56 @@ describe("generateRestBindings config validation", () => {
         } finally {
             fs.rmSync(tempDir, { recursive: true, force: true });
         }
+    });
+});
+
+describe('generator security boundaries', () => {
+    it('uses argv for database names, keeps credentials temporary, and hides trigger bodies by default', () => {
+        ensureGeneratorScript();
+        const dir = makeTempDir();
+        try {
+            const bin = path.join(dir, 'bin');
+            const outputDir = path.join(dir, 'out');
+            fs.mkdirSync(bin); fs.mkdirSync(outputDir);
+            const capture = path.join(dir, 'capture.json');
+            // A fake client records arguments and permissions without using real credentials or databases.
+            fs.writeFileSync(path.join(bin, 'mysqldump'), `#!/usr/bin/env node\nconst fs = require('fs');\nconst cnf = process.argv.find(v => v.startsWith('--defaults-extra-file=')).split('=').slice(1).join('=');\nfs.writeFileSync(${JSON.stringify(capture)}, JSON.stringify({argv: process.argv.slice(2), cnf, mode: fs.statSync(cnf).mode & 511}));\nprocess.stdout.write(${JSON.stringify(schemaDumpWithTrigger)});\n`, {mode: 0o755});
+            fs.writeFileSync(path.join(bin, 'mysql'), '#!/bin/sh\nexit 1\n', {mode: 0o755});
+            const marker = path.join(dir, 'injected');
+            const dbname = `sakila; touch ${marker} #`;
+            const configPath = path.join(dir, 'config.json');
+            writeJson(configPath, {databases: [{alias: 'app', host: 'localhost', user: 'test', pass: 'test-only', dbname}]});
+            const result = spawnSync(process.execPath, [generatorScriptPath, '--config', configPath, '--output', outputDir], {
+                cwd: dir, encoding: 'utf8', env: {...process.env, PATH: `${bin}${path.delimiter}${process.env.PATH}`, C6_SKIP_GENERATED_TSC: '1'},
+            });
+            expect(result.status, result.stderr).toBe(0);
+            expect(fs.existsSync(marker)).toBe(false);
+            const record = JSON.parse(fs.readFileSync(capture, 'utf8'));
+            expect(record.argv).toContain(dbname);
+            expect(record.mode).toBe(0o600);
+            expect(fs.existsSync(record.cnf)).toBe(false);
+            expect(fs.readdirSync(outputDir).some(name => name.endsWith('.cnf'))).toBe(false);
+            const actor = fs.readFileSync(path.join(outputDir, 'C6.generated/tables/Actor.ts'), 'utf8');
+            expect(actor).toContain('actor_set_first_name');
+            expect(actor).not.toContain('SET NEW.first_name');
+            expect(actor).not.toContain('root`@`localhost');
+        } finally {fs.rmSync(dir, {recursive: true, force: true});}
+    });
+
+    it('honors no-db without invoking clients or changing the existing dump', () => {
+        const dir = makeTempDir();
+        try {
+            const outputDir = path.join(dir, 'out'); fs.mkdirSync(outputDir);
+            const dumpPath = path.join(outputDir, 'C6.mysqldump.sql');
+            fs.writeFileSync(dumpPath, minimalSchemaDump);
+            const configPath = path.join(dir, 'config.json');
+            writeJson(configPath, {databases: [{alias: 'app', host: 'invalid.example', user: 'test', pass: 'test-only', dbname: 'app'}]});
+            const result = runGenerator(['--config', configPath, '--output', outputDir, '--no-db', '1', '--prefix', "x';globalThis.injected=true;//"], dir);
+            expect(result.status, result.output).toBe(0);
+            expect(fs.readFileSync(dumpPath, 'utf8')).toBe(minimalSchemaDump);
+            expect(result.output).not.toContain('Successfully created C6.mysql.cnf');
+            const core = fs.readFileSync(path.join(outputDir, 'C6.generated/core.ts'), 'utf8');
+            expect(core).toContain(`export const RestTablePrefix = ${JSON.stringify("x';globalThis.injected=true;//")};`);
+        } finally {fs.rmSync(dir, {recursive: true, force: true});}
     });
 });
