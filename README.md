@@ -837,6 +837,8 @@ Report issues at:
 ## Security behavior and migration
 
 Version 7.0.0 includes the [new repository-scan remediation](docs/security-remediation-7.0.0.md).
+Version 7.0.1 also prevents deeply nested expression tokens from triggering recursive
+string conversion inside request validation; the iterative budget rejects them first.
 This major bump reflects stricter request defaults and rejection of previously
 accepted unsafe or ambiguous inputs. Regenerate bindings and review these changes:
 

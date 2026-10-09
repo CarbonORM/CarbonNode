@@ -25,7 +25,10 @@ MySQL max_execution_time protects read execution; its server behavior does not p
 
 ## Validation and Cloud state
 
+### 7.0.1 depth-guard correction
+
+Review of the built 7.0.0 package found that String(arrayToken) could recurse through a deeply nested array before the iterative depth check. The 7.0.1 patch inspects only primitive string tokens and never coerces an array/object expression token or custom function name. Regression cases construct 20000 nested arrays in both token positions with REST function policy enabled and disabled, and require explicit budget/policy rejection instead of a RangeError. The verification scan of the superseded 7.0.0 revision was canceled so the next scan can examine the corrected merged revision. The patch passed source typecheck and the full npm test gate: 343 passed and the two optional live PostgreSQL tests skipped, including 47 new security tests.
+
 Local validation passed: npm test -- --maxWorkers=2 --minWorkers=2 completed build, live MySQL binding generation, and 341 passing tests; the two optional live PostgreSQL tests were skipped because no separate PostgreSQL server was configured. All 45 new security tests and 24 generator configuration tests passed. Source typecheck with skipLibCheck and diff check passed. The packaged CommonJS import is covered. Two default-worker allowlist tests initially timed out on the busy host; reducing workers preserved the assertions and default timeouts and both passed. Clean Linux/MySQL CI is required before merge. A follow-up Cloud scan must target the merged revision, not the historical snapshot.
 
 These 10 findings are repository-scan report records with null commit_detail. The available fixed-status mutation supports commit-scan findings only; it cannot manually rewrite a repository-scan report. Keep the historical report intact and use a fresh scan plus this release's evidence to verify remediation. No unverified record is marked fixed simply to empty the interface.
-
