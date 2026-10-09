@@ -229,7 +229,7 @@ export class HttpExecutor<
 
             const {
                 debug,
-                cacheResults: requestedCacheResults = (C6.GET === requestMethod),
+                cacheResults: requestedCacheResults = false,
                 skipReactBootstrap = false,
                 dataInsertMultipleRows,
                 success,
@@ -247,7 +247,7 @@ export class HttpExecutor<
                 console.groupEnd();
             }
 
-            const cacheResults = requestedCacheResults && requestMethod === GET
+            const cacheResults = requestedCacheResults === true && requestMethod === GET
                 && typeof this.config.cacheScope === 'string' && this.config.cacheScope.length > 0
                 && !Object.values(this.config.restModel.LIFECYCLE_HOOKS.GET ?? {}).some(group =>
                     group && Object.keys(group).length > 0);

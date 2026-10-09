@@ -844,7 +844,16 @@ historical findings, intentional SQL grammar, SQL-allowlist mitigations, and fix
   permission version, and rotate it when any of those change. Do not take it from
   request JSON. Keys also distinguish SQL pools/HTTP clients and REST URLs.
   SQL requests with lifecycle hooks bypass result caching so authorization hooks
-  always run. `cacheResults: false` still disables caching.
+  always run. Both SQL and HTTP GET requests require `cacheResults: true` to
+  enable caching; a scope alone does not opt in. Database aliases also partition
+  cache entries when they share a transport.
+- Generic Express REST routes exclude generated views by default, including
+  JOINs and scalar/derived subqueries. To expose an authorized view, set trusted
+  `restViewAllowlist: ['view_name']` in the server configuration. Request JSON
+  cannot opt in. Direct server ORM reads of views remain available.
+- `GROUP_BY` accepts the same expression grammar as SELECT. A single tuple
+  (for example `[C6C.CALL, 'COALESCE', column, [C6C.LIT, 'unknown']]`) and a list
+  of expressions are both supported. Bare strings remain references.
 - UPDATE and DELETE require a nonempty WHERE predicate. Trusted server code may
   set `allowUnfilteredWrites: true` for intentional unfiltered writes. A client
   JSON field cannot grant this permission. URL primary keys constrain complex
@@ -863,6 +872,8 @@ historical findings, intentional SQL grammar, SQL-allowlist mitigations, and fix
 - Dependency fetching rejects traversals exceeding 8 levels or 100 requests and
   skips repeated table/filter requests. Pagination `next()` advances the page.
 - Generator credentials use private temporary files and are removed on exit.
+  Schema-derived names are escaped as TypeScript string literals, including
+  table, view, and database-scoped templates.
   `C6_NO_DB=1` or `--no-db 1` uses existing dumps without invoking database tools;
   CI alone does not disable database generation. Trigger bodies and definers are
   omitted by default; `--includeTriggerDefinitions 1` is an explicit opt-in for

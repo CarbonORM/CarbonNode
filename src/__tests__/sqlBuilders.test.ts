@@ -81,6 +81,31 @@ describe('SQL Builders', () => {
     expect(params).toEqual([]);
   });
 
+  it('rejects raw SQL fragments in SELECT and GROUP BY expressions', () => {
+    const config = buildTestConfig();
+
+    expect(() => new SelectQueryBuilder(config as any, {
+      SELECT: ['actor.actor_id', '(SELECT GROUP_CONCAT(password) FROM secrets) AS leaked'],
+    } as any, false).build('actor')).toThrow(/Bare string .* is not a reference in SELECT expression/);
+
+    expect(() => new SelectQueryBuilder(config as any, {
+      SELECT: ['actor.actor_id'],
+      GROUP_BY: 'actor.actor_id WITH ROLLUP',
+    } as any, false).build('actor')).toThrow(/Bare string .* is not a reference in GROUP BY expression/);
+  });
+
+  it('serializes GROUP BY terms through the expression serializer', () => {
+    const config = buildTestConfig();
+    const qb = new SelectQueryBuilder(config as any, {
+      SELECT: ['actor.first_name', [C6C.AS, [C6C.COUNT, 'actor.actor_id'], 'cnt']],
+      GROUP_BY: ['actor.first_name', 'actor.last_name'],
+    } as any, false);
+
+    const { sql } = qb.build('actor');
+
+    expect(sql).toContain('GROUP BY actor.first_name, actor.last_name');
+  });
+
   it('logs SELECT aggregate expressions at DEBUG level', () => {
     const config = buildTestConfig();
     const logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
@@ -507,6 +532,40 @@ describe('SQL Builders', () => {
     } as any, false);
 
     expect(() => qb.build('actor')).toThrowError(/INNER joins only/);
+  });
+
+  it('rejects unsafe JOIN aliases and inherited column names', () => {
+    const config = buildTestConfig();
+    for (const [table, column] of [
+      ['film_actor 1)OR/**/1=1#', '1)OR/**/1=1#.toString'],
+      ['film_actor fa', 'fa.toString'],
+    ]) {
+      expect(() => new SelectQueryBuilder(config as any, {
+        SELECT: ['actor.actor_id'],
+        JOIN: { [C6C.INNER]: { [table]: { [column]: [C6C.EQUAL, [C6C.LIT, 1]] } } },
+      } as any, false).build('actor')).toThrow();
+    }
+  });
+
+  it('supports a GROUP BY tuple and lists of expressions with bound literals', () => {
+    const config = buildTestConfig();
+    const group = [C6C.CALL, 'COALESCE', 'actor.first_name', [C6C.LIT, 'unknown']];
+    const single = new SelectQueryBuilder(config as any, {GROUP_BY: group} as any).build('actor');
+    expect(single.sql).toContain('GROUP BY COALESCE(actor.first_name, ?)');
+    expect(single.params).toEqual(['unknown']);
+    const multiple = new SelectQueryBuilder(config as any, {GROUP_BY: [group, 'actor.last_name']} as any).build('actor');
+    expect(multiple.sql).toContain('GROUP BY COALESCE(actor.first_name, ?), actor.last_name');
+    expect(multiple.params).toEqual(['unknown']);
+  });
+
+  it('registers Map JOIN aliases before SELECT serialization', () => {
+    const config = buildTestConfig();
+    const qb = new SelectQueryBuilder(config as any, {
+      SELECT: ['fa.actor_id'],
+      JOIN: new Map([[C6C.INNER, new Map([['film_actor fa', {'fa.actor_id': [C6C.EQUAL, 'actor.actor_id']}]])]]),
+    } as any);
+    expect(qb.build('actor').sql).toContain('INNER JOIN `film_actor` AS `fa`');
+    expect(() => new SelectQueryBuilder(config as any, {SELECT: ['unknown.*']} as any).build('actor')).toThrow(/Unknown table or alias/);
   });
 
   it('converts hex to Buffer for BINARY columns in WHERE params', () => {

@@ -31,17 +31,9 @@ export class PostQueryBuilder<G extends OrmGenerics> extends ConditionBuilder<G>
         return this.REQUEST_METADATA_KEYS.has(key);
     }
 
-    private trimTablePrefix(table: string, column: string): string {
-        if (!column.includes('.')) return column;
-        const [prefix, col] = column.split('.', 2);
-        if (prefix !== table) {
-            throw new Error(`Invalid prefixed column: '${column}'. Expected prefix '${table}.'`);
-        }
-        return col;
-    }
 
     build(table: string) {
-        this.aliasMap = {};
+        this.initAlias(table);
         const verb = C6C.REPLACE in this.request ? C6C.REPLACE : C6C.INSERT;
         const directRows = Array.isArray(this.request)
             ? this.request
@@ -64,7 +56,7 @@ export class PostQueryBuilder<G extends OrmGenerics> extends ConditionBuilder<G>
 
             for (const key of keys) {
                 const value = row[key] ?? null;
-                const trimmed = this.trimTablePrefix(table, key);
+                const trimmed = this.normalizeWritableColumn(table, key, 'INSERT column');
                 const qualified = `${table}.${trimmed}`;
                 const placeholder = this.serializeUpdateValue(value, params, qualified);
                 placeholders.push(placeholder);
@@ -74,7 +66,7 @@ export class PostQueryBuilder<G extends OrmGenerics> extends ConditionBuilder<G>
         }
 
         let sql = `${this.sqlDialect.insertInto(verb, table)} (
-            ${this.sqlDialect.columnList(keys.map(k => this.trimTablePrefix(table, k)))}
+            ${this.sqlDialect.columnList(keys.map(k => this.normalizeWritableColumn(table, k, 'INSERT column')))}
          ) VALUES
             ${rowPlaceholders.join(',\n            ')}`;
 
@@ -85,9 +77,9 @@ export class PostQueryBuilder<G extends OrmGenerics> extends ConditionBuilder<G>
                 throw new Error(`Update data must be an array of keys to update, got: ${JSON.stringify(updateData)}`);
             }
 
-            const updateColumns = updateData.map(k => this.trimTablePrefix(table, String(k)));
+            const updateColumns = updateData.map(k => this.normalizeWritableColumn(table, String(k), 'ON DUPLICATE KEY UPDATE'));
             const conflictColumns = (this.config.restModel.PRIMARY_SHORT ?? [])
-                .map(column => this.trimTablePrefix(table, String(column)));
+                .map(column => this.normalizeWritableColumn(table, String(column), 'ON CONFLICT'));
             sql += this.sqlDialect.upsertUpdateClause(updateColumns, conflictColumns);
         }
 

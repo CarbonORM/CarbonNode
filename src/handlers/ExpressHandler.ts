@@ -4,7 +4,7 @@ import restRequest from "../api/restRequest";
 import {iRest, iRestMethods} from "../types/ormInterfaces";
 import {LogLevel, logWithLevel} from "../utils/logLevel";
 import {OrmGenerics} from "../types/ormGenerics";
-import {resolveDatabaseSelection} from "../api/databaseResolver";
+import {resolveDatabaseSelection, stripDatabaseKeyFromRequest} from "../api/databaseResolver";
 
 
 export function restExpressRequest<G extends OrmGenerics>(
@@ -76,7 +76,18 @@ export function ExpressHandler<
                 );
             }
 
-            const { config } = resolveDatabaseSelection(baseConfig as any, payload);
+            const { config: selectedConfig } = resolveDatabaseSelection(baseConfig as any, payload);
+            // Restrict the entire expression surface, not just the route's root table.
+            // Views can otherwise be reached through JOIN and scalar/derived SELECTs.
+            const allowedViews = selectedConfig.restViewAllowlist ?? [];
+            const config = {
+                ...selectedConfig,
+                C6: {
+                    ...selectedConfig.C6,
+                    TABLES: Object.fromEntries(Object.entries(selectedConfig.C6.TABLES).filter(([name, model]) =>
+                        (model as any).RELATION_TYPE !== 'VIEW' || allowedViews.includes(name))),
+                },
+            };
             const { C6 } = config;
 
             if (!Object.prototype.hasOwnProperty.call(C6.TABLES, table)) {
@@ -141,9 +152,13 @@ export function ExpressHandler<
 
             const response = await restRequest({
                 ...config,
+                // Selection is already resolved. Do not reapply a database entry's
+                // original C6 and restore views excluded at this REST boundary.
+                databases: undefined,
+                defaultDatabase: undefined,
                 requestMethod: method,
                 restModel: C6.TABLES[table]
-            })(payload);
+            })(stripDatabaseKeyFromRequest(payload));
 
             const {sql: _sql, ...publicResponse} = response as any;
             res.status(200).json({success: true, ...publicResponse});

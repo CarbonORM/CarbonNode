@@ -17,7 +17,7 @@ export function scopedCacheRequest(config: any, request: unknown, transport: 'sq
     const backend = transport === 'sql' ? (config.mysqlPool ?? config.postgresPool) : config.axios;
     if (backend && !backendIds.has(backend)) backendIds.set(backend, ++nextBackendId);
     return [transport, backend ? backendIds.get(backend) : null, config.restURL ?? '',
-        config.cacheScope, config.sqlAllowListPath ?? '', request];
+        config.cacheScope, config.sqlAllowListPath ?? '', config.cacheDatabaseKey ?? '', request];
 }
 
 function makeCacheKey(

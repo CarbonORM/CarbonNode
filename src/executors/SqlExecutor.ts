@@ -784,7 +784,7 @@ export class SqlExecutor<
         const logContext = getLogContext(this.config, this.request);
         const cacheResults = method === C6C.GET
             && typeof this.config.cacheScope === 'string' && this.config.cacheScope.length > 0
-            && (this.request.cacheResults ?? true)
+            && this.request.cacheResults === true
             && !Object.values(this.config.restModel.LIFECYCLE_HOOKS.GET ?? {}).some(group =>
                 group && Object.keys(group).length > 0);
         const cacheAllowListStatus: SqlAllowListStatus = this.config.sqlAllowListPath
@@ -1073,7 +1073,7 @@ export class SqlExecutor<
                     method: sqlMethod,
                     sql: sqlExecution.sql,
                     context: logContext,
-                    cacheStatus: this.request.cacheResults === false ? "ignored" : "miss",
+                    cacheStatus: this.request.cacheResults === true ? "miss" : "ignored",
                     allowListStatus: "denied",
                 });
                 throw error;
@@ -1083,7 +1083,7 @@ export class SqlExecutor<
                 method: sqlMethod,
                 sql: sqlExecution.sql,
                 context: logContext,
-                cacheStatus: this.request.cacheResults === false ? "ignored" : "miss",
+                cacheStatus: this.request.cacheResults === true ? "miss" : "ignored",
                 allowListStatus,
             });
 

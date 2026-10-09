@@ -41,6 +41,16 @@ describe("SqlExecutor cache eviction", () => {
     clearCache({ ignoreWarning: true });
   });
 
+  it("requires explicit cache opt-in even with a trusted identity scope", async () => {
+    const { actorSql, conn } = buildOrm();
+    const first = await actorSql.Get({ actor_id: 1 } as any);
+    const second = await actorSql.Get({ actor_id: 1 } as any);
+    expect(conn.query).toHaveBeenCalledTimes(2);
+    expect(first.evictFromCache).toBeUndefined();
+    expect(second.evictFromCache).toBeUndefined();
+    expect(apiRequestCache.size).toBe(0);
+  });
+
   it("adds evictFromCache for cached GET responses", async () => {
     const { actorSql, conn } = buildOrm();
 

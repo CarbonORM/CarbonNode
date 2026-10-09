@@ -10,17 +10,21 @@ export abstract class ConditionBuilder<
     G extends OrmGenerics
 > extends AggregateBuilder<G> {
 
-    protected aliasMap: Record<string, string> = {};
+    protected aliasMap: Record<string, string> = Object.create(null);
     protected derivedAliases: Set<string> = new Set<string>();
 
     protected initAlias(baseTable: string, joins?: any): void {
-        this.aliasMap = { [baseTable]: baseTable };
+        this.aliasMap = Object.create(null);
         this.derivedAliases = new Set<string>();
+        this.registerAlias(baseTable, baseTable);
 
         if (!joins) return;
 
-        for (const joinType in joins) {
-            for (const raw in joins[joinType]) {
+        const sections = joins instanceof Map ? Array.from(joins.values()) : Object.values(joins);
+        for (const section of sections) {
+            const keys = section instanceof Map ? Array.from(section.keys()) : Object.keys(section ?? {});
+            for (const rawKey of keys) {
+                const raw = String(rawKey);
                 const [table, alias] = raw.trim().split(/\s+/, 2);
                 if (!table) continue;
                 this.registerAlias(alias || table, table);
@@ -41,12 +45,31 @@ export abstract class ConditionBuilder<
         }
     }
 
+    protected normalizeWritableColumn(table: string, column: string, context: string): string {
+        const parts = typeof column === 'string' ? column.split('.') : [];
+        if (parts.length < 1 || parts.length > 2 || (parts.length === 2 && parts[0] !== table)) {
+            throw new Error(`Invalid column in ${context}: '${column}'.`);
+        }
+        const name = parts[parts.length - 1];
+        if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) {
+            throw new Error(`Invalid column in ${context}: '${column}'.`);
+        }
+        const columns = this.config.C6?.TABLES?.[table]?.COLUMNS ?? {};
+        if (!Object.prototype.hasOwnProperty.call(columns, `${table}.${name}`) && !Object.values(columns).includes(name)) {
+            throw new Error(`Unknown column in ${context}: '${column}'.`);
+        }
+        return name;
+    }
+
     protected assertValidIdentifier(identifier: string, context: string): void {
         if (typeof identifier !== 'string') return;
         if (!identifier.includes('.')) return;
 
-        const [alias] = identifier.split('.', 2);
-        if (!(alias in this.aliasMap)) {
+        if (!/^[A-Za-z_][A-Za-z0-9_]*\.(?:[A-Za-z_][A-Za-z0-9_]*|\*)$/.test(identifier)) {
+            throw new Error(`Invalid SQL reference in ${context}: '${identifier}'.`);
+        }
+        const [alias] = identifier.split('.');
+        if (!Object.prototype.hasOwnProperty.call(this.aliasMap, alias)) {
             throw new Error(`Unknown table or alias '${alias}' referenced in ${context}: '${identifier}'.`);
         }
     }
@@ -79,6 +102,7 @@ export abstract class ConditionBuilder<
 
         if (trimmed.includes('.')) {
             if (/^[A-Za-z_][A-Za-z0-9_]*\.\*$/.test(trimmed)) {
+                this.assertValidIdentifier(trimmed, 'SQL reference');
                 return true;
             }
             if (this.isTableReference(trimmed) || this.isColumnRef(trimmed)) {
@@ -317,7 +341,7 @@ export abstract class ConditionBuilder<
         throw new Error('Unsupported operand type in SQL expression.');
     }
 
-    private isExpressionTuple(value: any): boolean {
+    protected isExpressionTuple(value: any): boolean {
         if (!Array.isArray(value) || value.length === 0 || typeof value[0] !== 'string') {
             return false;
         }

@@ -76,7 +76,7 @@ export type RequestGetPutDeleteBody<T extends { [key: string]: any } = any> = T 
     WHERE?: WhereClause<T>;
     JOIN?: Join<T>;
     ORDER?: OrderTerm[];
-    GROUP_BY?: string | string[];
+    GROUP_BY?: SQLExpression | SQLExpression[];
     HAVING?: WhereClause<T>;
     INDEX_HINTS?: IndexHints;
     PAGINATION?: Pagination;
@@ -238,6 +238,8 @@ export interface iPostgresPool {
 }
 
 export interface iDatabaseRuntimeOptions {
+    /** Trusted view names allowed through generic REST, including JOINs and subselects. */
+    restViewAllowlist?: readonly string[];
     sqlDialect?: SqlDialectName | SqlDialect;
     mysqlPool?: Pool;
     postgresPool?: iPostgresPool;
@@ -268,6 +270,8 @@ export interface iRest<
     PrimaryKey extends keyof RestTableInterface & string = keyof RestTableInterface & string
 > {
     C6: iC6Object;
+    /** Trusted view names allowed through generic REST, including JOINs and subselects. */
+    restViewAllowlist?: readonly string[];
     axios?: AxiosInstance;
     restURL?: string;
     mysqlPool?: Pool;

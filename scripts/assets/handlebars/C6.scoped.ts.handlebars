@@ -17,39 +17,39 @@ import {
 
 export const SCOPED_C6_BY_DATABASE: Record<string, iC6Object<any>> = {
     {{#each SCOPED_DATABASES}}
-    '{{DATABASE_KEY}}': (() => {
+    {{{tsString DATABASE_KEY}}}: (() => {
         {{#each RELATIONS}}
         const {{SCOPED_TABLE_CONST}}: Record<string, any> & {
             TABLE_NAME: string;
             RELATION_TYPE: 'TABLE' | 'VIEW';
             READ_ONLY: boolean;
         } = {
-            TABLE_NAME: '{{TABLE_NAME}}',
-            RELATION_TYPE: '{{RELATION_TYPE}}',
+            TABLE_NAME: {{{tsString TABLE_NAME}}},
+            RELATION_TYPE: {{{tsString RELATION_TYPE}}},
             READ_ONLY: {{READ_ONLY}},
             {{#each COLUMNS_UPPERCASE}}
-            {{@key}}: '{{this}}',
+            {{{tsKey @key}}}: {{{tsString this}}},
             {{/each}}
             PRIMARY: [
             {{#PRIMARY}}
-                '{{this}}',
+                {{{tsString this}}},
             {{/PRIMARY}}
             ],
             PRIMARY_SHORT: [
             {{#each PRIMARY_SHORT}}
-                '{{this}}',
+                {{{tsString this}}},
             {{/each}}
             ],
             COLUMNS: {
             {{#each COLUMNS}}
-                '{{@key}}': '{{this}}',
+                {{{tsString @key}}}: {{{tsString this}}},
             {{/each}}
             },
             TYPE_VALIDATION: {
             {{#each TYPE_VALIDATION}}
-                '{{@key}}': {
-                    MYSQL_TYPE: '{{this.MYSQL_TYPE}}',
-                    MAX_LENGTH: '{{this.MAX_LENGTH}}',
+                {{{tsString @key}}}: {
+                    MYSQL_TYPE: {{{tsString this.MYSQL_TYPE}}},
+                    MAX_LENGTH: {{{tsString this.MAX_LENGTH}}},
                     AUTO_INCREMENT: {{this.AUTO_INCREMENT}},
                     SKIP_COLUMN_IN_POST: {{this.SKIP_COLUMN_IN_POST}}
                 },
@@ -57,7 +57,7 @@ export const SCOPED_C6_BY_DATABASE: Record<string, iC6Object<any>> = {
             },
             REGEX_VALIDATION: {
             {{#each REGEX_VALIDATION}}
-                '{{@key}}': '{{this}}',
+                {{{tsString @key}}}: {{{tsString this}}},
             {{/each}}
             },
             LIFECYCLE_HOOKS: {
@@ -67,17 +67,17 @@ export const SCOPED_C6_BY_DATABASE: Record<string, iC6Object<any>> = {
                 DELETE: {beforeProcessing:{}, beforeExecution:{}, afterExecution:{}, afterCommit:{}},
             },
             TABLE_REFERENCES: {
-                {{#each TABLE_REFERENCES}}'{{@key}}': [{{#this}}{
-                    TABLE: '{{TABLE}}',
-                    COLUMN: '{{COLUMN}}',
-                    CONSTRAINT: '{{CONSTRAINT}}',
+                {{#each TABLE_REFERENCES}}{{{tsString @key}}}: [{{#this}}{
+                    TABLE: {{{tsString TABLE}}},
+                    COLUMN: {{{tsString COLUMN}}},
+                    CONSTRAINT: {{{tsString CONSTRAINT}}},
                 },{{/this}}],{{/each}}
             },
             TABLE_REFERENCED_BY: {
-                {{#each TABLE_REFERENCED_BY}}'{{@key}}': [{{#this}}{
-                    TABLE: '{{TABLE}}',
-                    COLUMN: '{{COLUMN}}',
-                    CONSTRAINT: '{{CONSTRAINT}}',
+                {{#each TABLE_REFERENCED_BY}}{{{tsString @key}}}: [{{#this}}{
+                    TABLE: {{{tsString TABLE}}},
+                    COLUMN: {{{tsString COLUMN}}},
+                    CONSTRAINT: {{{tsString CONSTRAINT}}},
                 },{{/this}}],{{/each}}
             }
         };
@@ -85,13 +85,13 @@ export const SCOPED_C6_BY_DATABASE: Record<string, iC6Object<any>> = {
 
         const scopedTables = {
             {{#each RELATIONS}}
-            '{{TABLE_NAME_SHORT}}': {{SCOPED_TABLE_CONST}},
+            {{{tsString TABLE_NAME_SHORT}}}: {{SCOPED_TABLE_CONST}},
             {{/each}}
         } as Record<string, any>;
 
         const scopedC6: iC6Object<any> = {
             ...C6Constants,
-            C6VERSION: '{{../C6VERSION}}',
+            C6VERSION: {{{tsString ../C6VERSION}}},
             PREFIX: RestTablePrefix,
             TABLES: scopedTables as any,
             ORM: {},
