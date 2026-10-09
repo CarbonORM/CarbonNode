@@ -17,6 +17,7 @@ import {removeInvalidKeys, removePrefixIfExists, TestRestfulResponse} from "../u
 import {scopedCacheRequest, checkCache, evictCacheEntry, setCache, userCustomClearCache} from "../utils/cacheManager";
 import type { SqlAllowListStatus } from "../utils/logSql";
 import {normalizeRequestOrder} from "../utils/normalizeSingularRequest";
+import {safePagination, queryLimits, validateResponseBudget} from '../utils/querySafety';
 import {sortAndSerializeQueryObject} from "../utils/sortAndSerializeQueryObject";
 import {notifyToast} from "../utils/toastRuntime";
 import {Executor} from "./Executor";
@@ -209,7 +210,7 @@ export class HttpExecutor<
                 throw Error('Bad request method passed to getApi')
         }
 
-        if (clearCache != null) {
+        if (clearCache != null && !userCustomClearCache.includes(clearCache)) {
             userCustomClearCache.push(clearCache);
         }
 
@@ -273,9 +274,7 @@ export class HttpExecutor<
 
                 }
 
-                query[C6.PAGINATION][C6.PAGE] = query[C6.PAGINATION][C6.PAGE] || 1;
-
-                query[C6.PAGINATION][C6.LIMIT] = query[C6.PAGINATION][C6.LIMIT] || 100;
+                query[C6.PAGINATION] = {...query[C6.PAGINATION], ...safePagination(query[C6.PAGINATION], this.config)};
 
             }
 
@@ -350,7 +349,8 @@ export class HttpExecutor<
             // todo - aggregate primary key check with condition check
             // check if PK exists in query, clone so pop does not affect the real data
             const primaryKeyList = structuredClone(TABLES[operatingTable]?.PRIMARY);
-            const primaryKeyFullyQualified = primaryKeyList?.pop();
+            // Composite identities stay in the payload; one path segment cannot represent them.
+            const primaryKeyFullyQualified = primaryKeyList?.length === 1 ? primaryKeyList[0] : undefined;
             const primaryKey = primaryKeyFullyQualified?.split('.')?.pop();
 
             if (needsConditionOrPrimaryCheck) {
@@ -363,7 +363,11 @@ export class HttpExecutor<
                         (Array.isArray(whereVal) && whereVal.length === 0) ||
                         (typeof whereVal === 'object' && !Array.isArray(whereVal) && Object.keys(whereVal).length === 0);
 
-                    if (whereIsEmpty) {
+                    const hasCompositeIdentity = primaryKeyList?.length > 1 && primaryKeyList.every((key: string) => {
+                        const value = query?.[key] ?? query?.[key.split('.').pop()!];
+                        return value !== undefined && value !== null;
+                    });
+                    if (whereIsEmpty && !hasCompositeIdentity) {
 
                         logWithLevel(LogLevel.ERROR, logContext, console.error, query);
 
@@ -412,7 +416,13 @@ export class HttpExecutor<
 
                 if (undefined !== primaryVal) {
 
-                    restRequestUri += primaryVal + '/'
+                    if (!['string', 'number', 'bigint'].includes(typeof primaryVal)) throw new Error('Invalid HTTP primary key.');
+                    const segment = String(primaryVal);
+                    // Reject traversal and encoded delimiters; encode all remaining values as one segment.
+                    if (!segment || /[\\/?#%\u0000-\u001f\u007f]/.test(segment) || segment === '.' || segment === '..') {
+                        throw new Error('Invalid HTTP primary key path segment.');
+                    }
+                    restRequestUri += encodeURIComponent(segment) + '/';
 
                     if (isLocal() && shouldLog(LogLevel.DEBUG, logContext)) {
                         console.log('query', query, 'primaryKey', primaryKey);
@@ -442,7 +452,7 @@ export class HttpExecutor<
                     console.groupEnd();
                 }
 
-                this.runLifecycleHooks<"beforeExecution">(
+                await this.runLifecycleHooks<"beforeExecution">(
                     "beforeExecution", {
                         config: this.config,
                         request: this.request
@@ -466,6 +476,9 @@ export class HttpExecutor<
 
                         const baseConfig = {
                             withCredentials: withCredentials,
+                            timeout: this.config.statementTimeoutMs ?? 30000,
+                            maxContentLength: this.config.maxResponseBytes ?? 8 * 1024 * 1024,
+                            maxBodyLength: queryLimits(this.config.queryLimits).maxInputBytes,
                         };
 
                         switch (requestMethod) {
@@ -517,6 +530,8 @@ export class HttpExecutor<
                 // https://rapidapi.com/guides/axios-async-await
                 return axiosActiveRequest.then(async (response: AxiosResponse<ResponseDataType, any>): Promise<AxiosResponse<ResponseDataType, any>> => {
 
+                        validateResponseBudget(response.data, this.config);
+
                         let hasNext: boolean | undefined;
 
                         // noinspection SuspiciousTypeOfGuard
@@ -555,7 +570,7 @@ export class HttpExecutor<
                             });
                         }
 
-                        this.runLifecycleHooks<"afterExecution">(
+                        await this.runLifecycleHooks<"afterExecution">(
                             "afterExecution", {
                                 config: this.config,
                                 request: this.request,
@@ -572,7 +587,8 @@ export class HttpExecutor<
                             return Promise.resolve({ ...response, data: null as unknown as ResponseDataType });
                         }
 
-                        const callback = () => this.runLifecycleHooks<"afterCommit">(
+                        let commitHook: Promise<void> | undefined;
+                        const callback = () => commitHook ??= this.runLifecycleHooks<"afterCommit">(
                             "afterCommit", {
                                 config: this.config,
                                 request: this.request,
@@ -601,8 +617,9 @@ export class HttpExecutor<
                                     break;
                             }
                         } else {
-                            callback();
+                            await callback();
                         }
+                        await callback();
 
                         if (requestMethod === GET && this.isRestResponse(response)) {
 

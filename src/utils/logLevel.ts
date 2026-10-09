@@ -148,6 +148,10 @@ export const logWithLevel = (
     ...args: any[]
 ): void => {
     if (shouldLog(requiredLevel, context)) {
-        logger(...args);
+        const encode = (value: unknown) => typeof value === 'string'
+            ? value.replace(/[\u0000-\u001f\u007f-\u009f\u2028\u2029\u202a-\u202e\u2066-\u2069]/g,
+                char => `\\u${char.charCodeAt(0).toString(16).padStart(4, '0')}`)
+            : value instanceof Error ? encode(value.message) : value;
+        logger(...args.map(encode));
     }
 };

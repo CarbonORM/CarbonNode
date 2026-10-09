@@ -7,6 +7,7 @@ import {
 } from "../types/ormInterfaces";
 import {resolveSqlDialect, SqlDialect} from "../orm/dialects/SqlDialect";
 import {applyLogLevelDefaults, getLogContext, LogLevel, logWithLevel, shouldLog} from "../utils/logLevel";
+import {validateQueryRequest} from '../utils/querySafety';
 
 export abstract class Executor<
     G extends OrmGenerics
@@ -25,6 +26,7 @@ export abstract class Executor<
         >,
         protected useNamedParams: boolean = false,
     ) {
+        validateQueryRequest(this.request, this.config);
         applyLogLevelDefaults(this.config, this.request);
     }
 
@@ -63,6 +65,7 @@ export abstract class Executor<
                 try {
                     // todo - this
                     await fn(args  as any);
+                    validateQueryRequest(args.request, this.config);
                 } catch (err) {
                     logWithLevel(
                         LogLevel.ERROR,

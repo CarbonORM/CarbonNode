@@ -5,6 +5,7 @@ import {iRest, iRestMethods} from "../types/ormInterfaces";
 import {LogLevel, logWithLevel} from "../utils/logLevel";
 import {OrmGenerics} from "../types/ormGenerics";
 import {resolveDatabaseSelection, stripDatabaseKeyFromRequest} from "../api/databaseResolver";
+import {validateQueryRequest} from '../utils/querySafety';
 
 
 export function restExpressRequest<G extends OrmGenerics>(
@@ -82,6 +83,8 @@ export function ExpressHandler<
             const allowedViews = selectedConfig.restViewAllowlist ?? [];
             const config = {
                 ...selectedConfig,
+                enforceRestFunctionPolicy: true,
+                statementTimeoutMs: selectedConfig.statementTimeoutMs ?? 5000,
                 C6: {
                     ...selectedConfig.C6,
                     TABLES: Object.fromEntries(Object.entries(selectedConfig.C6.TABLES).filter(([name, model]) =>
@@ -89,6 +92,7 @@ export function ExpressHandler<
                 },
             };
             const { C6 } = config;
+            validateQueryRequest(payload, config);
 
             if (!Object.prototype.hasOwnProperty.call(C6.TABLES, table)) {
                 res.status(400).json({error: `Invalid table: ${table}`});
@@ -101,26 +105,8 @@ export function ExpressHandler<
             const columnMap = restModel.COLUMNS ?? {};
             const resolveShortKey = (fullKey: string, index: number) =>
                 (columnMap as any)[fullKey] ?? primaryShortKeys[index] ?? fullKey.split('.').pop() ?? fullKey;
-            const hasPrimaryKeyValues = (data: any) => {
-                if (!data || typeof data !== 'object') return false;
-                const whereClause = (data as any)[C6C.WHERE];
-                const hasKeyValue = (obj: any, fullKey: string, shortKey: string) => {
-                    if (!obj || typeof obj !== 'object') return false;
-                    const fullValue = obj[fullKey];
-                    if (fullValue !== undefined && fullValue !== null) return true;
-                    const shortValue = shortKey ? obj[shortKey] : undefined;
-                    return shortValue !== undefined && shortValue !== null;
-                };
-                return primaryKeys.every((fullKey, index) => {
-                    const shortKey = resolveShortKey(fullKey, index);
-                    return hasKeyValue(whereClause, fullKey, shortKey) || hasKeyValue(data, fullKey, shortKey);
-                });
-            };
-
-            if (primary && primaryKeys.length !== 1) {
-                if (primaryKeys.length > 1 && hasPrimaryKeyValues(payload)) {
-                    primary = undefined;
-                } else if (primaryKeys.length > 1) {
+            if (primary !== undefined && primaryKeys.length !== 1) {
+                if (primaryKeys.length > 1) {
                     res.status(400).json({error: `Table ${table} has multiple primary keys. Cannot implicitly determine key.`});
                     return;
                 } else {

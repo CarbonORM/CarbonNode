@@ -56,7 +56,7 @@ export class SelectQueryBuilder<G extends OrmGenerics> extends PaginationBuilder
         if (args.PAGINATION) {
             sql += this.buildPaginationClause(args.PAGINATION, params);
         } else if (!isSubSelect) {
-            sql += this.sqlDialect.defaultLimit();
+            sql += this.buildPaginationClause({}, params);
         }
 
         return { sql, params };
