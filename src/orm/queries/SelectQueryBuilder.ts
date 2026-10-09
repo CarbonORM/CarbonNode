@@ -40,9 +40,12 @@ export class SelectQueryBuilder<G extends OrmGenerics> extends PaginationBuilder
         }
 
         if (args.GROUP_BY) {
-            const groupBy = Array.isArray(args.GROUP_BY)
-                ? args.GROUP_BY.join(', ')
-                : args.GROUP_BY;
+            const groupByTerms = Array.isArray(args.GROUP_BY)
+                ? args.GROUP_BY
+                : [args.GROUP_BY];
+            const groupBy = groupByTerms
+                .map((term: any) => this.serializeExpression(term, params, 'GROUP BY expression').sql)
+                .join(', ');
             sql += ` GROUP BY ${groupBy}`;
         }
 

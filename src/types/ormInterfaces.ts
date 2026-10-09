@@ -75,7 +75,7 @@ export type RequestGetPutDeleteBody<T extends { [key: string]: any } = any> = T 
     WHERE?: WhereClause<T>;
     JOIN?: Join<T>;
     ORDER?: OrderTerm[];
-    GROUP_BY?: string | string[];
+    GROUP_BY?: SQLExpression | SQLExpression[];
     HAVING?: WhereClause<T>;
     INDEX_HINTS?: IndexHints;
     PAGINATION?: Pagination;

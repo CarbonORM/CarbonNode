@@ -44,6 +44,31 @@ describe('SQL Builders', () => {
     expect(params).toEqual(['%A%', 10, 1]);
   });
 
+  it('rejects raw SQL fragments in SELECT and GROUP BY expressions', () => {
+    const config = buildTestConfig();
+
+    expect(() => new SelectQueryBuilder(config as any, {
+      SELECT: ['actor.actor_id', '(SELECT GROUP_CONCAT(password) FROM secrets) AS leaked'],
+    } as any, false).build('actor')).toThrow(/Bare string .* is not a reference in SELECT expression/);
+
+    expect(() => new SelectQueryBuilder(config as any, {
+      SELECT: ['actor.actor_id'],
+      GROUP_BY: 'actor.actor_id WITH ROLLUP',
+    } as any, false).build('actor')).toThrow(/Bare string .* is not a reference in GROUP BY expression/);
+  });
+
+  it('serializes GROUP BY terms through the expression serializer', () => {
+    const config = buildTestConfig();
+    const qb = new SelectQueryBuilder(config as any, {
+      SELECT: ['actor.first_name', [C6C.AS, [C6C.COUNT, 'actor.actor_id'], 'cnt']],
+      GROUP_BY: ['actor.first_name', 'actor.last_name'],
+    } as any, false);
+
+    const { sql } = qb.build('actor');
+
+    expect(sql).toContain('GROUP BY actor.first_name, actor.last_name');
+  });
+
   it('logs SELECT aggregate expressions at DEBUG level', () => {
     const config = buildTestConfig();
     const logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
