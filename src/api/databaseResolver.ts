@@ -69,7 +69,7 @@ const resolveTableModelForC6 = (
 
     for (const candidate of candidates) {
         if (!candidate) continue;
-        if (candidate in c6.TABLES) {
+        if (hasOwn(c6.TABLES, candidate)) {
             return c6.TABLES[candidate] as C6RestfulModel<string, any, any>;
         }
     }
@@ -192,7 +192,7 @@ export const resolveDatabaseSelection = <
         );
     }
 
-    const entry = configuredDatabases[databaseKey];
+    const entry = hasOwn(configuredDatabases, databaseKey) ? configuredDatabases[databaseKey] : undefined;
     if (!entry) {
         throw new Error(
             `Unknown database key '${databaseKey}'. Known keys: ${Object.keys(configuredDatabases).join(", ") || "(none)"}.`,
@@ -200,7 +200,7 @@ export const resolveDatabaseSelection = <
     }
 
     return {
-        config: mergeDatabaseEntry(baseConfig, entry),
+        config: {...mergeDatabaseEntry(baseConfig, entry), cacheDatabaseKey: databaseKey},
         databaseKey,
     };
 };

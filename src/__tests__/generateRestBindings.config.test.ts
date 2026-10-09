@@ -3,6 +3,7 @@ import os from "os";
 import path from "path";
 import { spawnSync } from "child_process";
 import { describe, expect, it } from "vitest";
+import ts from 'typescript';
 
 const repoRoot = process.cwd();
 const generatorScriptPath = path.resolve(repoRoot, "scripts/generateRestBindings.cjs");
@@ -525,6 +526,27 @@ describe("generateRestBindings config validation", () => {
 });
 
 describe('generator security boundaries', () => {
+    it('serializes punctuation, quotes, and comment terminators from schema names as data', () => {
+        const dir = makeTempDir();
+        try {
+            const outputDir = path.join(dir, 'out'); fs.mkdirSync(outputDir);
+            const schema = "CREATE TABLE `actor` (\n  `actor_id` int NOT NULL AUTO_INCREMENT,\n  `foo: globalThis.process.exit(99), bar` int DEFAULT NULL,\n  `name'quote` varchar(45) DEFAULT NULL,\n  `slash*/ payload /*` int DEFAULT NULL,\n  PRIMARY KEY (`actor_id`)\n) ENGINE=InnoDB;";
+            fs.writeFileSync(path.join(outputDir, 'C6.mysqldump.sql'), schema);
+            const configPath = path.join(dir, 'config.json');
+            writeJson(configPath, {databases: [{alias: 'app', host: 'invalid.example', user: 'test', pass: 'test-only', dbname: 'app'}]});
+            const result = runGenerator(['--config', configPath, '--output', outputDir, '--no-db', '1'], dir);
+            expect(result.status, result.output).toBe(0);
+            const table = fs.readFileSync(path.join(outputDir, 'C6.generated/tables/Actor.ts'), 'utf8');
+            expect(table).toContain("FOO_GLOBALTHIS_PROCESS_EXIT_99_BAR: 'actor.foo: globalThis.process.exit(99), bar'");
+            expect(table).toContain("'name\\'quote'?: string");
+            expect(table).not.toContain('`slash*/ payload /*`');
+            for (const file of ['tables/Actor.ts', 'core.ts', 'scoped.ts'].map(file => path.join(outputDir, 'C6.generated', file))) {
+                const source = fs.readFileSync(file, 'utf8');
+                expect(ts.transpileModule(source, {reportDiagnostics: true}).diagnostics ?? []).toEqual([]);
+            }
+        } finally {fs.rmSync(dir, {recursive: true, force: true});}
+    });
+
     it('uses argv for database names, keeps credentials temporary, and hides trigger bodies by default', () => {
         ensureGeneratorScript();
         const dir = makeTempDir();

@@ -12,40 +12,40 @@ import {
 } from "../core";
 
 /**
-{{{TABLE_DEFINITION}}}
+{{{tsComment TABLE_DEFINITION}}}
 **/
 
 export interface i{{TABLE_NAME_SHORT_PASCAL_CASE}} {
 {{#each TYPE_VALIDATION}}
-    '{{this.COLUMN_NAME}}'?: {{{this.TYPESCRIPT_TYPE}}}{{^NOT_NULL}} | null{{/NOT_NULL}};
+    {{{tsString this.COLUMN_NAME}}}?: {{{this.TYPESCRIPT_TYPE}}}{{^NOT_NULL}} | null{{/NOT_NULL}};
 {{/each}}
 }
 
 export type {{TABLE_NAME_SHORT_PASCAL_CASE}}PrimaryKeys = never;
 
 const {{TABLE_NAME_SHORT}}: Record<string, any> & {
-        TABLE_NAME: '{{TABLE_NAME_SHORT}}';
+        TABLE_NAME: {{{tsString TABLE_NAME_SHORT}}};
         RELATION_TYPE: 'VIEW';
         READ_ONLY: true;
     } = {
-    TABLE_NAME: '{{TABLE_NAME}}',
+    TABLE_NAME: {{{tsString TABLE_NAME}}},
     RELATION_TYPE: 'VIEW',
     READ_ONLY: true,
     {{#each COLUMNS_UPPERCASE}}
-    {{@key}}: '{{this}}',
+    {{{tsKey @key}}}: {{{tsString this}}},
     {{/each}}
     PRIMARY: [],
     PRIMARY_SHORT: [],
     COLUMNS: {
     {{#each COLUMNS}}
-        '{{@key}}': '{{this}}',
+        {{{tsString @key}}}: {{{tsString this}}},
     {{/each}}
     },
     TYPE_VALIDATION: {
     {{#each TYPE_VALIDATION}}
-        '{{@key}}': {
-            MYSQL_TYPE: '{{this.MYSQL_TYPE}}',
-            MAX_LENGTH: '{{this.MAX_LENGTH}}',
+        {{{tsString @key}}}: {
+            MYSQL_TYPE: {{{tsString this.MYSQL_TYPE}}},
+            MAX_LENGTH: {{{tsString this.MAX_LENGTH}}},
             AUTO_INCREMENT: {{this.AUTO_INCREMENT}},
             SKIP_COLUMN_IN_POST: {{this.SKIP_COLUMN_IN_POST}}
         },
@@ -53,7 +53,7 @@ const {{TABLE_NAME_SHORT}}: Record<string, any> & {
     },
     REGEX_VALIDATION: {
     {{#each REGEX_VALIDATION}}
-        '{{@key}}': '{{this}}',
+        {{{tsString @key}}}: {{{tsString this}}},
     {{/each}}
     },
     LIFECYCLE_HOOKS: {
@@ -77,8 +77,8 @@ export const {{TABLE_NAME_SHORT_PASCAL_CASE}} = {
 }
 
 registerC6Table(
-    '{{TABLE_NAME_SHORT}}',
-    '{{TABLE_NAME_SHORT_PASCAL_CASE}}',
+    {{{tsString TABLE_NAME_SHORT}}},
+    {{{tsString TABLE_NAME_SHORT_PASCAL_CASE}}},
     {{TABLE_NAME_SHORT}},
     {{TABLE_NAME_SHORT_PASCAL_CASE}},
     'VIEW',

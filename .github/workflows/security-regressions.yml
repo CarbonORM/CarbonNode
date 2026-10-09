@@ -1,0 +1,49 @@
+name: Security regression validation
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql@sha256:7dcddc01f13bab2f15cde676d44d01f61fc9f99fe7785e86196dfc07d358ae2b
+        env:
+          MYSQL_ROOT_PASSWORD: password
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -ppassword --silent"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=12
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version: '25'
+          cache: npm
+      - name: Prepare test database
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y default-mysql-client
+          cat > "$HOME/my.cnf" <<'EOF'
+          [client]
+          user=root
+          password=password
+          host=127.0.0.1
+          port=3306
+          protocol=tcp
+          EOF
+          chmod 600 "$HOME/my.cnf"
+          mysql --defaults-file="$HOME/my.cnf" -e "SET GLOBAL local_infile = 1; CREATE DATABASE IF NOT EXISTS sakila;"
+          mysql --defaults-file="$HOME/my.cnf" sakila < src/__tests__/sakila-db/sakila-schema.sql
+          mysql --defaults-file="$HOME/my.cnf" sakila < src/__tests__/sakila-db/sakila-data.sql
+      - run: npm ci
+      - run: npm test

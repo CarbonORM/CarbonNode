@@ -31,6 +31,17 @@ describe("HttpExecutor cache eviction", () => {
     clearCache({ ignoreWarning: true });
   });
 
+  it("does not cache GET responses by default", async () => {
+    const get = vi.fn().mockResolvedValue({ data: makeResponsePayload() });
+    const actorHttp = buildOrm(get);
+
+    await actorHttp.Get({ actor_id: 1 } as any);
+    await actorHttp.Get({ actor_id: 1 } as any);
+
+    expect(get).toHaveBeenCalledTimes(2);
+    expect(apiRequestCache.size).toBe(0);
+  });
+
   it("adds evictFromCache for cached GET responses", async () => {
     const get = vi.fn().mockResolvedValue({ data: makeResponsePayload() });
     const actorHttp = buildOrm(get);

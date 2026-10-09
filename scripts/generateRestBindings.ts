@@ -11,6 +11,20 @@ process.on('exit', () => {
 });
 const readline = require('readline');
 const Handlebars = require('handlebars');
+// Schema names are data, even when MySQL permits punctuation in quoted identifiers.
+const typeScriptString = (value: unknown): string => {
+    const escaped = JSON.stringify(String(value))
+        .slice(1, -1)
+        .replace(/'/g, "\\'")
+        .replace(/\u2028/g, '\\u2028')
+        .replace(/\u2029/g, '\\u2029');
+    return `'${escaped}'`;
+};
+Handlebars.registerHelper('tsString', (value: unknown) => new Handlebars.SafeString(typeScriptString(value)));
+Handlebars.registerHelper('tsKey', (value: unknown) => new Handlebars.SafeString(
+    /^[A-Za-z_][A-Za-z0-9_]*$/.test(String(value)) ? String(value) : typeScriptString(value),
+));
+Handlebars.registerHelper('tsComment', (value: unknown) => new Handlebars.SafeString(String(value).replace(/\*\//g, '* /')));
 import {version} from '../package.json';
 
 const args = process.argv.slice(2);  // Slice the first two elements

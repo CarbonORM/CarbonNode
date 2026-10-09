@@ -15,6 +15,19 @@ jobs:
     permissions:
       contents: read
       id-token: write
+    services:
+      mysql:
+        # Pinned mysql:8.0 image digest; avoids executing a mutable third-party setup action.
+        image: mysql@sha256:7dcddc01f13bab2f15cde676d44d01f61fc9f99fe7785e86196dfc07d358ae2b
+        env:
+          MYSQL_ROOT_PASSWORD: password
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -ppassword --silent"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=12
 
     steps:
       - name: Checkout
@@ -32,16 +45,10 @@ jobs:
 
       - run: npm whoami || echo "OIDC mode (expected)"
 
-      - uses: shogo82148/actions-setup-mysql@1d4ebc60ba1227dd13fc7e6ba845bd3997928d75 # v1
-        with:
-          mysql-version: "8.0"
-          root-password: password
-          my-cnf: |
-            innodb_log_file_size=256MB
-            innodb_buffer_pool_size=512MB
-            max_allowed_packet=16MB
-            max_connections=50
-            local_infile=1
+      - name: Install MySQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y default-mysql-client
 
       - name: Setup MySQL client config
         run: |
@@ -54,13 +61,14 @@ jobs:
           protocol=tcp
           EOF
           chmod 600 ~/my.cnf
+          mysql --defaults-file="$HOME/my.cnf" -e "SET GLOBAL local_infile = 1; SET GLOBAL max_connections = 50;"
 
       - name: Load schema
         if: hashFiles('src/__tests__/sakila-db/sakila-schema.sql') != ''
         run: |
-          mysql --defaults-file=~/my.cnf -e "CREATE DATABASE IF NOT EXISTS sakila;"
-          mysql --defaults-file=~/my.cnf sakila < src/__tests__/sakila-db/sakila-schema.sql
-          mysql --defaults-file=~/my.cnf sakila < src/__tests__/sakila-db/sakila-data.sql
+          mysql --defaults-file="$HOME/my.cnf" -e "CREATE DATABASE IF NOT EXISTS sakila;"
+          mysql --defaults-file="$HOME/my.cnf" sakila < src/__tests__/sakila-db/sakila-schema.sql
+          mysql --defaults-file="$HOME/my.cnf" sakila < src/__tests__/sakila-db/sakila-data.sql
 
       - name: Read package name & version
         id: pkg
