@@ -228,7 +228,7 @@ export class HttpExecutor<
 
             const {
                 debug,
-                cacheResults = (C6.GET === requestMethod),
+                cacheResults = false,
                 skipReactBootstrap = false,
                 dataInsertMultipleRows,
                 success,
