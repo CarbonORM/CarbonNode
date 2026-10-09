@@ -159,6 +159,27 @@ export abstract class JoinBuilder<G extends OrmGenerics> extends ConditionBuilde
         return '';
     }
 
+    private isValidJoinKind(joinKind: string): boolean {
+        return new Set([
+            'JOIN',
+            'INNER',
+            'LEFT',
+            'LEFT JOIN',
+            'LEFT OUTER',
+            'LEFT OUTER JOIN',
+            'RIGHT',
+            'RIGHT JOIN',
+            'RIGHT OUTER',
+            'RIGHT OUTER JOIN',
+            'FULL',
+            'FULL JOIN',
+            'FULL OUTER',
+            'FULL OUTER JOIN',
+            'CROSS',
+            'CROSS JOIN',
+        ]).has(joinKind);
+    }
+
     buildJoinClauses(joinArgs: any, params: any[] | Record<string, any>): string {
         let sql = '';
 
@@ -168,6 +189,9 @@ export abstract class JoinBuilder<G extends OrmGenerics> extends ConditionBuilde
 
         for (const [joinTypeRaw, joinSection] of joinTypeEntries) {
             const joinKind = joinTypeRaw.replace('_', ' ').toUpperCase();
+            if (!this.isValidJoinKind(joinKind)) {
+                throw new Error(`Invalid JOIN type '${joinTypeRaw}'.`);
+            }
             const entries: Array<[any, any]> = [];
 
             if (joinSection instanceof Map) {
@@ -216,7 +240,7 @@ export abstract class JoinBuilder<G extends OrmGenerics> extends ConditionBuilde
                     const normalizedSql = this.integrateSubSelectParams(subSql, subParams, params);
 
                     const formatted = normalizedSql.trim().split('\n').map(line => `  ${line}`).join('\n');
-                    const joinSql = `(\n${formatted}\n) AS \`${alias}\``;
+                    const joinSql = `(\n${formatted}\n) AS ${this.escapeSqlIdentifierPart(alias, 'JOIN alias')}`;
                     const onClause = this.buildBooleanJoinedConditions(conditions, true, params);
                     sql += ` ${joinKind} JOIN ${joinSql}`;
                     if (onClause) {
@@ -227,8 +251,13 @@ export abstract class JoinBuilder<G extends OrmGenerics> extends ConditionBuilde
                     if (alias) {
                         this.registerAlias(alias, table);
                     }
+                    this.assertSqlIdentifierPart(table, 'JOIN table');
+                    if (alias) {
+                        this.assertSqlIdentifierPart(alias, 'JOIN alias');
+                    }
                     const hintClause = this.getIndexHintClause(table, alias);
-                    const baseJoinSql = alias ? `\`${table}\` AS \`${alias}\`` : `\`${table}\``;
+                    const tableSql = this.escapeSqlIdentifierPart(table, 'JOIN table');
+                    const baseJoinSql = alias ? `${tableSql} AS ${this.escapeSqlIdentifierPart(alias, 'JOIN alias')}` : tableSql;
                     const joinSql = hintClause ? `${baseJoinSql} ${hintClause}` : baseJoinSql;
                     const onClause = this.buildBooleanJoinedConditions(conditions, true, params);
                     sql += ` ${joinKind} JOIN ${joinSql}`;

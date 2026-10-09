@@ -6,21 +6,32 @@ import {AggregateBuilder} from "./AggregateBuilder";
 import {isDerivedTableKey} from "../queryHelpers";
 import {getLogContext, LogLevel, logWithLevel} from "../../utils/logLevel";
 
+const SQL_IDENTIFIER_REGEX = /^[A-Za-z_][A-Za-z0-9_]*$/;
+
 export abstract class ConditionBuilder<
     G extends OrmGenerics
 > extends AggregateBuilder<G> {
 
-    protected aliasMap: Record<string, string> = {};
+    protected aliasMap: Record<string, string> = Object.create(null);
     protected derivedAliases: Set<string> = new Set<string>();
 
     protected initAlias(baseTable: string, joins?: any): void {
-        this.aliasMap = { [baseTable]: baseTable };
+        this.aliasMap = Object.create(null);
         this.derivedAliases = new Set<string>();
+        this.registerAlias(baseTable, baseTable);
 
         if (!joins) return;
 
-        for (const joinType in joins) {
-            for (const raw in joins[joinType]) {
+        const joinTypeEntries: Array<[string, any]> = joins instanceof Map
+            ? Array.from(joins.entries()).map(([key, value]) => [String(key), value])
+            : Object.keys(joins).map(key => [key, joins[key]]);
+
+        for (const [, joinSection] of joinTypeEntries) {
+            const joinEntries: Array<[string, any]> = joinSection instanceof Map
+                ? Array.from(joinSection.entries()).map(([key, value]) => [String(key), value])
+                : Object.keys(joinSection ?? {}).map(key => [key, joinSection[key]]);
+
+            for (const [raw] of joinEntries) {
                 const [table, alias] = raw.trim().split(/\s+/, 2);
                 if (!table) continue;
                 this.registerAlias(alias || table, table);
@@ -28,7 +39,30 @@ export abstract class ConditionBuilder<
         }
     }
 
+    protected hasOwnKey(obj: object | undefined | null, key: string): boolean {
+        return !!obj && Object.prototype.hasOwnProperty.call(obj, key);
+    }
+
+    private isInheritedObjectProperty(key: string): boolean {
+        return key in Object.prototype;
+    }
+
+    protected assertSqlIdentifierPart(identifier: string, context: string): void {
+        if (typeof identifier !== 'string' || !SQL_IDENTIFIER_REGEX.test(identifier)) {
+            throw new Error(`${context} '${identifier}' must be a valid SQL identifier.`);
+        }
+    }
+
+    protected escapeSqlIdentifierPart(identifier: string, context: string): string {
+        this.assertSqlIdentifierPart(identifier, context);
+        return `\`${identifier.replace(/`/g, '``')}\``;
+    }
+
     protected registerAlias(alias: string, table: string): void {
+        this.assertSqlIdentifierPart(alias, 'JOIN alias');
+        if (!isDerivedTableKey(table)) {
+            this.assertSqlIdentifierPart(table, 'JOIN table');
+        }
         this.aliasMap[alias] = table;
         if (isDerivedTableKey(table)) {
             this.derivedAliases.add(alias);
@@ -39,8 +73,17 @@ export abstract class ConditionBuilder<
         if (typeof identifier !== 'string') return;
         if (!identifier.includes('.')) return;
 
-        const [alias] = identifier.split('.', 2);
-        if (!(alias in this.aliasMap)) {
+        const parts = identifier.split('.');
+        if (parts.length !== 2) {
+            throw new Error(`Invalid SQL reference in ${context}: '${identifier}'.`);
+        }
+
+        const [alias, column] = parts;
+        this.assertSqlIdentifierPart(alias, `${context} table or alias`);
+        if (column !== '*') {
+            this.assertSqlIdentifierPart(column, `${context} column`);
+        }
+        if (!this.hasOwnKey(this.aliasMap, alias)) {
             throw new Error(`Unknown table or alias '${alias}' referenced in ${context}: '${identifier}'.`);
         }
     }
@@ -48,8 +91,12 @@ export abstract class ConditionBuilder<
     protected isColumnRef(ref: string): boolean {
         if (typeof ref !== 'string' || !ref.includes('.')) return false;
 
-        const [prefix, column] = ref.split('.', 2);
-        const tableName = this.aliasMap[prefix] || prefix;
+        const parts = ref.split('.');
+        if (parts.length !== 2) return false;
+        const [prefix, column] = parts;
+        if (!SQL_IDENTIFIER_REGEX.test(prefix) || !SQL_IDENTIFIER_REGEX.test(column)) return false;
+
+        const tableName = this.hasOwnKey(this.aliasMap, prefix) ? this.aliasMap[prefix] : prefix;
 
         if (isDerivedTableKey(tableName) || this.derivedAliases.has(prefix)) {
             return true;
@@ -59,7 +106,7 @@ export abstract class ConditionBuilder<
         if (!table) return false;
 
         const fullKey = `${tableName}.${column}`;
-        if (table.COLUMNS && (fullKey in table.COLUMNS)) return true;
+        if (this.hasOwnKey(table.COLUMNS, fullKey)) return true;
         if (table.COLUMNS && Object.values(table.COLUMNS).includes(column)) return true;
 
         return false;
@@ -80,7 +127,8 @@ export abstract class ConditionBuilder<
             }
             if (/^[A-Za-z_][A-Za-z0-9_]*\.[A-Za-z_][A-Za-z0-9_]*$/.test(trimmed)) {
                 this.assertValidIdentifier(trimmed, 'SQL reference');
-                return true;
+                const [, column] = trimmed.split('.', 2);
+                return !this.isInheritedObjectProperty(column);
             }
             return false;
         }
@@ -154,8 +202,12 @@ export abstract class ConditionBuilder<
             }
             return false;
         }
-        const [prefix, column] = val.split('.');
-        const tableName = this.aliasMap[prefix] ?? prefix;
+        const parts = val.split('.');
+        if (parts.length !== 2) return false;
+        const [prefix, column] = parts;
+        if (!SQL_IDENTIFIER_REGEX.test(prefix) || !SQL_IDENTIFIER_REGEX.test(column)) return false;
+
+        const tableName = this.hasOwnKey(this.aliasMap, prefix) ? this.aliasMap[prefix] : prefix;
         if (isDerivedTableKey(tableName) || this.derivedAliases.has(prefix)) {
             return true;
         }
@@ -165,10 +217,11 @@ export abstract class ConditionBuilder<
         const fullKey = `${tableName}.${column}`;
 
         return (
-            fullKey in table.COLUMNS ||
+            this.hasOwnKey(table.COLUMNS, fullKey) ||
             Object.values(table.COLUMNS).includes(column)
         );
     }
+
 
     public addParam(
         params: any[] | Record<string, any>,

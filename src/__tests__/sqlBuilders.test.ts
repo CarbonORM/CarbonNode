@@ -340,6 +340,39 @@ describe('SQL Builders', () => {
     expect(params).toEqual([100]);
   });
 
+
+  it('rejects unsafe JOIN aliases before building ON predicates', () => {
+    const config = buildTestConfig();
+    const qb = new SelectQueryBuilder(config as any, {
+      SELECT: ['actor.actor_id'],
+      JOIN: {
+        [C6C.INNER]: {
+          'film_actor 1)OR/**/1=1#': {
+            '1)OR/**/1=1#.toString': [C6C.EQUAL, [C6C.LIT, 1]],
+          },
+        },
+      },
+    } as any, false);
+
+    expect(() => qb.build('actor')).toThrowError(/JOIN alias .* valid SQL identifier/);
+  });
+
+  it('does not treat inherited COLUMNS properties as JOIN alias column references', () => {
+    const config = buildTestConfig();
+    const qb = new SelectQueryBuilder(config as any, {
+      SELECT: ['actor.actor_id'],
+      JOIN: {
+        [C6C.INNER]: {
+          'film_actor fa': {
+            'fa.toString': [C6C.EQUAL, [C6C.LIT, 1]],
+          },
+        },
+      },
+    } as any, false);
+
+    expect(() => qb.build('actor')).toThrowError(/Bare string 'fa\.toString' is not a reference/);
+  });
+
   it('converts hex to Buffer for BINARY columns in WHERE params', () => {
     const config = buildTestConfig();
     const qb = new SelectQueryBuilder(config as any, {
