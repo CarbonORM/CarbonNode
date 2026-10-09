@@ -2,6 +2,7 @@ import { DeleteQueryBuilder } from "../orm/queries/DeleteQueryBuilder";
 import { PostQueryBuilder } from "../orm/queries/PostQueryBuilder";
 import { SelectQueryBuilder } from "../orm/queries/SelectQueryBuilder";
 import { UpdateQueryBuilder } from "../orm/queries/UpdateQueryBuilder";
+import {validateSqlBudget, validateResponseBudget} from '../utils/querySafety';
 import { OrmGenerics } from "../types/ormGenerics";
 import { C6Constants as C6C } from "../constants/C6Constants";
 import {
@@ -900,6 +901,7 @@ export class SqlExecutor<
     ): iRestSqlExecutionContext {
         const builder = this.getQueryBuilder(method);
         const queryResult = builder.build(tableName);
+        validateSqlBudget(queryResult.sql, queryResult.params, this.config);
 
         logWithLevel(
             LogLevel.DEBUG,
@@ -948,6 +950,7 @@ export class SqlExecutor<
             const rows = this.isPostgresRuntime()
                 ? ((result as iPostgresQueryResult).rows ?? [])
                 : result;
+            validateResponseBudget(rows, this.config);
             return {
                 rest: rows.map(this.serialize),
                 sql: { sql: sqlExecution.sql, values: sqlExecution.values },
@@ -1096,8 +1099,9 @@ export class SqlExecutor<
                 },
             );
             // Hooks may rewrite SQL; approve the statement that actually reaches the driver.
+            validateSqlBudget(sqlExecution.sql, sqlExecution.values, this.config);
             await this.validateSqlAllowList(sqlExecution.sql);
-            const result = await this.runSqlStatement(conn, sqlExecution);
+            const result = await this.runWithStatementTimeout(conn, sqlExecution);
 
             const response = this.createResponseFromQueryResult(
                 method,
@@ -1159,6 +1163,30 @@ export class SqlExecutor<
             }
             throw err;
         }
+    }
+
+    private async runWithStatementTimeout(conn: SqlConnection, sql: iRestSqlExecutionContext): Promise<any> {
+        const timeout = this.config.statementTimeoutMs;
+        if (timeout === undefined) return this.runSqlStatement(conn, sql);
+        if (!Number.isSafeInteger(timeout) || timeout < 1 || timeout > 300000) throw new Error('Invalid trusted statement timeout.');
+        if (this.isPostgresRuntime()) {
+            const pg = conn as iPostgresClient;
+            if (this.config.requestMethod !== C6C.GET) {
+                // Transaction-local settings restore automatically on commit or rollback,
+                // including a timeout that leaves the transaction aborted.
+                await pg.query("SELECT set_config('statement_timeout', $1, true)", [String(timeout)]);
+                return this.runSqlStatement(conn, sql);
+            }
+            const prior = await pg.query('SHOW statement_timeout');
+            await pg.query("SELECT set_config('statement_timeout', $1, false)", [String(timeout)]);
+            try {return await this.runSqlStatement(conn, sql);}
+            finally {await pg.query("SELECT set_config('statement_timeout', $1, false)", [prior.rows?.[0]?.statement_timeout ?? '0']);}
+        }
+        const mysql = conn as PoolConnection;
+        const [prior] = await mysql.query<any[]>('SELECT @@SESSION.max_execution_time AS timeout');
+        await mysql.query('SET SESSION max_execution_time = ?', [timeout]);
+        try {return await this.runSqlStatement(conn, sql);}
+        finally {await mysql.query('SET SESSION max_execution_time = ?', [prior[0]?.timeout ?? 0]);}
     }
 
     private async validateSqlAllowList(sql: string): Promise<SqlAllowListStatus> {

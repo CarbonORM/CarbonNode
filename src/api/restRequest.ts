@@ -6,6 +6,7 @@ import {
 } from "../types/ormInterfaces";
 import {applyLogLevelDefaults, getLogContext, LogLevel, logWithLevel} from "../utils/logLevel";
 import {resolveRestConfigForRequest, stripDatabaseKeyFromRequest} from "./databaseResolver";
+import {validateQueryRequest} from '../utils/querySafety';
 
 /**
  * Facade: routes API calls to SQL or HTTP executors based on runtime context.
@@ -34,6 +35,7 @@ export default function restRequest<
 
         const baseConfig = {...(typeof configX === "function" ? configX() : configX)};
         const { config } = resolveRestConfigForRequest(baseConfig as any, request as any);
+        validateQueryRequest(request, config);
 
         if ((config.restModel as any)?.READ_ONLY === true && config.requestMethod !== "GET") {
             const relationName = (config.restModel as any)?.TABLE_NAME ?? "relation";

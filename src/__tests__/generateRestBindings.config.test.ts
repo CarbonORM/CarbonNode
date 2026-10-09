@@ -1,7 +1,7 @@
 import fs from "fs";
 import os from "os";
 import path from "path";
-import { spawnSync } from "child_process";
+import { spawn, spawnSync } from "child_process";
 import { describe, expect, it } from "vitest";
 import ts from 'typescript';
 
@@ -526,6 +526,71 @@ describe("generateRestBindings config validation", () => {
 });
 
 describe('generator security boundaries', () => {
+    it.each(['../../C6', '/tmp/escape', 'bad\\name', 'index', 'class', 'CON', 'Actor'])('rejects unsafe or colliding PostgreSQL view names before generated writes: %s', name => {
+        ensureGeneratorScript(); const dir = makeTempDir();
+        try {
+            const bin = path.join(dir, 'bin'); fs.mkdirSync(bin);
+            const outputDir = path.join(dir, 'out'); fs.mkdirSync(outputDir);
+            const sentinel = path.join(outputDir, 'C6.ts'); fs.writeFileSync(sentinel, 'original facade');
+            const rows = `${name}\tVIEW\tid\tinteger\tint4\tYES\t\n`;
+            fs.writeFileSync(path.join(bin, 'pg_dump'), `#!/usr/bin/env node\nprocess.stdout.write(${JSON.stringify(minimalPostgresSchemaDump)});\n`, {mode: 0o755});
+            fs.writeFileSync(path.join(bin, 'psql'), `#!/usr/bin/env node\nprocess.stdout.write(${JSON.stringify(rows)});\n`, {mode: 0o755});
+            const configPath = path.join(dir, 'config.json');
+            writeJson(configPath, {databases: [{alias: 'app', dialect: 'postgresql', host: 'invalid.example', user: 'test', pass: 'test-only', dbname: 'app'}]});
+            const result = spawnSync(process.execPath, [generatorScriptPath, '--config', configPath, '--output', outputDir], {
+                cwd: dir, encoding: 'utf8', env: {...process.env, PATH: `${bin}${path.delimiter}${process.env.PATH}`, C6_SKIP_GENERATED_TSC: '1'},
+            });
+            // A duplicate raw actor is a table/view conflict and must not silently replace its metadata.
+            expect(result.status, result.stdout + result.stderr).not.toBe(0);
+            expect(fs.readFileSync(sentinel, 'utf8')).toBe('original facade');
+        } finally {fs.rmSync(dir, {recursive: true, force: true});}
+    });
+    it.each(['C6.ts', 'C6.generated', 'C6.mysqldump.json'])('refuses existing or dangling generated symlinks: %s', relative => {
+        const dir = makeTempDir();
+        try {
+            const outputDir = path.join(dir, 'out'); fs.mkdirSync(outputDir);
+            fs.writeFileSync(path.join(outputDir, 'C6.mysqldump.sql'), minimalSchemaDump);
+            const outside = path.join(dir, 'outside.ts'); fs.writeFileSync(outside, 'preserve');
+            fs.symlinkSync(outside, path.join(outputDir, relative));
+            const configPath = path.join(dir, 'config.json');
+            writeJson(configPath, {databases: [{alias: 'app', host: 'invalid.example', user: 'test', pass: 'test-only', dbname: 'app'}]});
+            const result = runGenerator(['--config', configPath, '--output', outputDir, '--no-db', '1'], dir);
+            expect(result.status).not.toBe(0); expect(result.output).toContain('symbolic links');
+            expect(fs.readFileSync(outside, 'utf8')).toBe('preserve');
+            fs.rmSync(outside);
+            const dangling = runGenerator(['--config', configPath, '--output', outputDir, '--no-db', '1'], dir);
+            expect(dangling.status).not.toBe(0); expect(fs.existsSync(outside)).toBe(false);
+        } finally {fs.rmSync(dir, {recursive: true, force: true});}
+    });
+    it('scaffolds an ignored mode-0600 environment-reference config without collecting a password', async () => {
+        ensureGeneratorScript(); const dir = makeTempDir();
+        try {
+            const outputDir = path.join(dir, 'out'); fs.mkdirSync(outputDir);
+            fs.writeFileSync(path.join(outputDir, 'C6.mysqldump.sql'), minimalSchemaDump);
+            const bootstrap = `Object.defineProperty(process.stdin, 'isTTY', {value: true}); Object.defineProperty(process.stdout, 'isTTY', {value: true}); process.argv = [process.execPath, ${JSON.stringify(generatorScriptPath)}, '--output', ${JSON.stringify(outputDir)}]; require(${JSON.stringify(generatorScriptPath)});`;
+            const answers: [string, string][] = [['Create ./C6.config.local.json', 'y'], ['Database alias', 'app'], ['Dialect', 'mysql'],
+                ['Host', 'invalid.example'], ['Port', '3306'], ['User:', 'test'], ['Password environment variable', 'TEST_C6_PASS'], ['Schema names', 'app'], ['Add another', 'n']];
+            const result = await new Promise<{code: number | null; output: string}>((resolve, reject) => {
+                const child = spawn(process.execPath, ['-e', bootstrap], {cwd: dir, env: {...process.env, TEST_C6_PASS: 'test-only-secret', C6_NO_DB: '1', C6_SKIP_GENERATED_TSC: '1'}});
+                let output = '', buffer = '', next = 0;
+                const timer = setTimeout(() => {child.kill(); reject(new Error('Wizard timed out'));}, 15000);
+                child.stdout.on('data', chunk => {output += chunk; buffer += chunk;
+                    if (next < answers.length && buffer.includes(answers[next][0])) {child.stdin.write(answers[next][1] + '\n'); next++; buffer = '';}
+                });
+                child.stderr.on('data', chunk => {output += chunk;});
+                child.on('error', error => {clearTimeout(timer); reject(error);});
+                child.on('close', code => {clearTimeout(timer); resolve({code, output});});
+            });
+            expect(result.code, result.output).toBe(0);
+            const file = path.join(dir, 'C6.config.local.json');
+            const config = JSON.parse(fs.readFileSync(file, 'utf8'));
+            expect(config.databases[0]).toHaveProperty('passEnv', 'TEST_C6_PASS');
+            expect(config.databases[0]).not.toHaveProperty('pass');
+            expect(fs.statSync(file).mode & 0o777).toBe(0o600);
+            expect(result.output).not.toContain('test-only-secret');
+            expect(fs.readFileSync(path.join(repoRoot, '.gitignore'), 'utf8')).toContain('C6.config.local.json');
+        } finally {fs.rmSync(dir, {recursive: true, force: true});}
+    }, 20000);
     it('serializes punctuation, quotes, and comment terminators from schema names as data', () => {
         const dir = makeTempDir();
         try {

@@ -35,8 +35,8 @@ describe('REST security boundary', () => {
     it.each(['GET', 'PUT', 'DELETE'])('binds the URL key as a literal for singular %s', async method => {
         const {config, conn} = sqlFixture();
         await handle(config, method, {actor_id: 6, 'actor.actor_id': 7, ...(method === 'PUT' ? {first_name: 'Changed'} : {})}, 'actor.actor_id');
-        expect(conn.query).toHaveBeenCalledOnce();
-        const [sql, params]: any = conn.query.mock.calls[0];
+        expect(conn.query).toHaveBeenCalledTimes(4);
+        const [sql, params]: any = conn.query.mock.calls[2];
         expect(sql).toContain('WHERE');
         expect(params).toContain('actor.actor_id');
         expect(params).not.toContain(6);
@@ -45,14 +45,14 @@ describe('REST security boundary', () => {
     it('ANDs route identity with a client OR filter', async () => {
         const {config, conn} = sqlFixture();
         await handle(config, 'DELETE', {WHERE: {OR: [{'actor.actor_id': 6}, {'actor.actor_id': 7}]}}, '5');
-        const [sql, params]: any = conn.query.mock.calls[0];
+        const [sql, params]: any = conn.query.mock.calls[2];
         expect(sql).toMatch(/WHERE.*OR.*AND/s);
         expect(params).toEqual([6, 7, '5']);
     });
     it('adds WHERE for complex PUT with a URL key', async () => {
         const {config, conn} = sqlFixture();
         await handle(config, 'PUT', {UPDATE: {first_name: 'Changed'}, 'actor.actor_id': 7}, '5');
-        const [sql, params]: any = conn.query.mock.calls[0];
+        const [sql, params]: any = conn.query.mock.calls[2];
         expect(sql).toContain('WHERE');
         expect(params).toEqual(['Changed', '5']);
     });

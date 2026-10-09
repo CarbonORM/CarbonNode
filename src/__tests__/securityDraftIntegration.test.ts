@@ -51,7 +51,7 @@ describe('holistic Security Cloud draft integration', () => {
         config.restViewAllowlist = ['actor_info'];
         const res = await get(config, 'actor_info');
         expect(res.status).toHaveBeenCalledWith(200);
-        expect(conn.query).toHaveBeenCalledOnce();
+        expect(conn.query).toHaveBeenCalledTimes(4);
     });
     it('keeps database aliases isolated even when they share a transport', async () => {
         const {config, conn} = fixture();

@@ -248,6 +248,7 @@ const buildScopedDefinitionsFromConfig = (
 const CONFIG_DISCOVERY_NAMES = [
     ".C6.ts",
     ".C6.json",
+    "C6.config.local.json",
     "C6.config.ts",
     "C6.config.json",
 ];
@@ -286,7 +287,7 @@ const buildConfigInteractively = async (): Promise<iGeneratorConfig> => {
     });
 
     try {
-        console.log("[generateRestBindings] No config found. Let's create C6.config.json.");
+        console.log("[generateRestBindings] No config found. Let's create a secret-free C6.config.local.json.");
         const databases: iGeneratorDatabaseConfigEntry[] = [];
 
         while (true) {
@@ -299,7 +300,8 @@ const buildConfigInteractively = async (): Promise<iGeneratorConfig> => {
             const defaultPort = dialect === "postgresql" ? "5432" : "3306";
             const port = (await askQuestion(rl, `Port (default ${defaultPort}): `)) || defaultPort;
             const user = ensureString(await askQuestion(rl, "User: "), "user");
-            const pass = ensureString(await askQuestion(rl, "Password: "), "pass");
+            const passEnv = (await askQuestion(rl, "Password environment variable (default C6_DB_PASSWORD): ")) || 'C6_DB_PASSWORD';
+            if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(passEnv)) throw new Error('Invalid password environment variable name.');
             const dbnamesRaw = ensureString(
                 await askQuestion(rl, "Schema names (comma-separated, e.g. app,billing): "),
                 "dbnames",
@@ -311,7 +313,7 @@ const buildConfigInteractively = async (): Promise<iGeneratorConfig> => {
                 host,
                 port,
                 user,
-                pass,
+                passEnv,
                 dbnames: dbnamesRaw.split(",").map((name) => name.trim()).filter(Boolean),
             });
 
@@ -1625,7 +1627,45 @@ const applyGeneratedModuleMetadata = (tableData: any) => {
     }
 };
 
+const validateGeneratedOutput = (outputDir: string, tableData: any) => {
+    const root = path.resolve(outputDir);
+    const symbols = new Set<string>();
+    const targets = ['C6.ts', 'C6.test.ts', 'C6.mysqldump.json', 'C6.generated/core.ts',
+        'C6.generated/scoped.ts', 'C6.generated/tables/index.ts', 'C6.generated/views/index.ts'];
+    const reservedSymbols = new Set(['await', 'break', 'case', 'catch', 'class', 'const', 'continue',
+        'debugger', 'default', 'delete', 'do', 'else', 'enum', 'export', 'extends', 'false', 'finally',
+        'for', 'function', 'if', 'implements', 'import', 'in', 'instanceof', 'interface', 'let', 'new',
+        'null', 'package', 'private', 'protected', 'public', 'return', 'static', 'super', 'switch',
+        'this', 'throw', 'true', 'try', 'typeof', 'var', 'void', 'while', 'with', 'yield']);
+    for (const relation of tableData.RELATIONS) {
+        const name = relation.TABLE_NAME_SHORT_PASCAL_CASE;
+        if (![relation.TABLE_NAME, relation.TABLE_NAME_SHORT, name].every(value =>
+            typeof value === 'string' && /^[A-Za-z_][A-Za-z0-9_]*$/.test(value))) {
+            throw new Error('Unsafe generated relation name; SQL names must map to safe symbols and filenames.');
+        }
+        const key = name.toLowerCase();
+        if (reservedSymbols.has(relation.TABLE_NAME_SHORT) || /^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/.test(key)
+            || ['index', 'core', 'scoped', 'c6'].includes(key) || symbols.has(key)) throw new Error('Reserved or colliding generated relation name.');
+        symbols.add(key);
+        targets.push(`C6.generated/${relation.RELATION_TYPE === 'VIEW' ? 'views' : 'tables'}/${name}.ts`);
+    }
+    for (const relative of targets) {
+        const target = path.resolve(root, relative);
+        if (!target.startsWith(root + path.sep)) throw new Error('Generated path escapes output directory.');
+        let current = root;
+        for (const part of ['', ...relative.split('/')]) {
+            current = path.join(current, part);
+            try {
+                if (fs.lstatSync(current).isSymbolicLink()) throw new Error('Generated output refuses symbolic links.');
+            } catch (error) {
+                if ((error as any).code !== 'ENOENT') throw error;
+            }
+        }
+    }
+};
+
 const writeGeneratedBindings = (outputDir: string, tableData: any) => {
+    validateGeneratedOutput(outputDir, tableData);
     const templatesDir = path.resolve(__dirname, 'assets/handlebars');
     const readTemplate = (templateName: string) =>
         fs.readFileSync(path.join(templatesDir, templateName), 'utf-8');
@@ -1732,7 +1772,7 @@ const resolveConfigPathFromArgsOrDiscovery = async (): Promise<string> => {
         output: process.stdout,
     });
     try {
-        const answer = (await askQuestion(rl, "No config found. Create ./C6.config.json now? (y/N): ")).toLowerCase();
+        const answer = (await askQuestion(rl, "No config found. Create ./C6.config.local.json now? (y/N): ")).toLowerCase();
         if (answer !== "y" && answer !== "yes") {
             throw new Error("Config is required. Generation cancelled.");
         }
@@ -1741,8 +1781,8 @@ const resolveConfigPathFromArgsOrDiscovery = async (): Promise<string> => {
     }
 
     const generatedConfig = await buildConfigInteractively();
-    const generatedPath = path.resolve(process.cwd(), "C6.config.json");
-    fs.writeFileSync(generatedPath, `${JSON.stringify(generatedConfig, null, 2)}\n`);
+    const generatedPath = path.resolve(process.cwd(), "C6.config.local.json");
+    fs.writeFileSync(generatedPath, `${JSON.stringify(generatedConfig, null, 2)}\n`, {mode: 0o600, flag: 'wx'});
     console.log(`[generateRestBindings] Created config at ${generatedPath}`);
     return generatedPath;
 };
@@ -1967,6 +2007,7 @@ const main = async () => {
 
     tableData.SCOPED_DATABASES = scopedDatabaseSchemas;
     applyGeneratedModuleMetadata(tableData);
+    validateGeneratedOutput(MySQLDump.OUTPUT_DIR, tableData);
 
     // write to file
     fs.writeFileSync(path.join(MySQLDump.OUTPUT_DIR, 'C6.mysqldump.json'), JSON.stringify(tableData));
@@ -1978,11 +2019,7 @@ const main = async () => {
     if (process.env.C6_SKIP_GENERATED_TSC === "1") {
         console.log("[generateRestBindings] Skipping generated C6.ts type check (C6_SKIP_GENERATED_TSC=1).");
     } else {
-        try {
-            typeCheckGeneratedC6(outputDir);
-        } catch (e) {
-            console.warn('TypeScript type check for generated C6.ts reported errors:', e);
-        }
+        typeCheckGeneratedC6(outputDir);
     }
 
     console.log('Successfully created CarbonORM bindings!');

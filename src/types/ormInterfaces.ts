@@ -7,6 +7,7 @@ import type {CarbonReact, iStateAdapter} from "@carbonorm/carbonreact";
 import type {OrmGenerics} from "./ormGenerics";
 import {restOrm} from "../api/restOrm";
 import type {SqlDialect, SqlDialectName} from "../orm/dialects/SqlDialect";
+import type {QuerySafetyConfig} from '../utils/querySafety';
 
 
 type RestOrmFactory = typeof restOrm<OrmGenerics<any>>;
@@ -237,7 +238,12 @@ export interface iPostgresPool {
     connect: () => Promise<iPostgresClient> | iPostgresClient;
 }
 
-export interface iDatabaseRuntimeOptions {
+export interface iDatabaseRuntimeOptions extends QuerySafetyConfig {
+    /** Trusted SQL execution deadline in milliseconds. */
+    statementTimeoutMs?: number;
+    /** Trusted pagination cap and maximum offset. Defaults: 1000 rows, 100000 offset. */
+    maxPageSize?: number;
+    maxPageOffset?: number;
     /** Trusted view names allowed through generic REST, including JOINs and subselects. */
     restViewAllowlist?: readonly string[];
     sqlDialect?: SqlDialectName | SqlDialect;
@@ -268,8 +274,11 @@ export interface iRest<
     RestShortTableName extends string = any,
     RestTableInterface extends Record<string, any> = any,
     PrimaryKey extends keyof RestTableInterface & string = keyof RestTableInterface & string
-> {
+> extends QuerySafetyConfig {
     C6: iC6Object;
+    statementTimeoutMs?: number;
+    maxPageSize?: number;
+    maxPageOffset?: number;
     /** Trusted view names allowed through generic REST, including JOINs and subselects. */
     restViewAllowlist?: readonly string[];
     axios?: AxiosInstance;

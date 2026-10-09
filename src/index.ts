@@ -47,6 +47,7 @@ export { default as logSql } from "./utils/logSql";
 export * from "./utils/logSql";
 export * from "./utils/logger";
 export * from "./utils/normalizeSingularRequest";
+export * from "./utils/querySafety";
 export * from "./utils/sortAndSerializeQueryObject";
 export * from "./utils/sqlAllowList";
 export * from "./utils/testHelpers";
