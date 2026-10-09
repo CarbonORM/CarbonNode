@@ -76,6 +76,13 @@ describe('HTTP lifecycle authorization and URL identity', () => {
 });
 
 describe('shared query and pagination budgets', () => {
+    it.each([false, true])('bounds deep arrays without recursive token coercion (REST policy %s)', enforceRestFunctionPolicy => {
+        let deep: unknown = 1;
+        for (let i = 0; i < 20000; i++) deep = [deep];
+        expect(() => validateQueryRequest({SELECT: [deep]}, {enforceRestFunctionPolicy})).toThrow('Query complexity budget exceeded');
+        expect(() => validateQueryRequest({SELECT: [[C6C.CALL, deep]]}, {enforceRestFunctionPolicy}))
+            .toThrow(enforceRestFunctionPolicy ? 'Database function is not approved' : 'Query complexity budget exceeded');
+    });
     it.each([{}, {ORDER: [['actor.actor_id', 'DESC']]}, {LIMIT: null}])('preserves a default limit for %j', pagination => {
         const sql = new SelectQueryBuilder(buildTestConfig() as any, {PAGINATION: pagination} as any).build('actor').sql;
         expect(sql).toContain('LIMIT 100');

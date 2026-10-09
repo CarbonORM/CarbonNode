@@ -82,15 +82,16 @@ export function validateQueryRequest(request: unknown, config: QuerySafetyConfig
             throw new Error('Query collection budget exceeded.');
         }
         if (!Array.isArray(value) && !(value instanceof Map)) Object.keys(value).forEach(countString);
+        // Inspect only string tokens: coercing nested arrays recurses before the depth guard.
+        const head = Array.isArray(value) && typeof value[0] === 'string' ? value[0].trim().toUpperCase() : '';
         if (Array.isArray(value) && !literal && config.enforceRestFunctionPolicy) {
-            const head = String(value[0] ?? '').trim().toUpperCase();
-            const name = head === C6C.CALL ? String(value[1] ?? '').trim().toUpperCase() : head;
+            const name = head === C6C.CALL ? (typeof value[1] === 'string' ? value[1].trim().toUpperCase() : '') : head;
             if (forbiddenFunctions.has(name) || (head === C6C.CALL &&
                 !(config.restFunctionAllowlist ?? []).some(allowed => allowed.trim().toUpperCase() === name))) {
                 throw new Error('Database function is not approved for this REST endpoint.');
             }
         }
-        const childLiteral = literal || (Array.isArray(value) && String(value[0]).trim().toUpperCase() === C6C.LIT);
+        const childLiteral = literal || head === C6C.LIT;
         for (const child of children) stack.push({value: child, depth: depth + 1, literal: childLiteral});
     }
 }
