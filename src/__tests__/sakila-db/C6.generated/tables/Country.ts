@@ -25,11 +25,16 @@ export interface iCountry {
     'last_update'?: Date | number | string;
 }
 
-export type CountryPrimaryKeys = 
+export type CountryPrimaryKeys =
         'country_id'
     ;
 
-const country:
+export type PK_country = {
+    'country_id': number;
+};
+export type CountryPK_shape = PK_country;
+
+export const country:
     C6RestfulModel<
         'country',
         iCountry,
@@ -37,6 +42,8 @@ const country:
     > & Record<string, any> & {
         RELATION_TYPE: 'TABLE';
         READ_ONLY: false;
+        PRIMARY: readonly ['country.country_id'];
+        PRIMARY_SHORT: readonly ['country_id'];
     } = {
     TABLE_NAME: 'country',
     RELATION_TYPE: 'TABLE',
@@ -46,10 +53,10 @@ const country:
     LAST_UPDATE: 'country.last_update',
     PRIMARY: [
         'country.country_id',
-    ],
+    ] as const,
     PRIMARY_SHORT: [
         'country_id',
-    ],
+    ] as const,
     COLUMNS: {
         'country.country_id': 'country_id',
         'country.country': 'country',
@@ -86,7 +93,7 @@ const country:
         DELETE: {beforeProcessing:{}, beforeExecution:{}, afterExecution:{}, afterCommit:{}},
     },
     TABLE_REFERENCES: {
-        
+
     },
     TABLE_REFERENCED_BY: {
         'country_id': [{

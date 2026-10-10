@@ -11,6 +11,7 @@ export * from "./Film";
 export * from "./Film_Actor";
 export * from "./Film_Category";
 export * from "./Film_Text";
+export * from "./Group_Permissions";
 export * from "./Inventory";
 export * from "./Language";
 export * from "./Payment";

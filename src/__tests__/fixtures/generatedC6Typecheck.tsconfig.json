@@ -17,6 +17,7 @@
   "files": [
     "../sakila-db/C6.ts",
     "./generatedC6PublicImports.ts",
-    "./generatedC6DoubleBarrel.ts"
+    "./generatedC6DoubleBarrel.ts",
+    "./generatedCompositeKeys.ts"
   ]
 }

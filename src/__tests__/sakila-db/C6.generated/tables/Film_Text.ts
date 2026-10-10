@@ -26,11 +26,16 @@ export interface iFilm_Text {
     'description'?: string | null;
 }
 
-export type Film_TextPrimaryKeys = 
+export type Film_TextPrimaryKeys =
         'film_id'
     ;
 
-const film_text:
+export type PK_film_text = {
+    'film_id': number;
+};
+export type Film_TextPK_shape = PK_film_text;
+
+export const film_text:
     C6RestfulModel<
         'film_text',
         iFilm_Text,
@@ -38,6 +43,8 @@ const film_text:
     > & Record<string, any> & {
         RELATION_TYPE: 'TABLE';
         READ_ONLY: false;
+        PRIMARY: readonly ['film_text.film_id'];
+        PRIMARY_SHORT: readonly ['film_id'];
     } = {
     TABLE_NAME: 'film_text',
     RELATION_TYPE: 'TABLE',
@@ -47,10 +54,10 @@ const film_text:
     DESCRIPTION: 'film_text.description',
     PRIMARY: [
         'film_text.film_id',
-    ],
+    ] as const,
     PRIMARY_SHORT: [
         'film_id',
-    ],
+    ] as const,
     COLUMNS: {
         'film_text.film_id': 'film_id',
         'film_text.title': 'title',
@@ -87,10 +94,10 @@ const film_text:
         DELETE: {beforeProcessing:{}, beforeExecution:{}, afterExecution:{}, afterCommit:{}},
     },
     TABLE_REFERENCES: {
-        
+
     },
     TABLE_REFERENCED_BY: {
-        
+
     }
 }
 

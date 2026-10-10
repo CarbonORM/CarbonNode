@@ -32,6 +32,13 @@ function httpFixture(method: string) {
 }
 
 describe('HTTP lifecycle authorization and URL identity', () => {
+    it('PATCH retains PUT authorization when a different PATCH phase is configured', async () => {
+        const {config, dispatch, request} = httpFixture('PATCH');
+        config.restModel.LIFECYCLE_HOOKS.PATCH = {afterCommit: {track: vi.fn()}};
+        config.restModel.LIFECYCLE_HOOKS.PUT.beforeExecution = {authorize: async () => {throw new Error('Denied');}};
+        await expect(request({actor_id: 1, first_name: 'A'} as any)).rejects.toThrow('Denied');
+        expect(dispatch).not.toHaveBeenCalled();
+    });
     it.each(['GET', 'POST', 'PUT', 'DELETE'])('awaits rejecting authorization before %s dispatch', async method => {
         for (const asynchronous of [false, true]) {
             const {config, dispatch, request} = httpFixture(method);
@@ -65,7 +72,7 @@ describe('HTTP lifecycle authorization and URL identity', () => {
     it.each(['GET', 'PUT', 'DELETE'])('rejects ambiguous composite %s routes despite complete body keys', async method => {
         const {config, pool} = sqlFixture();
         const res = await handle(config, method, {WHERE: {'film_actor.actor_id': 2, 'film_actor.film_id': 3}}, 'film_actor', '1');
-        expect(res.status).toHaveBeenCalledWith(400); expect(pool.getConnection).not.toHaveBeenCalled();
+        expect(res.status).toHaveBeenCalledWith(422); expect(pool.getConnection).not.toHaveBeenCalled();
     });
     it.each(['GET', 'PUT', 'DELETE'])('sends complete composite %s identities as payload data without a path identity', async method => {
         const {config, dispatch} = httpFixture(method);

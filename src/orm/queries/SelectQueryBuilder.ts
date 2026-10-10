@@ -2,6 +2,8 @@ import {OrmGenerics} from "../../types/ormGenerics";
 import {PaginationBuilder} from "../builders/PaginationBuilder";
 import {SqlBuilderResult} from "../utils/sqlUtils";
 
+import {normalizePrimaryKeyRequest} from '../../utils/primaryKeys';
+
 export class SelectQueryBuilder<G extends OrmGenerics> extends PaginationBuilder<G>{
 
     protected createSelectBuilder(request: any) {
@@ -15,6 +17,7 @@ export class SelectQueryBuilder<G extends OrmGenerics> extends PaginationBuilder
         if (!Object.prototype.hasOwnProperty.call(this.config.C6?.TABLES ?? {}, table)) {
             throw new Error(`Unknown SELECT table '${table}'.`);
         }
+        this.request = normalizePrimaryKeyRequest('GET', this.request, this.config.C6.TABLES[table] ?? this.config.restModel);
         this.aliasMap = {};
         // reset any previously collected SELECT aliases (from AggregateBuilder)
         // @ts-ignore

@@ -28,7 +28,7 @@ CREATE TABLE `payment` (
   CONSTRAINT `fk_payment_staff` FOREIGN KEY (`staff_id`) REFERENCES `staff` (`staff_id`) ON DELETE RESTRICT ON UPDATE CASCADE
 ) ENGINE=InnoDB AUTO_INCREMENT=16160 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
-CREATE DEFINER=`root`@`localhost` TRIGGER `payment_date` BEFORE INSERT ON `payment` FOR EACH ROW SET NEW.payment_date = NOW();
+
 **/
 
 export interface iPayment {
@@ -41,11 +41,16 @@ export interface iPayment {
     'last_update'?: Date | number | string | null;
 }
 
-export type PaymentPrimaryKeys = 
+export type PaymentPrimaryKeys =
         'payment_id'
     ;
 
-const payment:
+export type PK_payment = {
+    'payment_id': number;
+};
+export type PaymentPK_shape = PK_payment;
+
+export const payment:
     C6RestfulModel<
         'payment',
         iPayment,
@@ -53,6 +58,8 @@ const payment:
     > & Record<string, any> & {
         RELATION_TYPE: 'TABLE';
         READ_ONLY: false;
+        PRIMARY: readonly ['payment.payment_id'];
+        PRIMARY_SHORT: readonly ['payment_id'];
     } = {
     TABLE_NAME: 'payment',
     RELATION_TYPE: 'TABLE',
@@ -66,10 +73,10 @@ const payment:
     LAST_UPDATE: 'payment.last_update',
     PRIMARY: [
         'payment.payment_id',
-    ],
+    ] as const,
     PRIMARY_SHORT: [
         'payment_id',
-    ],
+    ] as const,
     COLUMNS: {
         'payment.payment_id': 'payment_id',
         'payment.customer_id': 'customer_id',
@@ -131,9 +138,9 @@ const payment:
             EVENT_MANIPULATION: "INSERT",
             ACTION_TIMING: "BEFORE",
             EVENT_OBJECT_TABLE: "payment",
-            ACTION_STATEMENT: "SET NEW.payment_date = NOW()",
-            CREATE_STATEMENT: "CREATE DEFINER=`root`@`localhost` TRIGGER `payment_date` BEFORE INSERT ON `payment` FOR EACH ROW SET NEW.payment_date = NOW();",
-            DEFINER: "`root`@`localhost`",
+            ACTION_STATEMENT: "",
+            CREATE_STATEMENT: "",
+            DEFINER: null,
         },
     ],
     LIFECYCLE_HOOKS: {
@@ -158,7 +165,7 @@ const payment:
         },],
     },
     TABLE_REFERENCED_BY: {
-        
+
     }
 }
 

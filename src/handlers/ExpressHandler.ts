@@ -5,6 +5,7 @@ import {iRest, iRestMethods} from "../types/ormInterfaces";
 import {LogLevel, logWithLevel} from "../utils/logLevel";
 import {OrmGenerics} from "../types/ormGenerics";
 import {resolveDatabaseSelection, stripDatabaseKeyFromRequest} from "../api/databaseResolver";
+import {CompositePrimaryKeyMissingColumns} from '../utils/primaryKeys';
 import {validateQueryRequest} from '../utils/querySafety';
 
 
@@ -108,8 +109,7 @@ export function ExpressHandler<
                 (columnMap as any)[fullKey] ?? primaryShortKeys[index] ?? fullKey.split('.').pop() ?? fullKey;
             if (primary !== undefined && primaryKeys.length !== 1) {
                 if (primaryKeys.length > 1) {
-                    res.status(400).json({error: `Table ${table} has multiple primary keys. Cannot implicitly determine key.`});
-                    return;
+                    throw new CompositePrimaryKeyMissingColumns(table, primaryShortKeys, primaryShortKeys);
                 } else {
                     res.status(400).json({
                         error: `Table ${table} has no primary keys. Please specify one.`
@@ -151,6 +151,11 @@ export function ExpressHandler<
             res.status(200).json({success: true, ...publicResponse});
 
         } catch (err) {
+            if (err instanceof CompositePrimaryKeyMissingColumns) {
+                res.status(err.status).json({success: false, error: err.code, message: err.message,
+                    requiredColumns: err.requiredColumns, missingColumns: err.missingColumns});
+                return;
+            }
             const message = err instanceof Error ? err.message : String(err);
             logWithLevel(LogLevel.ERROR, undefined, console.error, message);
             res.status(500).json({success: false, error: "Request failed"});

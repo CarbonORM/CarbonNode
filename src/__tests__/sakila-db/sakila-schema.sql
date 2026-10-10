@@ -695,3 +695,13 @@ CREATE TABLE `binary_test` (
   `bin_col` binary(16) DEFAULT NULL,
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Composite identity fixture for generated bindings and REST integration.
+CREATE TABLE IF NOT EXISTS `group_permissions` (
+  `group_id` BINARY(16) NOT NULL,
+  `permission_id` BINARY(16) NOT NULL,
+  `effect` ENUM('ALLOW','DENY') NOT NULL,
+  `created_by` BINARY(16) NOT NULL,
+  `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`group_id`, `permission_id`)
+) ENGINE=InnoDB;

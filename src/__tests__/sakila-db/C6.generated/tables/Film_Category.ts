@@ -28,12 +28,18 @@ export interface iFilm_Category {
     'last_update'?: Date | number | string;
 }
 
-export type Film_CategoryPrimaryKeys = 
+export type Film_CategoryPrimaryKeys =
         'film_id' |
             'category_id'
     ;
 
-const film_category:
+export type PK_film_category = {
+    'film_id': number;
+    'category_id': number;
+};
+export type Film_CategoryPK_shape = PK_film_category;
+
+export const film_category:
     C6RestfulModel<
         'film_category',
         iFilm_Category,
@@ -41,6 +47,8 @@ const film_category:
     > & Record<string, any> & {
         RELATION_TYPE: 'TABLE';
         READ_ONLY: false;
+        PRIMARY: readonly ['film_category.film_id', 'film_category.category_id'];
+        PRIMARY_SHORT: readonly ['film_id', 'category_id'];
     } = {
     TABLE_NAME: 'film_category',
     RELATION_TYPE: 'TABLE',
@@ -51,11 +59,11 @@ const film_category:
     PRIMARY: [
         'film_category.film_id',
         'film_category.category_id',
-    ],
+    ] as const,
     PRIMARY_SHORT: [
         'film_id',
         'category_id',
-    ],
+    ] as const,
     COLUMNS: {
         'film_category.film_id': 'film_id',
         'film_category.category_id': 'category_id',
@@ -103,7 +111,7 @@ const film_category:
         },],
     },
     TABLE_REFERENCED_BY: {
-        
+
     }
 }
 

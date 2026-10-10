@@ -204,7 +204,7 @@ export class SqlExecutor<
             })
             .filter(({ columnDef }) => this.isUuidLikePrimaryColumn(columnDef));
 
-        if (primaryColumns.length === 0) return;
+        if (primaryColumns.length === 0 || primaryShorts.length > 1) return;
 
         for (const row of rows) {
             if (!row || typeof row !== "object") continue;
@@ -275,6 +275,7 @@ export class SqlExecutor<
                 return "SELECT";
             case C6C.POST:
                 return "INSERT";
+            case C6C.PATCH:
             case C6C.PUT:
                 return "UPDATE";
             default:
@@ -355,6 +356,7 @@ export class SqlExecutor<
                 break;
             }
 
+            case 'PATCH':
             case 'PUT': {
                 const result = await this.runQuery();
                 await this.broadcastWebsocketIfConfigured(result);
@@ -498,7 +500,7 @@ export class SqlExecutor<
     private extractRequestBody() {
         const request = this.request;
 
-        if (this.config.requestMethod === C6C.POST) {
+        if (this.config.requestMethod === C6C.POST || C6C.INSERT in request || C6C.REPLACE in request) {
             const insertRows = request.dataInsertMultipleRows;
             if (Array.isArray(insertRows) && insertRows.length > 0) {
                 return insertRows[0] as Record<string, unknown>;
@@ -512,7 +514,7 @@ export class SqlExecutor<
             return this.stripRequestMetadata(request);
         }
 
-        if (this.config.requestMethod === C6C.PUT) {
+        if (this.config.requestMethod === C6C.PUT || this.config.requestMethod === C6C.PATCH) {
             if (request[C6C.UPDATE] && typeof request[C6C.UPDATE] === "object") {
                 return request[C6C.UPDATE] as Record<string, unknown>;
             }
@@ -525,7 +527,7 @@ export class SqlExecutor<
     private extractPrimaryKeyValues(): Record<string, any> | null {
         const request = this.request as Record<string, any>;
         const where = request?.[C6C.WHERE];
-        const sources = [request, (where && typeof where === "object" && !Array.isArray(where)) ? where : undefined];
+        const sources = [request[C6C.INSERT], request[C6C.REPLACE], request, (where && typeof where === "object" && !Array.isArray(where)) ? where : undefined];
         const columns = this.config.restModel.COLUMNS as Record<string, string>;
         const primaryShorts = this.config.restModel.PRIMARY_SHORT ?? [];
         const primaryFulls = this.config.restModel.PRIMARY ?? [];
@@ -886,8 +888,12 @@ export class SqlExecutor<
         switch (method) {
             case C6C.GET:
                 return new SelectQueryBuilder(this.config, this.request);
-            case C6C.PUT:
+            case C6C.PATCH:
                 return new UpdateQueryBuilder(this.config, this.request);
+            case C6C.PUT:
+                return C6C.INSERT in this.request || C6C.REPLACE in this.request
+                    ? new PostQueryBuilder(this.config, this.request)
+                    : new UpdateQueryBuilder(this.config, this.request);
             case C6C.DELETE:
                 return new DeleteQueryBuilder(this.config, this.request);
             case C6C.POST:
@@ -982,7 +988,7 @@ export class SqlExecutor<
         return {
             affected: affectedRows as number,
             insertId: insertId as number | undefined,
-            rest: method === C6C.POST
+            rest: method === C6C.POST || C6C.INSERT in this.request || C6C.REPLACE in this.request
                 ? (
                     postgresRows.length > 0
                         ? postgresRows.map(this.serialize)

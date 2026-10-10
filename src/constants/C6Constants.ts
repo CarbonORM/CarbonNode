@@ -171,6 +171,8 @@ export const C6Constants = {
     UNIX_TIMESTAMP: 'UNIX_TIMESTAMP',
     UNKNOWN: 'UNKNOWN',
     UPDATE: 'UPDATE',
+    SET: 'UPDATE',
+    PATCH: 'PATCH',
     UNHEX: 'UNHEX',
     UTC_DATE: 'UNHEX',
     UTC_TIME: 'UNHEX',

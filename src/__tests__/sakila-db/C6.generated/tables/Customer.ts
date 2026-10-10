@@ -29,7 +29,7 @@ CREATE TABLE `customer` (
   CONSTRAINT `fk_customer_store` FOREIGN KEY (`store_id`) REFERENCES `store` (`store_id`) ON DELETE RESTRICT ON UPDATE CASCADE
 ) ENGINE=InnoDB AUTO_INCREMENT=710 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
-CREATE DEFINER=`root`@`localhost` TRIGGER `customer_create_date` BEFORE INSERT ON `customer` FOR EACH ROW SET NEW.create_date = NOW();
+
 **/
 
 export interface iCustomer {
@@ -44,11 +44,16 @@ export interface iCustomer {
     'last_update'?: Date | number | string | null;
 }
 
-export type CustomerPrimaryKeys = 
+export type CustomerPrimaryKeys =
         'customer_id'
     ;
 
-const customer:
+export type PK_customer = {
+    'customer_id': number;
+};
+export type CustomerPK_shape = PK_customer;
+
+export const customer:
     C6RestfulModel<
         'customer',
         iCustomer,
@@ -56,6 +61,8 @@ const customer:
     > & Record<string, any> & {
         RELATION_TYPE: 'TABLE';
         READ_ONLY: false;
+        PRIMARY: readonly ['customer.customer_id'];
+        PRIMARY_SHORT: readonly ['customer_id'];
     } = {
     TABLE_NAME: 'customer',
     RELATION_TYPE: 'TABLE',
@@ -71,10 +78,10 @@ const customer:
     LAST_UPDATE: 'customer.last_update',
     PRIMARY: [
         'customer.customer_id',
-    ],
+    ] as const,
     PRIMARY_SHORT: [
         'customer_id',
-    ],
+    ] as const,
     COLUMNS: {
         'customer.customer_id': 'customer_id',
         'customer.store_id': 'store_id',
@@ -150,9 +157,9 @@ const customer:
             EVENT_MANIPULATION: "INSERT",
             ACTION_TIMING: "BEFORE",
             EVENT_OBJECT_TABLE: "customer",
-            ACTION_STATEMENT: "SET NEW.create_date = NOW()",
-            CREATE_STATEMENT: "CREATE DEFINER=`root`@`localhost` TRIGGER `customer_create_date` BEFORE INSERT ON `customer` FOR EACH ROW SET NEW.create_date = NOW();",
-            DEFINER: "`root`@`localhost`",
+            ACTION_STATEMENT: "",
+            CREATE_STATEMENT: "",
+            DEFINER: null,
         },
     ],
     LIFECYCLE_HOOKS: {

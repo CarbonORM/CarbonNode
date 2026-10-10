@@ -97,6 +97,27 @@ const runGenerator = (args: string[], cwd: string) => {
 };
 
 describe("generateRestBindings config validation", () => {
+    it.each(['mysql', 'postgresql'])("preserves composite PK constraint order and emits required Buffer shapes for %s", dialect => {
+        const tempDir = makeTempDir();
+        try {
+            const outputDir = path.join(tempDir, 'generated');
+            fs.mkdirSync(outputDir, {recursive: true});
+            const mysqlDump = "CREATE TABLE `group_permissions` (\n `group_id` binary(16) NOT NULL,\n `permission_id` binary(16) NOT NULL,\n `effect` enum('ALLOW','DENY') NOT NULL,\n PRIMARY KEY (`permission_id`, `group_id`)\n) ENGINE=InnoDB;";
+            const pgDump = 'CREATE TABLE public.group_permissions (\n group_id bytea NOT NULL,\n permission_id bytea NOT NULL,\n effect text NOT NULL\n);\nALTER TABLE ONLY public.group_permissions ADD CONSTRAINT group_permissions_pkey PRIMARY KEY (permission_id, group_id);';
+            fs.writeFileSync(path.join(outputDir, dialect === 'mysql' ? 'C6.mysqldump.sql' : 'C6.pg_dump.sql'), dialect === 'mysql' ? mysqlDump : pgDump);
+            const configPath = path.join(tempDir, 'C6.config.json');
+            writeJson(configPath, {databases: [{alias: 'app', dialect, host: '127.0.0.1', port: 1, user: 'test', pass: 'test', dbnames: ['test']} ]});
+            const result = runGenerator(['--config', configPath, '--output', outputDir, '--no-db', '1'], tempDir);
+            expect(result.status, result.output).toBe(0);
+            const source = fs.readFileSync(path.join(outputDir, 'C6.generated/tables/Group_Permissions.ts'), 'utf8');
+            expect(source).toMatch(/PRIMARY_SHORT: readonly \[['"]permission_id['"], ['"]group_id['"]\]/);
+            expect(source).toMatch(/export type PK_group_permissions = \{\s*['"]permission_id['"]: Buffer;\s*['"]group_id['"]: Buffer;/);
+            expect(source).toContain('export type Group_PermissionsPK_shape = PK_group_permissions;');
+            expect(source).toContain('] as const');
+        } finally {
+            fs.rmSync(tempDir, {recursive: true, force: true});
+        }
+    });
     it("fails on duplicate aliases", () => {
         const tempDir = makeTempDir();
         try {

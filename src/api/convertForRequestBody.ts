@@ -2,6 +2,24 @@ import { C6Constants } from "../constants/C6Constants";
 import {iC6Object, C6RestfulModel, iRestMethods, RequestQueryBody} from "../types/ormInterfaces";
 import {LogLevel, logWithLevel} from "../utils/logLevel";
 import {sortQueryValue} from "../utils/sortAndSerializeQueryObject";
+import {Buffer} from 'buffer';
+
+/** Binary values cross JSON/query-string transports as hex, with explicit WHERE literals. */
+export function encodeHttpRequest(value: any, inWhere = false): any {
+    if (Buffer.isBuffer(value)) return value.toString('hex');
+    if (Array.isArray(value)) {
+        const literal = value[0] === C6Constants.LIT || value[0] === C6Constants.PARAM;
+        return value.map(entry => inWhere && !literal && Buffer.isBuffer(entry)
+            ? [C6Constants.LIT, entry.toString('hex')]
+            : encodeHttpRequest(entry, inWhere && !literal));
+    }
+    if (!value || typeof value !== 'object' || value instanceof Date) return value;
+    return Object.fromEntries(Object.entries(value).map(([key, entry]) => [key,
+        inWhere && Buffer.isBuffer(entry)
+            ? [C6Constants.EQUAL, [C6Constants.LIT, entry.toString('hex')]]
+            : encodeHttpRequest(entry, inWhere || key === C6Constants.WHERE),
+    ]));
+}
 
 const sortShallowObjectKeys = (value: any) => {
     if (!value || typeof value !== "object" || Array.isArray(value)) {
@@ -137,7 +155,7 @@ export default function <
         }
     }
 
-    return Object.keys(payload)
+    return encodeHttpRequest(Object.keys(payload)
         .sort()
-        .reduce((acc, key) => ({ ...acc, [key]: payload[key] }), {});
+        .reduce((acc, key) => ({ ...acc, [key]: payload[key] }), {}));
 }

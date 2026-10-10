@@ -37,7 +37,14 @@ export type {{TABLE_NAME_SHORT_PASCAL_CASE}}PrimaryKeys = {{#if PRIMARY_SHORT.le
     never;
 {{/if}}
 
-const {{TABLE_NAME_SHORT}}:
+export type PK_{{TABLE_NAME_SHORT}} = {
+{{#each PRIMARY_SHAPE}}
+    {{{tsString COLUMN_NAME}}}: {{{TYPESCRIPT_TYPE}}};
+{{/each}}
+};
+export type {{TABLE_NAME_SHORT_PASCAL_CASE}}PK_shape = PK_{{TABLE_NAME_SHORT}};
+
+export const {{TABLE_NAME_SHORT}}:
     C6RestfulModel<
         {{{tsString TABLE_NAME_SHORT}}},
         i{{TABLE_NAME_SHORT_PASCAL_CASE}},
@@ -45,6 +52,8 @@ const {{TABLE_NAME_SHORT}}:
     > & Record<string, any> & {
         RELATION_TYPE: 'TABLE';
         READ_ONLY: false;
+        PRIMARY: readonly [{{#each PRIMARY}}{{{tsString this}}}{{#unless @last}}, {{/unless}}{{/each}}];
+        PRIMARY_SHORT: readonly [{{#each PRIMARY_SHORT}}{{{tsString this}}}{{#unless @last}}, {{/unless}}{{/each}}];
     } = {
     TABLE_NAME: {{{tsString TABLE_NAME}}},
     RELATION_TYPE: 'TABLE',
@@ -56,12 +65,12 @@ const {{TABLE_NAME_SHORT}}:
     {{#PRIMARY}}
         {{{tsString this}}},
     {{/PRIMARY}}
-    ],
+    ] as const,
     PRIMARY_SHORT: [
     {{#each PRIMARY_SHORT}}
         {{{tsString this}}},
     {{/each}}
-    ],
+    ] as const,
     COLUMNS: {
     {{#each COLUMNS}}
         {{{tsString @key}}}: {{{tsString this}}},

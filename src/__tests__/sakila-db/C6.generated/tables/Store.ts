@@ -31,11 +31,16 @@ export interface iStore {
     'last_update'?: Date | number | string;
 }
 
-export type StorePrimaryKeys = 
+export type StorePrimaryKeys =
         'store_id'
     ;
 
-const store:
+export type PK_store = {
+    'store_id': number;
+};
+export type StorePK_shape = PK_store;
+
+export const store:
     C6RestfulModel<
         'store',
         iStore,
@@ -43,6 +48,8 @@ const store:
     > & Record<string, any> & {
         RELATION_TYPE: 'TABLE';
         READ_ONLY: false;
+        PRIMARY: readonly ['store.store_id'];
+        PRIMARY_SHORT: readonly ['store_id'];
     } = {
     TABLE_NAME: 'store',
     RELATION_TYPE: 'TABLE',
@@ -53,10 +60,10 @@ const store:
     LAST_UPDATE: 'store.last_update',
     PRIMARY: [
         'store.store_id',
-    ],
+    ] as const,
     PRIMARY_SHORT: [
         'store_id',
-    ],
+    ] as const,
     COLUMNS: {
         'store.store_id': 'store_id',
         'store.manager_staff_id': 'manager_staff_id',

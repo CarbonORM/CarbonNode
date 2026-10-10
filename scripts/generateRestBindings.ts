@@ -859,6 +859,7 @@ function determineTypeScriptType(mysqlType: string, enumValues?: string[]): stri
             return 'GeoJSON.GeometryCollection';
 
         // Binary
+        case 'bytea':
         case 'binary':
         case 'varbinary':
         case 'blob':
@@ -1179,7 +1180,7 @@ const parseSQLToTypeScript = (sql: string, schemaMetadata: iSchemaMetadata = {})
         });
 
         // Extract primary keys
-        const primaryKeyMatch = columnDefinitions.match(/PRIMARY KEY \(([^)]+)\)/i);
+        const primaryKeyMatch = columnDefinitions.match(/PRIMARY\s+KEY\s*\(([^)]+)\)/i);
         const primaryKeys = primaryKeyMatch
             ? primaryKeyMatch[1].split(',').map(key => key.trim().replace(/`/g, ''))
             : [];
@@ -1558,6 +1559,14 @@ const parseSQLToTypeScript = (sql: string, schemaMetadata: iSchemaMetadata = {})
             CONSTRAINT: constraintName
         });
 
+    }
+
+    for (const table of Object.values(tableData) as any[]) {
+        table.PRIMARY_SHAPE = table.PRIMARY_SHORT.map((column: string) => {
+            const meta = table.TYPE_VALIDATION[`${table.TABLE_NAME}.${column}`];
+            return {COLUMN_NAME: column, TYPESCRIPT_TYPE: /^(binary|varbinary|bytea|.*blob)$/i.test(meta.MYSQL_TYPE)
+                ? 'Buffer' : meta.TYPESCRIPT_TYPE};
+        });
     }
 
     const relations = Object.values(tableData);

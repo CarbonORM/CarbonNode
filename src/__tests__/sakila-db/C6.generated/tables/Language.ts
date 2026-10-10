@@ -25,11 +25,16 @@ export interface iLanguage {
     'last_update'?: Date | number | string;
 }
 
-export type LanguagePrimaryKeys = 
+export type LanguagePrimaryKeys =
         'language_id'
     ;
 
-const language:
+export type PK_language = {
+    'language_id': number;
+};
+export type LanguagePK_shape = PK_language;
+
+export const language:
     C6RestfulModel<
         'language',
         iLanguage,
@@ -37,6 +42,8 @@ const language:
     > & Record<string, any> & {
         RELATION_TYPE: 'TABLE';
         READ_ONLY: false;
+        PRIMARY: readonly ['language.language_id'];
+        PRIMARY_SHORT: readonly ['language_id'];
     } = {
     TABLE_NAME: 'language',
     RELATION_TYPE: 'TABLE',
@@ -46,10 +53,10 @@ const language:
     LAST_UPDATE: 'language.last_update',
     PRIMARY: [
         'language.language_id',
-    ],
+    ] as const,
     PRIMARY_SHORT: [
         'language_id',
-    ],
+    ] as const,
     COLUMNS: {
         'language.language_id': 'language_id',
         'language.name': 'name',
@@ -86,7 +93,7 @@ const language:
         DELETE: {beforeProcessing:{}, beforeExecution:{}, afterExecution:{}, afterCommit:{}},
     },
     TABLE_REFERENCES: {
-        
+
     },
     TABLE_REFERENCED_BY: {
         'language_id': [{

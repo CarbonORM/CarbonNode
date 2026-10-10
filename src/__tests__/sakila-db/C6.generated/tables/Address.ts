@@ -41,11 +41,16 @@ export interface iAddress {
     'last_update'?: Date | number | string;
 }
 
-export type AddressPrimaryKeys = 
+export type AddressPrimaryKeys =
         'address_id'
     ;
 
-const address:
+export type PK_address = {
+    'address_id': number;
+};
+export type AddressPK_shape = PK_address;
+
+export const address:
     C6RestfulModel<
         'address',
         iAddress,
@@ -53,6 +58,8 @@ const address:
     > & Record<string, any> & {
         RELATION_TYPE: 'TABLE';
         READ_ONLY: false;
+        PRIMARY: readonly ['address.address_id'];
+        PRIMARY_SHORT: readonly ['address_id'];
     } = {
     TABLE_NAME: 'address',
     RELATION_TYPE: 'TABLE',
@@ -68,10 +75,10 @@ const address:
     LAST_UPDATE: 'address.last_update',
     PRIMARY: [
         'address.address_id',
-    ],
+    ] as const,
     PRIMARY_SHORT: [
         'address_id',
-    ],
+    ] as const,
     COLUMNS: {
         'address.address_id': 'address_id',
         'address.address': 'address',

@@ -34,12 +34,12 @@ export const SCOPED_C6_BY_DATABASE: Record<string, iC6Object<any>> = {
             {{#PRIMARY}}
                 {{{tsString this}}},
             {{/PRIMARY}}
-            ],
+            ] as const,
             PRIMARY_SHORT: [
             {{#each PRIMARY_SHORT}}
                 {{{tsString this}}},
             {{/each}}
-            ],
+            ] as const,
             COLUMNS: {
             {{#each COLUMNS}}
                 {{{tsString @key}}}: {{{tsString this}}},

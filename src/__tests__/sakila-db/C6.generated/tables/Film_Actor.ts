@@ -28,12 +28,18 @@ export interface iFilm_Actor {
     'last_update'?: Date | number | string;
 }
 
-export type Film_ActorPrimaryKeys = 
+export type Film_ActorPrimaryKeys =
         'actor_id' |
             'film_id'
     ;
 
-const film_actor:
+export type PK_film_actor = {
+    'actor_id': number;
+    'film_id': number;
+};
+export type Film_ActorPK_shape = PK_film_actor;
+
+export const film_actor:
     C6RestfulModel<
         'film_actor',
         iFilm_Actor,
@@ -41,6 +47,8 @@ const film_actor:
     > & Record<string, any> & {
         RELATION_TYPE: 'TABLE';
         READ_ONLY: false;
+        PRIMARY: readonly ['film_actor.actor_id', 'film_actor.film_id'];
+        PRIMARY_SHORT: readonly ['actor_id', 'film_id'];
     } = {
     TABLE_NAME: 'film_actor',
     RELATION_TYPE: 'TABLE',
@@ -51,11 +59,11 @@ const film_actor:
     PRIMARY: [
         'film_actor.actor_id',
         'film_actor.film_id',
-    ],
+    ] as const,
     PRIMARY_SHORT: [
         'actor_id',
         'film_id',
-    ],
+    ] as const,
     COLUMNS: {
         'film_actor.actor_id': 'actor_id',
         'film_actor.film_id': 'film_id',
@@ -103,7 +111,7 @@ const film_actor:
         },],
     },
     TABLE_REFERENCED_BY: {
-        
+
     }
 }
 

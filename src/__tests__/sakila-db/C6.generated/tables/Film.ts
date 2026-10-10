@@ -33,6 +33,11 @@ CREATE TABLE `film` (
   CONSTRAINT `fk_film_language_original` FOREIGN KEY (`original_language_id`) REFERENCES `language` (`language_id`) ON DELETE RESTRICT ON UPDATE CASCADE
 ) ENGINE=InnoDB AUTO_INCREMENT=1110 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
+
+
+
+
+
 **/
 
 export interface iFilm {
@@ -51,11 +56,16 @@ export interface iFilm {
     'last_update'?: Date | number | string;
 }
 
-export type FilmPrimaryKeys = 
+export type FilmPrimaryKeys =
         'film_id'
     ;
 
-const film:
+export type PK_film = {
+    'film_id': number;
+};
+export type FilmPK_shape = PK_film;
+
+export const film:
     C6RestfulModel<
         'film',
         iFilm,
@@ -63,6 +73,8 @@ const film:
     > & Record<string, any> & {
         RELATION_TYPE: 'TABLE';
         READ_ONLY: false;
+        PRIMARY: readonly ['film.film_id'];
+        PRIMARY_SHORT: readonly ['film_id'];
     } = {
     TABLE_NAME: 'film',
     RELATION_TYPE: 'TABLE',
@@ -82,10 +94,10 @@ const film:
     LAST_UPDATE: 'film.last_update',
     PRIMARY: [
         'film.film_id',
-    ],
+    ] as const,
     PRIMARY_SHORT: [
         'film_id',
-    ],
+    ] as const,
     COLUMNS: {
         'film.film_id': 'film_id',
         'film.title': 'title',
@@ -164,13 +176,13 @@ const film:
         },
         'film.rating': {
             MYSQL_TYPE: 'enum',
-            MAX_LENGTH: '&#x27;G&#x27;,&#x27;PG&#x27;,&#x27;PG-13&#x27;,&#x27;R&#x27;,&#x27;NC-17&#x27;',
+            MAX_LENGTH: '\'G\',\'PG\',\'PG-13\',\'R\',\'NC-17\'',
             AUTO_INCREMENT: false,
             SKIP_COLUMN_IN_POST: false
         },
         'film.special_features': {
             MYSQL_TYPE: 'set',
-            MAX_LENGTH: '&#x27;Trailers&#x27;,&#x27;Commentaries&#x27;,&#x27;Deleted Scenes&#x27;,&#x27;Behind the Scenes&#x27;',
+            MAX_LENGTH: '\'Trailers\',\'Commentaries\',\'Deleted Scenes\',\'Behind the Scenes\'',
             AUTO_INCREMENT: false,
             SKIP_COLUMN_IN_POST: false
         },

@@ -2,7 +2,7 @@ import {reserveDependency} from "../utils/dependencyTraversal";
 import type {AxiosPromise, AxiosResponse} from "axios";
 import isLocal from "../variables/isLocal";
 import isTest from "../variables/isTest";
-import convertForRequestBody from "../api/convertForRequestBody";
+import convertForRequestBody, {encodeHttpRequest} from "../api/convertForRequestBody";
 import {eFetchDependencies} from "../types/dynamicFetching";
 import type {OrmGenerics} from "../types/ormGenerics";
 import {
@@ -11,12 +11,12 @@ import {
     iConstraint,
     C6RestResponse,
     POST,
-    PUT, RequestQueryBody
+    PUT, PATCH, RequestQueryBody
 } from "../types/ormInterfaces";
 import {removeInvalidKeys, removePrefixIfExists, TestRestfulResponse} from "../utils/apiHelpers";
 import {scopedCacheRequest, checkCache, evictCacheEntry, setCache, userCustomClearCache} from "../utils/cacheManager";
 import type { SqlAllowListStatus } from "../utils/logSql";
-import {normalizeRequestOrder} from "../utils/normalizeSingularRequest";
+import {normalizeRequestOrder, normalizeSingularRequest} from "../utils/normalizeSingularRequest";
 import isNode from '../variables/isNode';
 import {readHttpResponseStream} from '../utils/httpResponseStream';
 import {safePagination, queryLimits, validateResponseBudget} from '../utils/querySafety';
@@ -42,7 +42,20 @@ export class HttpExecutor<
 
     private stripTableNameFromKeys<T extends Record<string, any>>(obj: Partial<T> | undefined | null): Partial<T> {
         const columns = this.config.restModel.COLUMNS as Record<string, string>;
-        const source: Record<string, any> = (obj ?? {}) as Record<string, any>;
+        const request = (obj ?? {}) as Record<string, any>;
+        const source: Record<string, any> = {
+            ...(request.INSERT ?? {}),
+            ...(request.UPDATE && !Array.isArray(request.UPDATE) ? request.UPDATE : {}),
+            ...request,
+        };
+        // Normalized mutation bodies keep identity in WHERE and values in UPDATE/INSERT.
+        for (const full of this.config.restModel.PRIMARY) {
+            const short = columns[full] ?? full.split('.').pop()!;
+            let value = request.WHERE?.[full] ?? request.WHERE?.[short];
+            if (Array.isArray(value) && value[0] === '=') value = value[1];
+            if (Array.isArray(value) && (value[0] === 'LIT' || value[0] === 'PARAM')) value = value[1];
+            if (value !== undefined && value !== null) source[short] = value;
+        }
         const out: Partial<T> = {} as Partial<T>;
         for (const [key, value] of Object.entries(source)) {
             const short = columns[key] ?? (key.includes('.') ? key.split('.').pop()! : key);
@@ -67,7 +80,7 @@ export class HttpExecutor<
             dataOrCallback: [
                 removeInvalidKeys<G['RestTableInterface']>({
                     ...normalized,
-                    ...response?.data?.rest,
+                    ...(Array.isArray(response?.data?.rest) ? response.data.rest[0] : response?.data?.rest),
                 }, this.config.C6.TABLES)
             ],
             stateKey: this.config.restModel.TABLE_NAME,
@@ -190,6 +203,10 @@ export class HttpExecutor<
                 request: this.request,
             });
 
+        if (this.config.restModel.PRIMARY_SHORT.length > 1 || this.config.requestMethod === PATCH
+            || (this.config.restModel.TABLE_NAME as string) in this.request) {
+            this.request = normalizeSingularRequest(this.config.requestMethod, this.request, this.config.restModel) as typeof this.request;
+        }
         this.request = normalizeRequestOrder(this.request) as typeof this.request;
 
         const tableName = restModel.TABLE_NAME as string;
@@ -205,6 +222,7 @@ export class HttpExecutor<
         switch (requestMethod) {
             case GET:
             case POST:
+            case PATCH:
             case PUT:
             case DELETE:
                 break;
@@ -343,7 +361,7 @@ export class HttpExecutor<
 
             let restRequestUri: string = restURL + operatingTable + '/';
 
-            const needsConditionOrPrimaryCheck = (PUT === requestMethod || DELETE === requestMethod)
+            const needsConditionOrPrimaryCheck = (PUT === requestMethod || PATCH === requestMethod || DELETE === requestMethod)
                 && false === skipPrimaryCheck;
 
             const TABLES = C6.TABLES;
@@ -355,7 +373,7 @@ export class HttpExecutor<
             const primaryKeyFullyQualified = primaryKeyList?.length === 1 ? primaryKeyList[0] : undefined;
             const primaryKey = primaryKeyFullyQualified?.split('.')?.pop();
 
-            if (needsConditionOrPrimaryCheck) {
+            if (needsConditionOrPrimaryCheck && query?.[C6.WHERE] === undefined) {
 
                 if (undefined === primaryKey) {
 
@@ -365,8 +383,9 @@ export class HttpExecutor<
                         (Array.isArray(whereVal) && whereVal.length === 0) ||
                         (typeof whereVal === 'object' && !Array.isArray(whereVal) && Object.keys(whereVal).length === 0);
 
+                    const identitySource = query?.[C6.INSERT] ?? query;
                     const hasCompositeIdentity = primaryKeyList?.length > 1 && primaryKeyList.every((key: string) => {
-                        const value = query?.[key] ?? query?.[key.split('.').pop()!];
+                        const value = identitySource?.[key] ?? identitySource?.[key.split('.').pop()!];
                         return value !== undefined && value !== null;
                     });
                     if (whereIsEmpty && !hasCompositeIdentity) {
@@ -491,7 +510,7 @@ export class HttpExecutor<
                             case GET:
                                 return [{
                                     ...baseConfig,
-                                    params: query
+                                    params: encodeHttpRequest(query)
                                 }];
 
                             case POST:
@@ -508,6 +527,7 @@ export class HttpExecutor<
                                 }
                                 return [convert(query), baseConfig];
 
+                            case PATCH:
                             case PUT:
                                 return [convert(query), baseConfig];
 
@@ -617,6 +637,7 @@ export class HttpExecutor<
                                 case POST:
                                     this.postState(response, this.request, callback);
                                     break;
+                                case PATCH:
                                 case PUT:
                                     this.putState(response, this.request, callback);
                                     break;
