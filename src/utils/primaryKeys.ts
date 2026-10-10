@@ -63,7 +63,8 @@ export function normalizePrimaryKeyRequest(
     const source = result[C6C.INSERT] ?? result[C6C.REPLACE] ?? result;
     const values = shorts.map((short, index) => source[fulls[index]] ?? source[short]);
     const missing = shorts.filter((_short, index) => values[index] === undefined || values[index] === null);
-    const hasKey = values.some(value => value !== undefined && value !== null);
+    const hasKey = shorts.some((short, index) => Object.prototype.hasOwnProperty.call(source, short)
+        || Object.prototype.hasOwnProperty.call(source, fulls[index]));
     // Explicit predicates retain the existing expression grammar and bulk-query semantics.
     if (result[C6C.WHERE] !== undefined && method !== C6C.POST
         && result[C6C.INSERT] === undefined && result[C6C.REPLACE] === undefined) return result;

@@ -178,6 +178,15 @@ describe('normalizeSingularRequest', () => {
     expect(() => normalizeSingularRequest('PATCH', {from_id: 1, UPDATE: {label: 'X'}} as any, model))
       .toThrow(/CompositePrimaryKeyMissingColumns/);
   });
+  it('rejects explicitly empty GET identities instead of treating them as collection queries', () => {
+    const model = makeModel('link', ['from_id', 'to_id']);
+    for (const value of [null, undefined]) {
+      expect(() => normalizeSingularRequest('GET', {link: {from_id: value}} as any, model))
+        .toThrow(/CompositePrimaryKeyMissingColumns.*Missing: \[from_id, to_id\]/);
+    }
+    const collection = {SELECT: ['*']} as any;
+    expect(normalizeSingularRequest('GET', collection, model)).toBe(collection);
+  });
 
   it('requires all composite POST keys, including each batch row', () => {
     const model = makeModel('link', ['from_id', 'to_id']);

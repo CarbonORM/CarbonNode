@@ -164,4 +164,13 @@ describe('composite BINARY primary keys against MySQL and REST', () => {
         const response = await Group_Permissions.Get({[C6C.WHERE]: {'group_permissions.group_id': [C6C.EQUAL, [C6C.LIT, group_id]]}} as any);
         expect(response.rest).toHaveLength(2);
     });
+    it('returns 422 for an explicitly null GET identity rather than reading the collection', async () => {
+        await expect(client.Get({group_permissions: {group_id: null}} as any)).rejects.toMatchObject({
+            code: 'CompositePrimaryKeyMissingColumns', missingColumns: required,
+        });
+        const response = await axios.post(baseURL + 'group_permissions?METHOD=GET',
+            {group_permissions: {group_id: null}}, {validateStatus: () => true});
+        expect(response.status).toBe(422);
+        expect(response.data.missingColumns).toEqual(required);
+    });
 });
