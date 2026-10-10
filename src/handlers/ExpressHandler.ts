@@ -84,6 +84,7 @@ export function ExpressHandler<
             const config = {
                 ...selectedConfig,
                 enforceRestFunctionPolicy: true,
+                enforceSqlTransportBudget: true,
                 statementTimeoutMs: selectedConfig.statementTimeoutMs ?? 5000,
                 C6: {
                     ...selectedConfig.C6,

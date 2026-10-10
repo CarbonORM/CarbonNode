@@ -12,7 +12,7 @@ import {DEFAULT_QUERY_LIMITS, validateQueryRequest} from '../utils/querySafety';
 beforeEach(() => clearCache({ignoreWarning: true}));
 afterEach(() => {clearCache({ignoreWarning: true}); vi.useRealTimers(); vi.restoreAllMocks();});
 function sqlFixture() {
-    const conn = {query: vi.fn(async () => [[{actor_id: 1}], []]), beginTransaction: vi.fn(),
+    const conn = {connection: {stream: {prependListener: vi.fn(), removeListener: vi.fn(), destroy: vi.fn()}},query: vi.fn(async () => [[{actor_id: 1}], []]), beginTransaction: vi.fn(),
         commit: vi.fn(), rollback: vi.fn(), release: vi.fn()};
     const pool = {getConnection: vi.fn(async () => conn)};
     const config: any = {...buildTestConfig(), mysqlPool: pool, logLevel: 0, cacheScope: 'one'};

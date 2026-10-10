@@ -12,14 +12,15 @@ import {apiRequestCache, checkCache, clearCache, setCache} from '../utils/cacheM
 import {getEnv, getEnvDebug} from '../variables/getEnv';
 import {reserveDependency} from '../utils/dependencyTraversal';
 import logSql from '../utils/logSql';
+import '../executors/SqlExecutor';
 import {HttpExecutor} from '../executors/HttpExecutor';
 
 function sqlFixture() {
-    const conn = {
+    const conn = {connection: {stream: {prependListener: vi.fn(), removeListener: vi.fn(), destroy: vi.fn()}},
         query: vi.fn(async () => [[{actor_id: 5}], []]),
         beginTransaction: vi.fn(), commit: vi.fn(), rollback: vi.fn(), release: vi.fn(),
     };
-    const config: any = {...buildTestConfig(), logLevel: 0, mysqlPool: {getConnection: async () => conn}};
+    const config: any = {...buildTestConfig(), logLevel: 0, mysqlCancellation: async () => ({cancel: vi.fn(), close: vi.fn()}), mysqlPool: {getConnection: async () => conn}};
     return {config, conn, orm: restOrm<any>(() => config)};
 }
 async function handle(config: any, method: string, body: any, primary?: string) {
@@ -35,8 +36,8 @@ describe('REST security boundary', () => {
     it.each(['GET', 'PUT', 'DELETE'])('binds the URL key as a literal for singular %s', async method => {
         const {config, conn} = sqlFixture();
         await handle(config, method, {actor_id: 6, 'actor.actor_id': 7, ...(method === 'PUT' ? {first_name: 'Changed'} : {})}, 'actor.actor_id');
-        expect(conn.query).toHaveBeenCalledTimes(4);
-        const [sql, params]: any = conn.query.mock.calls[2];
+        expect(conn.query).toHaveBeenCalledTimes(method === 'GET' ? 4 : 1);
+        const [sql, params]: any = conn.query.mock.calls[method === 'GET' ? 2 : 0];
         expect(sql).toContain('WHERE');
         expect(params).toContain('actor.actor_id');
         expect(params).not.toContain(6);
@@ -45,14 +46,14 @@ describe('REST security boundary', () => {
     it('ANDs route identity with a client OR filter', async () => {
         const {config, conn} = sqlFixture();
         await handle(config, 'DELETE', {WHERE: {OR: [{'actor.actor_id': 6}, {'actor.actor_id': 7}]}}, '5');
-        const [sql, params]: any = conn.query.mock.calls[2];
+        const [sql, params]: any = conn.query.mock.calls[0];
         expect(sql).toMatch(/WHERE.*OR.*AND/s);
         expect(params).toEqual([6, 7, '5']);
     });
     it('adds WHERE for complex PUT with a URL key', async () => {
         const {config, conn} = sqlFixture();
         await handle(config, 'PUT', {UPDATE: {first_name: 'Changed'}, 'actor.actor_id': 7}, '5');
-        const [sql, params]: any = conn.query.mock.calls[2];
+        const [sql, params]: any = conn.query.mock.calls[0];
         expect(sql).toContain('WHERE');
         expect(params).toEqual(['Changed', '5']);
     });

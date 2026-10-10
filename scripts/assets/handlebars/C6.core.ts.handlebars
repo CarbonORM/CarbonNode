@@ -30,10 +30,16 @@ export type RestShortViewNames = {{{RestShortViewNames}}};
 
 export type RestTableInterfaces = {{{RestTableInterfaces}}};
 
+export type RestRelationInterfaces = {
+{{#RELATIONS}}
+    {{{tsString TABLE_NAME_SHORT}}}: i{{TABLE_NAME_SHORT_PASCAL_CASE}};
+{{/RELATIONS}}
+};
+
 export const TABLES = {} as Record<RestShortTableNames, C6RestfulModel<any, any, any>>;
 export const VIEWS = {} as Record<RestShortViewNames, C6RestfulModel<any, any, any>>;
 
-export const C6Core: iC6Object<RestTableInterfaces> = {
+export const C6Core: iC6Object<RestRelationInterfaces> = {
     ...C6Constants,
     C6VERSION: {{{tsString C6VERSION}}},
     IMPORT: async (tableName: string): Promise<iDynamicApiImport> => {
@@ -69,7 +75,7 @@ export const C6Core: iC6Object<RestTableInterfaces> = {
     PREFIX: RestTablePrefix,
     TABLES: TABLES as any,
     VIEWS: VIEWS as any,
-    ORM: {},
+    ORM: {} as iC6Object<RestRelationInterfaces>["ORM"],
 };
 
 export type tStatefulApiData<T> = T[] | undefined;

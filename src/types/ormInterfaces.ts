@@ -231,7 +231,7 @@ export interface iPostgresQueryResult<Row = any> {
 
 export interface iPostgresClient {
     query: (sql: string, values?: any[]) => Promise<iPostgresQueryResult> | iPostgresQueryResult;
-    release: () => void;
+    release: (destroy?: boolean) => void;
 }
 
 export interface iPostgresPool {

@@ -34,6 +34,21 @@ for (let i = 0; i < args.length; i += 2) {
     argMap[args[i]] = args[i + 1];
 }
 
+// Credential-bearing subprocesses never search ambient PATH.
+const clientEnvironment = () => ({...process.env, PATH: [path.dirname(process.execPath), '/usr/bin', '/bin', '/opt/homebrew/bin', '/usr/local/bin'].join(path.delimiter)});
+const clientPath = (name: string): string => {
+    const flags = {mysql: '--mysql-client', mysqldump: '--mysqldump-client', psql: '--psql-client', pg_dump: '--pg-dump-client'};
+    const explicit = argMap[flags[name]];
+    if (explicit && !path.isAbsolute(explicit)) throw new Error('Database client paths must be absolute.');
+    const candidates = explicit ? [explicit] : ['/usr/bin', '/opt/homebrew/bin', '/usr/local/mysql/bin', '/usr/local/bin',
+        ...[18, 17, 16, 15].map(v => `/opt/homebrew/opt/postgresql@${v}/bin`)].map(dir => path.join(dir, name));
+    for (const candidate of candidates) {
+        try {const real = fs.realpathSync(candidate); if (!fs.statSync(real).isFile()) continue; fs.accessSync(real, fs.constants.X_OK); return real;}
+        catch {if (explicit) throw new Error('Configured database client is unavailable.');}
+    }
+    throw new Error(`Trusted ${name} client unavailable; configure ${flags[name]} with an absolute path.`);
+};
+
 type iDatabaseConnection = {
     host: string;
     port: string;
@@ -484,15 +499,17 @@ class MySQLDump {
         let outputFd: number | undefined;
         try {
             outputFd = fs.openSync(tempOutputFile, 'w', 0o600);
-            execFileSync(mysqldump, [
+            const dumpClient = clientPath(mysqldump);
+            const mariaDB = /mariadb/i.test(execFileSync(dumpClient, ['--version'], {encoding: 'utf8', env: clientEnvironment()}));
+            execFileSync(dumpClient, [
                 `--defaults-extra-file=${defaultsExtraFile}`,
                 ...otherOption.split(/\s+/).filter(Boolean),
-                '--set-gtid-purged=OFF', '--skip-add-locks', '--lock-tables=false',
+                ...(mariaDB ? [] : ['--set-gtid-purged=OFF']), '--skip-add-locks', '--lock-tables=false',
                 '--single-transaction', '--quick',
                 ...(schemas ? [] : ['--no-create-info']),
                 data ? '--hex-blob' : '--no-data', '--', databaseName,
                 ...(specificTable ? [specificTable] : []),
-            ], {stdio: ['ignore', outputFd, 'pipe']});
+            ], {stdio: ['ignore', outputFd, 'pipe'], env: clientEnvironment()});
             succeeded = true;
         } catch {
             console.warn('[generateRestBindings] mysqldump failed.');
@@ -503,13 +520,7 @@ class MySQLDump {
         if (succeeded) fs.renameSync(tempOutputFile, outputFile);
         else fs.rmSync(tempOutputFile, {force: true});
 
-        if (!succeeded && fs.existsSync(outputFile)) {
-            console.warn(`[generateRestBindings] mysqldump for '${databaseName}' failed. Reusing existing dump file at ${outputFile}.`);
-        }
-
-        if (!fs.existsSync(outputFile)) {
-            console.warn(`[generateRestBindings] mysqldump output not found at ${outputFile}. If running in CI/no-DB environment, ensure a prebuilt dump file exists at this path.`);
-        }
+        if (!succeeded) throw new Error('Online MySQL schema acquisition failed. Use explicit --no-db only for a verified offline dump.');
 
         return (this.mysqldump = outputFile);
 
@@ -547,7 +558,7 @@ class MySQLDump {
 
         try {
             const stdout = execFileSync(
-                "mysql",
+                clientPath('mysql'),
                 [
                     `--defaults-extra-file=${defaultsExtraFile}`,
                     "--batch",
@@ -556,7 +567,7 @@ class MySQLDump {
                     "-e",
                     query,
                 ],
-                {encoding: "utf-8"},
+                {encoding: "utf-8", env: clientEnvironment()},
             );
 
             const schemaMetadata: iSchemaMetadata = {};
@@ -594,8 +605,7 @@ class MySQLDump {
 
             return schemaMetadata;
         } catch (error) {
-            console.warn(`[generateRestBindings] information_schema lookup for '${databaseName}' failed. Falling back to dump-derived metadata where possible.`);
-            return {};
+            throw new Error('Online MySQL metadata acquisition failed.');
         }
 
     }
@@ -639,7 +649,8 @@ class PostgreSQLDump {
                 '--dbname', databaseName,
                 '--file', tempOutputFile,
             ];
-            execFileSync(pgDump, args, { encoding: 'utf-8', env });
+            execFileSync(clientPath(pgDump), args, {encoding: 'utf-8', env: {...env, PATH: clientEnvironment().PATH}});
+            if (!fs.existsSync(tempOutputFile)) throw new Error('PostgreSQL dump client did not produce output.');
             if (fs.existsSync(tempOutputFile)) {
                 fs.renameSync(tempOutputFile, outputFile);
             }
@@ -647,11 +658,7 @@ class PostgreSQLDump {
             if (fs.existsSync(tempOutputFile)) {
                 fs.unlinkSync(tempOutputFile);
             }
-            if (fs.existsSync(outputFile)) {
-                console.warn(`[generateRestBindings] pg_dump for '${databaseName}' failed. Reusing existing dump file at ${outputFile}.`);
-            } else {
-                console.warn(`[generateRestBindings] pg_dump output not found at ${outputFile}. If running in CI/no-DB environment, ensure a prebuilt dump file exists at this path.`);
-            }
+            throw new Error('Online PostgreSQL schema acquisition failed. Use explicit --no-db only for a verified offline dump.');
         }
 
         return outputFile;
@@ -690,12 +697,14 @@ class PostgreSQLDump {
 
         try {
             const stdout = execFileSync(
-                'psql',
+                clientPath('psql'),
                 [
                     '--host', connection.host,
                     '--port', connection.port,
                     '--username', connection.user,
                     '--dbname', databaseName,
+                    '--no-psqlrc',
+                    '--no-password',
                     '--tuples-only',
                     '--no-align',
                     '--field-separator', '\t',
@@ -704,7 +713,7 @@ class PostgreSQLDump {
                 {
                     encoding: 'utf-8',
                     env: {
-                        ...process.env,
+                        ...clientEnvironment(),
                         PGPASSWORD: connection.pass,
                     },
                 },
@@ -745,8 +754,7 @@ class PostgreSQLDump {
 
             return schemaMetadata;
         } catch (error) {
-            console.warn(`[generateRestBindings] PostgreSQL information_schema lookup for '${databaseName}' failed. Falling back to dump-derived metadata where possible.`);
-            return {};
+            throw new Error('Online PostgreSQL metadata acquisition failed.');
         }
     }
 }
@@ -1835,8 +1843,8 @@ const typeCheckGeneratedC6 = (outputDir: string) => {
     );
 
     try {
-        execFileSync("npx", [
-            "tsc",
+        execFileSync(process.execPath, [
+            require.resolve("typescript/bin/tsc"),
             "--project",
             tempTsConfigPath,
         ], { encoding: "utf-8" });

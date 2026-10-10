@@ -32,3 +32,7 @@ Review of the built 7.0.0 package found that String(arrayToken) could recurse th
 Local validation passed: npm test -- --maxWorkers=2 --minWorkers=2 completed build, live MySQL binding generation, and 341 passing tests; the two optional live PostgreSQL tests were skipped because no separate PostgreSQL server was configured. All 45 new security tests and 24 generator configuration tests passed. Source typecheck with skipLibCheck and diff check passed. The packaged CommonJS import is covered. Two default-worker allowlist tests initially timed out on the busy host; reducing workers preserved the assertions and default timeouts and both passed. Clean Linux/MySQL CI is required before merge. A follow-up Cloud scan must target the merged revision, not the historical snapshot.
 
 These 10 findings are repository-scan report records with null commit_detail. The available fixed-status mutation supports commit-scan findings only; it cannot manually rewrite a repository-scan report. Keep the historical report intact and use a fresh scan plus this release's evidence to verify remediation. No unverified record is marked fixed simply to empty the interface.
+
+### 7.0.2 transport and tooling correction
+
+The [7.0.2 verification-scan remediation](security-remediation-7.0.2.md) resolves the SQL/browser receipt and MySQL mutation deadline limitations recorded above, along with pinned compiler execution, trusted database client resolution, fail-closed online acquisition, loopback test servers, and request-value redaction.

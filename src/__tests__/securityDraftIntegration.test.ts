@@ -12,7 +12,7 @@ beforeEach(() => clearCache({ignoreWarning: true}));
 afterEach(() => vi.restoreAllMocks());
 
 function fixture() {
-    const conn = {query: vi.fn(async () => [[{actor_id: 1}], []]),
+    const conn = {connection: {stream: {prependListener: vi.fn(), removeListener: vi.fn(), destroy: vi.fn()}},query: vi.fn(async () => [[{actor_id: 1}], []]),
         beginTransaction: vi.fn(), commit: vi.fn(), rollback: vi.fn(), release: vi.fn()};
     const config: any = {...buildTestConfig(), logLevel: 0, cacheScope: 'principal',
         mysqlPool: {getConnection: vi.fn(async () => conn)}};

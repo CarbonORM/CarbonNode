@@ -839,6 +839,8 @@ Report issues at:
 Version 7.0.0 includes the [new repository-scan remediation](docs/security-remediation-7.0.0.md).
 Version 7.0.1 also prevents deeply nested expression tokens from triggering recursive
 string conversion inside request validation; the iterative budget rejects them first.
+Version 7.0.2 closes the eight [verification-scan findings](docs/security-remediation-7.0.2.md),
+including SQL/browser transport budgets, MySQL write cancellation, and trusted generator tooling.
 This major bump reflects stricter request defaults and rejection of previously
 accepted unsafe or ambiguous inputs. Regenerate bindings and review these changes:
 
@@ -855,18 +857,25 @@ accepted unsafe or ambiguous inputs. Regenerate bindings and review these change
   CALL grammar remains available. REST sets `statementTimeoutMs` to 5000 by default:
   MySQL read execution uses `max_execution_time`; PostgreSQL uses `statement_timeout`.
   Previous session settings are restored; PostgreSQL mutations use transaction-local settings.
-  MySQL write deadlines require deployment-level controls; its server read deadline does not cover writes.
+  MySQL writes reserve a separate cancellation connection before execution and terminate the
+  target session on deadline. Custom MySQL drivers must supply trusted `mysqlCancellation`.
 - All request trees have shared iterative budgets: depth 32, 10000 nodes, 1000 items
   per collection, 1 MiB input, 1000 SQL parameters, and 256 KiB generated SQL.
   Trusted `queryLimits` can adjust individual budgets; request JSON cannot raise them.
   `maxResponseBytes` defaults to 8 MiB. SQL results and HTTP payloads are checked;
-  Node Axios adapters also enforce transport content/body limits and a 30-second default timeout.
+  Native mysql2/pg receipt is bounded before row parsing; unsupported REST transports fail closed.
+  Browser Axios fetch streams are bounded before decoding/JSON parsing; Node uses the capped HTTP
+  adapter. Custom SQL drivers must expose `sqlResponseStream`; compressed MySQL needs a decoded stream.
+  HTTP requests retain a 30-second default timeout.
 - Response cache storage is bounded to 1000 entries, 16 MiB total, 1 MiB per entry,
   and a nonrenewable 60-second TTL. LRU eviction, expired entries, oversized/unserializable
   responses, and rejected promises force a fresh request. Existing trusted scopes remain required.
 - Generator relation names must map to safe identifiers and noncolliding filenames.
   Reserved names, separators, traversal, and symbolic links fail before generated-source writes.
   Generated typecheck failures are fatal unless explicitly skipped for a controlled offline workflow.
+  The compiler is a pinned local runtime dependency. Database clients come from trusted fixed paths
+  or absolute `--mysql-client`, `--mysqldump-client`, `--psql-client`, `--pg-dump-client` flags.
+  Failed online schema/metadata acquisition is fatal; existing dumps require explicit `--no-db 1` reuse.
 - Warning/error string fields escape terminal controls, line breaks, and Unicode record controls.
 
 The [October 2026 finding review](docs/security-review-2026-10-03.md) distinguishes
