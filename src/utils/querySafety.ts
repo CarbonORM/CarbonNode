@@ -30,10 +30,26 @@ export interface QuerySafetyConfig {
     /** Set by the server adapter, never by request JSON. */
     restFunctionAllowlist?: readonly string[];
     enforceRestFunctionPolicy?: boolean;
+    /** Generic REST requires a driver transport that can be bounded before decoding. */
+    enforceSqlTransportBudget?: boolean;
+    sqlResponseStream?: (connection: unknown) => SqlResponseStream;
+    /** Reserve an independent server cancellation channel before starting a MySQL mutation. */
+    mysqlCancellation?: (connection: unknown) => Promise<MySqlCancellation>;
 }
-export function validateResponseBudget(data: unknown, config: QuerySafetyConfig): void {
+export interface SqlResponseStream {
+    prependListener(event: 'data', listener: (chunk: Uint8Array | string) => void): unknown;
+    removeListener(event: 'data', listener: (chunk: Uint8Array | string) => void): unknown;
+    destroy(error?: Error): unknown;
+    pause?(): unknown;
+}
+export interface MySqlCancellation {cancel(): Promise<void>; close(): Promise<void>;}
+export function responseByteLimit(config: QuerySafetyConfig): number {
     const max = config.maxResponseBytes ?? 8 * 1024 * 1024;
     if (!Number.isSafeInteger(max) || max < 1) throw new Error('Invalid trusted response budget.');
+    return max;
+}
+export function validateResponseBudget(data: unknown, config: QuerySafetyConfig): void {
+    const max = responseByteLimit(config);
     const serialized = JSON.stringify(data);
     if (serialized && (serialized.length > max || new TextEncoder().encode(serialized).length > max)) {
         throw new Error('Response byte budget exceeded.');

@@ -17,6 +17,8 @@ import {removeInvalidKeys, removePrefixIfExists, TestRestfulResponse} from "../u
 import {scopedCacheRequest, checkCache, evictCacheEntry, setCache, userCustomClearCache} from "../utils/cacheManager";
 import type { SqlAllowListStatus } from "../utils/logSql";
 import {normalizeRequestOrder} from "../utils/normalizeSingularRequest";
+import isNode from '../variables/isNode';
+import {readHttpResponseStream} from '../utils/httpResponseStream';
 import {safePagination, queryLimits, validateResponseBudget} from '../utils/querySafety';
 import {sortAndSerializeQueryObject} from "../utils/sortAndSerializeQueryObject";
 import {notifyToast} from "../utils/toastRuntime";
@@ -369,9 +371,9 @@ export class HttpExecutor<
                     });
                     if (whereIsEmpty && !hasCompositeIdentity) {
 
-                        logWithLevel(LogLevel.ERROR, logContext, console.error, query);
+                        logWithLevel(LogLevel.ERROR, logContext, console.error, 'Mutation requires primary identity or a WHERE condition.');
 
-                        throw Error('Failed to parse primary key information. Query: (' + JSON.stringify(query) + ') Primary Key: (' + JSON.stringify(primaryKey) + ') TABLES[operatingTable]?.PRIMARY: (' + JSON.stringify(TABLES[operatingTable]?.PRIMARY) + ') for operatingTable (' + operatingTable + ').')
+                        throw Error('Mutation requires primary identity or a WHERE condition.');
 
                     }
 
@@ -387,7 +389,7 @@ export class HttpExecutor<
 
                         }
 
-                        throw Error('You must provide the primary key (' + primaryKey + ') for table (' + operatingTable + '). Request (' + JSON.stringify(this.request, undefined, 4) + ') Query (' + JSON.stringify(query) + ')');
+                        throw Error('Mutation requires the table primary key.');
 
                     }
 
@@ -458,6 +460,8 @@ export class HttpExecutor<
                         request: this.request
                     })
 
+                const browserTransport = !isNode();
+                const responseController = browserTransport ? new AbortController() : undefined;
                 const axiosActiveRequest: AxiosPromise<ResponseDataType> = axios![requestMethod.toLowerCase()]<ResponseDataType>(
                     restRequestUri,
                     ...(() => {
@@ -476,6 +480,8 @@ export class HttpExecutor<
 
                         const baseConfig = {
                             withCredentials: withCredentials,
+                            adapter: browserTransport ? 'fetch' : 'http',
+                            ...(browserTransport ? {responseType: 'stream' as const, signal: responseController!.signal} : {}),
                             timeout: this.config.statementTimeoutMs ?? 30000,
                             maxContentLength: this.config.maxResponseBytes ?? 8 * 1024 * 1024,
                             maxBodyLength: queryLimits(this.config.queryLimits).maxInputBytes,
@@ -515,7 +521,11 @@ export class HttpExecutor<
                                 throw new Error(`The request method (${requestMethod}) was not recognized.`);
                         }
                     })()
-                );
+                ).then(async response => {
+                    if (browserTransport) response.data = await readHttpResponseStream(response.data as any, this.config, responseController!) as ResponseDataType;
+                    validateResponseBudget(response.data, this.config);
+                    return response;
+                });
 
 
                 if (cachingConfirmed) {
@@ -529,8 +539,6 @@ export class HttpExecutor<
                 // returning the promise with this then is important for tests. todo - we could make that optional.
                 // https://rapidapi.com/guides/axios-async-await
                 return axiosActiveRequest.then(async (response: AxiosResponse<ResponseDataType, any>): Promise<AxiosResponse<ResponseDataType, any>> => {
-
-                        validateResponseBudget(response.data, this.config);
 
                         let hasNext: boolean | undefined;
 

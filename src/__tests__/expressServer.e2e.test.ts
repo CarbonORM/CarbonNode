@@ -55,9 +55,10 @@ beforeAll(async () => {
     });
 
     const app = createTestServer({C6, mysqlPool: pool});
-    server = app.listen(0);
+    server = app.listen(0, '127.0.0.1');
     await new Promise(resolve => server.on('listening', resolve));
     const {port} = server.address() as AddressInfo;
+    expect((server.address() as AddressInfo).address).toBe('127.0.0.1');
 
     restURL = `http://127.0.0.1:${port}/rest/`;
     axiosClient = axios.create();

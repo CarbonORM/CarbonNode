@@ -86,6 +86,7 @@ export function scopedCacheRequest(config: any, request: unknown, transport: 'sq
             maxPageOffset: config.maxPageOffset, maxResponseBytes: config.maxResponseBytes,
             statementTimeoutMs: config.statementTimeoutMs,
             enforceRestFunctionPolicy: config.enforceRestFunctionPolicy,
+            enforceSqlTransportBudget: config.enforceSqlTransportBudget,
             restFunctionAllowlist: config.restFunctionAllowlist}, request];
 }
 

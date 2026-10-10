@@ -3,6 +3,7 @@ import { PostQueryBuilder } from "../orm/queries/PostQueryBuilder";
 import { SelectQueryBuilder } from "../orm/queries/SelectQueryBuilder";
 import { UpdateQueryBuilder } from "../orm/queries/UpdateQueryBuilder";
 import {validateSqlBudget, validateResponseBudget} from '../utils/querySafety';
+import {withSqlWireBudget, withMySqlMutationDeadline} from '../utils/sqlTransportSafety';
 import { OrmGenerics } from "../types/ormGenerics";
 import { C6Constants as C6C } from "../constants/C6Constants";
 import {
@@ -114,6 +115,7 @@ const createSqlAllowListBlockedError = (args: {
 export class SqlExecutor<
     G extends OrmGenerics
 > extends Executor<G> {
+    private connectionRetired = false;
     private getPostRequestRows(): Record<string, any>[] {
         const request = this.request as any;
         if (!request) return [];
@@ -404,7 +406,8 @@ export class SqlExecutor<
                 console.log,
                 `[SQL EXECUTOR] 🔌 Releasing DB connection`,
             );
-            conn.release();
+            if (this.connectionRetired && this.isPostgresRuntime()) (conn as iPostgresClient).release(true);
+            else conn.release();
         }
     }
 
@@ -1101,7 +1104,8 @@ export class SqlExecutor<
             // Hooks may rewrite SQL; approve the statement that actually reaches the driver.
             validateSqlBudget(sqlExecution.sql, sqlExecution.values, this.config);
             await this.validateSqlAllowList(sqlExecution.sql);
-            const result = await this.runWithStatementTimeout(conn, sqlExecution);
+            const result = await withSqlWireBudget(conn, this.config,
+                () => this.runWithStatementTimeout(conn, sqlExecution), () => {this.connectionRetired = true;});
 
             const response = this.createResponseFromQueryResult(
                 method,
@@ -1181,6 +1185,10 @@ export class SqlExecutor<
             await pg.query("SELECT set_config('statement_timeout', $1, false)", [String(timeout)]);
             try {return await this.runSqlStatement(conn, sql);}
             finally {await pg.query("SELECT set_config('statement_timeout', $1, false)", [prior.rows?.[0]?.statement_timeout ?? '0']);}
+        }
+        if (this.config.requestMethod !== C6C.GET) {
+            return withMySqlMutationDeadline(conn, timeout, this.config,
+                () => this.runSqlStatement(conn, sql), () => {this.connectionRetired = true;});
         }
         const mysql = conn as PoolConnection;
         const [prior] = await mysql.query<any[]>('SELECT @@SESSION.max_execution_time AS timeout');

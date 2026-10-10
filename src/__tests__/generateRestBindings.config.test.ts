@@ -389,7 +389,7 @@ describe("generateRestBindings config validation", () => {
             });
 
             const { status, output } = runGenerator(
-                ["--config", configPath, "--output", outputDir, "--includeTriggerDefinitions", "1"],
+                ["--config", configPath, "--output", outputDir, "--includeTriggerDefinitions", "1", "--no-db", "1"],
                 tempDir,
             );
 
@@ -451,7 +451,7 @@ describe("generateRestBindings config validation", () => {
             });
 
             const { status, output } = runGenerator(
-                ["--config", configPath, "--output", outputDir],
+                ["--config", configPath, "--output", outputDir, "--no-db", "1"],
                 tempDir,
             );
 
@@ -533,11 +533,11 @@ describe('generator security boundaries', () => {
             const outputDir = path.join(dir, 'out'); fs.mkdirSync(outputDir);
             const sentinel = path.join(outputDir, 'C6.ts'); fs.writeFileSync(sentinel, 'original facade');
             const rows = `${name}\tVIEW\tid\tinteger\tint4\tYES\t\n`;
-            fs.writeFileSync(path.join(bin, 'pg_dump'), `#!/usr/bin/env node\nprocess.stdout.write(${JSON.stringify(minimalPostgresSchemaDump)});\n`, {mode: 0o755});
+            fs.writeFileSync(path.join(bin, 'pg_dump'), `#!/usr/bin/env node\nrequire('fs').writeFileSync(process.argv[process.argv.indexOf('--file')+1], ${JSON.stringify(minimalPostgresSchemaDump)});\n`, {mode: 0o755});
             fs.writeFileSync(path.join(bin, 'psql'), `#!/usr/bin/env node\nprocess.stdout.write(${JSON.stringify(rows)});\n`, {mode: 0o755});
             const configPath = path.join(dir, 'config.json');
             writeJson(configPath, {databases: [{alias: 'app', dialect: 'postgresql', host: 'invalid.example', user: 'test', pass: 'test-only', dbname: 'app'}]});
-            const result = spawnSync(process.execPath, [generatorScriptPath, '--config', configPath, '--output', outputDir], {
+            const result = spawnSync(process.execPath, [generatorScriptPath, '--config', configPath, '--output', outputDir, '--pg-dump-client', path.join(bin, 'pg_dump'), '--psql-client', path.join(bin, 'psql')], {
                 cwd: dir, encoding: 'utf8', env: {...process.env, PATH: `${bin}${path.delimiter}${process.env.PATH}`, C6_SKIP_GENERATED_TSC: '1'},
             });
             // A duplicate raw actor is a table/view conflict and must not silently replace its metadata.
@@ -621,13 +621,13 @@ describe('generator security boundaries', () => {
             fs.mkdirSync(bin); fs.mkdirSync(outputDir);
             const capture = path.join(dir, 'capture.json');
             // A fake client records arguments and permissions without using real credentials or databases.
-            fs.writeFileSync(path.join(bin, 'mysqldump'), `#!/usr/bin/env node\nconst fs = require('fs');\nconst cnf = process.argv.find(v => v.startsWith('--defaults-extra-file=')).split('=').slice(1).join('=');\nfs.writeFileSync(${JSON.stringify(capture)}, JSON.stringify({argv: process.argv.slice(2), cnf, mode: fs.statSync(cnf).mode & 511}));\nprocess.stdout.write(${JSON.stringify(schemaDumpWithTrigger)});\n`, {mode: 0o755});
-            fs.writeFileSync(path.join(bin, 'mysql'), '#!/bin/sh\nexit 1\n', {mode: 0o755});
+            fs.writeFileSync(path.join(bin, 'mysqldump'), `#!/usr/bin/env node\nconst fs = require('fs');\nif(process.argv.includes('--version')) {console.log('MySQL');process.exit(0)}\nconst cnf = process.argv.find(v => v.startsWith('--defaults-extra-file=')).split('=').slice(1).join('=');\nfs.writeFileSync(${JSON.stringify(capture)}, JSON.stringify({argv: process.argv.slice(2), cnf, mode: fs.statSync(cnf).mode & 511}));\nprocess.stdout.write(${JSON.stringify(schemaDumpWithTrigger)});\n`, {mode: 0o755});
+            fs.writeFileSync(path.join(bin, 'mysql'), '#!/bin/sh\nexit 0\n', {mode: 0o755});
             const marker = path.join(dir, 'injected');
             const dbname = `sakila; touch ${marker} #`;
             const configPath = path.join(dir, 'config.json');
             writeJson(configPath, {databases: [{alias: 'app', host: 'localhost', user: 'test', pass: 'test-only', dbname}]});
-            const result = spawnSync(process.execPath, [generatorScriptPath, '--config', configPath, '--output', outputDir], {
+            const result = spawnSync(process.execPath, [generatorScriptPath, '--config', configPath, '--output', outputDir, '--mysqldump-client', path.join(bin, 'mysqldump'), '--mysql-client', path.join(bin, 'mysql')], {
                 cwd: dir, encoding: 'utf8', env: {...process.env, PATH: `${bin}${path.delimiter}${process.env.PATH}`, C6_SKIP_GENERATED_TSC: '1'},
             });
             expect(result.status, result.stderr).toBe(0);
@@ -658,6 +658,75 @@ describe('generator security boundaries', () => {
             expect(result.output).not.toContain('Successfully created C6.mysql.cnf');
             const core = fs.readFileSync(path.join(outputDir, 'C6.generated/core.ts'), 'utf8');
             expect(core).toContain(`export const RestTablePrefix = ${JSON.stringify("x';globalThis.injected=true;//")};`);
+        } finally {fs.rmSync(dir, {recursive: true, force: true});}
+    });
+});
+
+describe('trusted generator toolchain and online acquisition', () => {
+    it.each(['mysql', 'postgresql'])('fails closed after %s dump failure with an existing dump', engine => {
+        ensureGeneratorScript(); const dir = makeTempDir();
+        try {
+            const out = path.join(dir, 'out'); fs.mkdirSync(out);
+            const old = path.join(out, engine === 'mysql' ? 'C6.mysqldump.sql' : 'C6.pg_dump.sql');
+            fs.writeFileSync(old, engine === 'mysql' ? minimalSchemaDump : minimalPostgresSchemaDump);
+            const client = path.join(dir, 'trusted-client');
+            fs.writeFileSync(client, '#!/bin/sh\nif [ "$1" = "--version" ]; then echo MySQL; exit 0; fi\nexit 1\n', {mode: 0o700});
+            const config = path.join(dir, 'config.json');
+            writeJson(config, {databases: [{alias: 'app', dialect: engine, host: '127.0.0.1', port: engine === 'mysql' ? 3306 : 5432, user: 'root', pass: 'fixture-secret', dbnames: ['app']}]});
+            const result = runGenerator(['--config', config, '--output', out,
+                engine === 'mysql' ? '--mysqldump-client' : '--pg-dump-client', client], dir);
+            expect(result.status).not.toBe(0); expect(result.output).toMatch(/Online .* schema acquisition failed/);
+            expect(fs.readFileSync(old, 'utf8')).toBe(engine === 'mysql' ? minimalSchemaDump : minimalPostgresSchemaDump);
+            expect(fs.existsSync(path.join(out, 'C6.ts'))).toBe(false); expect(result.output).not.toContain('fixture-secret');
+        } finally {fs.rmSync(dir, {recursive: true, force: true});}
+    });
+    it('ignores hostile PATH clients and never acquires a compiler through npx', () => {
+        ensureGeneratorScript(); const dir = makeTempDir();
+        try {
+            const bin = path.join(dir, 'bin'), out = path.join(dir, 'out'), marker = path.join(dir, 'executed');
+            fs.mkdirSync(bin); fs.mkdirSync(out);
+            for (const name of ['mysql', 'mysqldump', 'psql', 'pg_dump', 'npx']) {
+                fs.writeFileSync(path.join(bin, name), `#!/bin/sh\ntouch '${marker}'\nexit 1\n`, {mode: 0o700});
+            }
+            const scope = path.join(dir, 'node_modules', '@carbonorm');
+            fs.mkdirSync(scope, {recursive: true});
+            fs.symlinkSync(repoRoot, path.join(scope, 'carbonnode'), 'dir');
+            const config = path.join(dir, 'config.json');
+            writeJson(config, {databases: [{alias: 'app', host: '127.0.0.1', port: 1, user: 'root', pass: 'fixture-secret', dbnames: ['app']}]});
+            fs.writeFileSync(path.join(out, 'C6.mysqldump.sql'), minimalSchemaDump);
+            const env = {...process.env, PATH: bin, C6_NO_DB: '0', C6_SKIP_GENERATED_TSC: '0'};
+            const online = spawnSync(process.execPath, [generatorScriptPath, '--config', config, '--output', out], {cwd: dir, env, encoding: 'utf8', timeout: 10000});
+            expect(online.status).not.toBe(0); expect(online.error).toBeUndefined();
+            expect(`${online.stdout}${online.stderr}`).toMatch(/Online MySQL schema acquisition failed/);
+            expect(fs.existsSync(marker)).toBe(false);
+            const offline = spawnSync(process.execPath, [generatorScriptPath, '--config', config, '--output', out, '--no-db', '1'], {cwd: dir, env, encoding: 'utf8', timeout: 20000});
+            expect(fs.existsSync(marker)).toBe(false);
+            expect(offline.status, `${offline.stdout}${offline.stderr}`).toBe(0);
+            expect(fs.readFileSync(path.join(out, 'C6.generated/views/index.ts'), 'utf8')).toContain('export {};');
+            // Real local TypeScript runs without downloading a compiler.
+            expect(`${offline.stdout}${offline.stderr}`).not.toMatch(/npm ERR|npm warn exec|could not determine executable/);
+            const pkg = JSON.parse(fs.readFileSync(path.join(repoRoot, 'package.json'), 'utf8'));
+            expect(pkg.dependencies.typescript).toBe('5.9.2'); expect(pkg.devDependencies.typescript).toBeUndefined();
+        } finally {fs.rmSync(dir, {recursive: true, force: true});}
+    }, 40000);
+});
+
+describe('online metadata acquisition', () => {
+    it.each(['mysql', 'postgresql'])('rejects %s metadata failure after a successful dump', dialect => {
+        ensureGeneratorScript(); const dir = makeTempDir();
+        try {
+            const out = path.join(dir, 'out'), dump = path.join(dir, 'dump-client'), metadata = path.join(dir, 'metadata-client');
+            fs.mkdirSync(out);
+            const schema = dialect === 'mysql' ? minimalSchemaDump : minimalPostgresSchemaDump;
+            fs.writeFileSync(dump, `#!${process.execPath}\nconst fs = require('fs'); const args = process.argv.slice(2);\nif (args.includes('--version')) {console.log('MySQL'); process.exit(0);}\nconst schema = ${JSON.stringify(schema)};\nif (args.includes('--file')) fs.writeFileSync(args[args.indexOf('--file')+1], schema); else process.stdout.write(schema);\n`, {mode: 0o700});
+            fs.writeFileSync(metadata, '#!/bin/sh\nexit 1\n', {mode: 0o700});
+            const config = path.join(dir, 'config.json');
+            writeJson(config, {databases: [{alias: 'app', dialect, host: '127.0.0.1', user: 'root', pass: 'fixture-secret', dbnames: ['app']}]});
+            const result = runGenerator(['--config', config, '--output', out,
+                dialect === 'mysql' ? '--mysqldump-client' : '--pg-dump-client', dump,
+                dialect === 'mysql' ? '--mysql-client' : '--psql-client', metadata], dir);
+            expect(result.status).not.toBe(0); expect(result.output).toMatch(/Online .* metadata acquisition failed/);
+            expect(result.output).not.toContain('fixture-secret'); expect(fs.existsSync(path.join(out, 'C6.ts'))).toBe(false);
         } finally {fs.rmSync(dir, {recursive: true, force: true});}
     });
 });
