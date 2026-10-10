@@ -13,6 +13,10 @@ export function restOrm<G extends Omit<OrmGenerics, "RequestMethod">>(
             ...configFn(),
             requestMethod: "GET"
         })),
+        Update: restRequest<WithMethod<G, "PATCH">>(() => ({
+            ...configFn(),
+            requestMethod: "PATCH"
+        })),
         Put: restRequest<WithMethod<G, "PUT">>(() => ({
             ...configFn(),
             requestMethod: "PUT"

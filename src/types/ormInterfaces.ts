@@ -13,9 +13,10 @@ import type {QuerySafetyConfig} from '../utils/querySafety';
 type RestOrmFactory = typeof restOrm<OrmGenerics<any>>;
 type RestOrmReturn = ReturnType<RestOrmFactory>;
 
-export type iRestMethods = 'GET' | 'POST' | 'PUT' | 'DELETE';
+export type iRestMethods = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 export const POST = 'POST';
 export const PUT = 'PUT';
+export const PATCH = 'PATCH';
 export const GET = 'GET';
 export const DELETE = 'DELETE';
 
@@ -73,6 +74,8 @@ export type Pagination = {
 export type RequestGetPutDeleteBody<T extends { [key: string]: any } = any> = T | {
     SELECT?: SelectField<T>[];
     UPDATE?: Partial<T>;
+    INSERT?: Partial<T>;
+    REPLACE?: Partial<T>;
     DELETE?: boolean;
     WHERE?: WhereClause<T>;
     JOIN?: Join<T>;
@@ -105,7 +108,7 @@ export type RequestQueryBody<
     T extends { [key: string]: any },
     Custom extends { [key: string]: any } = {},
     Overrides extends { [key: string]: any } = {}
-> = Method extends 'GET' | 'PUT' | 'DELETE'
+> = Method extends 'GET' | 'PUT' | 'PATCH' | 'DELETE'
     ? iAPI<RequestGetPutDeleteBody<Modify<T, Overrides> & Custom>>
     : iAPI<RequestPostBody<Modify<T, Overrides> & Custom>>;
 
@@ -190,7 +193,7 @@ export type DetermineResponseDataType<
         ? iPostC6RestResponse<RestTableInterface>
         : Method extends 'GET'
             ? iGetC6RestResponse<RestTableInterface, ResponseDataOverrides>
-            : Method extends 'PUT'
+            : Method extends 'PUT' | 'PATCH'
                 ? iPutC6RestResponse<RestTableInterface>
                 : Method extends 'DELETE'
                     ? iDeleteC6RestResponse<RestTableInterface>
@@ -334,8 +337,8 @@ export type C6RestfulModel<
     TABLE_NAME: RestShortTableName;
     RELATION_TYPE?: "TABLE" | "VIEW";
     READ_ONLY?: boolean;
-    PRIMARY: Array<tPrimaryKeys<RestShortTableName, PrimaryKey>>;
-    PRIMARY_SHORT: Array<PrimaryKey>;
+    PRIMARY: ReadonlyArray<tPrimaryKeys<RestShortTableName, PrimaryKey>>;
+    PRIMARY_SHORT: ReadonlyArray<PrimaryKey>;
     COLUMNS: tColumns<RestShortTableName, RestTableInterface>;
     TYPE_VALIDATION: { [key: string]: iTypeValidation };
     REGEX_VALIDATION: RegExpMap;
@@ -375,7 +378,9 @@ export type iRestReactiveLifecycle<G extends OrmGenerics> = {
 };
 
 export type iRestHooks<G extends OrmGenerics> = {
-    [Method in iRestMethods]: iRestReactiveLifecycle<G>;
+    [Method in Exclude<iRestMethods, 'PATCH'>]: iRestReactiveLifecycle<G>;
+} & {
+    PATCH?: iRestReactiveLifecycle<G>;
 };
 
 export interface iDynamicApiImport<RestData extends { [key: string]: any } = any> {
@@ -390,6 +395,7 @@ export interface iRestApiFunctions<RestData extends { [key: string]: any } = any
     Post: (request?: RequestQueryBody<'POST', RestData>) => iPostC6RestResponse<RestData>;
     Get: (request?: RequestQueryBody<'GET', RestData>) => iGetC6RestResponse<RestData>;
     Put: (request?: RequestQueryBody<'PUT', RestData>) => iPutC6RestResponse<RestData>;
+    Update: (request?: RequestQueryBody<'PATCH', RestData>) => iPutC6RestResponse<RestData>;
 }
 
 // TODO - remove the key

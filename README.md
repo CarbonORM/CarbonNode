@@ -928,3 +928,44 @@ historical findings, intentional SQL grammar, SQL-allowlist mitigations, and fix
 - The CommonJS export uses a `.cjs` extension. Regenerate bindings to receive
   generator fixes. Existing installed applications do not change merely because
   this repository's fixes merge.
+
+### Composite primary keys (7.1.0)
+
+Generated tables preserve the database constraint's key order. `PRIMARY` remains
+fully qualified for compatibility, and `PRIMARY_SHORT` contains the corresponding
+short names; both are literal tuples. Each table exports a required `PK_<table>`
+shape and a `<Table>PK_shape` alias. Binary database keys use `Buffer`; HTTP
+requests encode those buffers as hex. `PK_shape<T, Keys>` is also exported for
+custom descriptors.
+
+```ts
+import { Group_Permissions, type PK_group_permissions } from './C6';
+
+const key: PK_group_permissions = { group_id, permission_id };
+await Group_Permissions.Get({ group_permissions: key });
+await Group_Permissions.Update({ group_permissions: key, effect: 'DENY' });
+await Group_Permissions.Update({
+  [C6C.WHERE]: {
+    'group_permissions.group_id': group_id,
+    'group_permissions.permission_id': permission_id,
+  },
+  [C6C.SET]: { 'group_permissions.effect': 'ALLOW' },
+});
+await Group_Permissions.Put({
+  group_permissions: { ...key, effect: 'ALLOW', created_by: userId },
+});
+await Group_Permissions.Delete({ group_permissions: key });
+```
+
+`Update` sends PATCH and uses the existing PUT lifecycle hooks unless PATCH hooks
+are configured. Without an explicit WHERE, GET, PATCH and DELETE bind every PK
+column with AND. Collection GETs remain available when no PK fields are supplied.
+Incomplete composite identities throw `CompositePrimaryKeyMissingColumns`; REST
+returns 422 with `requiredColumns`, `missingColumns`, and a descriptive message.
+Composite identities use the table-only REST route, with their keys in the payload.
+
+Composite `Put` without a WHERE performs INSERT ... ON DUPLICATE KEY UPDATE
+(or PostgreSQL ON CONFLICT with every PK column), updating supplied non-key
+columns. Use `Update` or explicit UPDATE + WHERE for an update that must not insert.
+Single-column `Put` retains its existing update behavior. Composite inserts require
+all key columns, including each row of a batch, and do not generate substitute IDs.

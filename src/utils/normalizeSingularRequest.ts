@@ -1,5 +1,6 @@
 import { C6Constants as C6C } from "../constants/C6Constants";
 import { C6RestfulModel, iRestMethods, RequestQueryBody } from "../types/ormInterfaces";
+import {normalizePrimaryKeyRequest} from './primaryKeys';
 
 const isPlainObject = (value: unknown): value is Record<string, any> =>
   !!value && typeof value === 'object' && !Array.isArray(value);
@@ -74,6 +75,10 @@ export function normalizeSingularRequest<
   removedPrimary?: { key: string; value: any }
 ): RequestQueryBody<Method, T, Custom, Overrides> {
   if (request == null || typeof request !== 'object') return request;
+
+  request = normalizePrimaryKeyRequest(requestMethod, request, restModel);
+  // PATCH uses the established update normalization for single-column keys.
+  if (requestMethod === 'PATCH') requestMethod = C6C.PUT as Method;
 
   const complexShapeKeys: Set<string> = new Set([
     C6C.DELETE,

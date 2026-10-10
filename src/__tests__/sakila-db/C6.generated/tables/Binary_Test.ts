@@ -23,11 +23,16 @@ export interface iBinary_Test {
     'bin_col'?: Buffer | string | null;
 }
 
-export type Binary_TestPrimaryKeys = 
+export type Binary_TestPrimaryKeys =
         'id'
     ;
 
-const binary_test:
+export type PK_binary_test = {
+    'id': number;
+};
+export type Binary_TestPK_shape = PK_binary_test;
+
+export const binary_test:
     C6RestfulModel<
         'binary_test',
         iBinary_Test,
@@ -35,6 +40,8 @@ const binary_test:
     > & Record<string, any> & {
         RELATION_TYPE: 'TABLE';
         READ_ONLY: false;
+        PRIMARY: readonly ['binary_test.id'];
+        PRIMARY_SHORT: readonly ['id'];
     } = {
     TABLE_NAME: 'binary_test',
     RELATION_TYPE: 'TABLE',
@@ -43,10 +50,10 @@ const binary_test:
     BIN_COL: 'binary_test.bin_col',
     PRIMARY: [
         'binary_test.id',
-    ],
+    ] as const,
     PRIMARY_SHORT: [
         'id',
-    ],
+    ] as const,
     COLUMNS: {
         'binary_test.id': 'id',
         'binary_test.bin_col': 'bin_col',
@@ -76,10 +83,10 @@ const binary_test:
         DELETE: {beforeProcessing:{}, beforeExecution:{}, afterExecution:{}, afterCommit:{}},
     },
     TABLE_REFERENCES: {
-        
+
     },
     TABLE_REFERENCED_BY: {
-        
+
     }
 }
 

@@ -4,6 +4,8 @@ import { PaginationBuilder } from '../builders/PaginationBuilder';
 import {SqlBuilderResult} from "../utils/sqlUtils";
 import {SelectQueryBuilder} from "./SelectQueryBuilder";
 
+import {normalizePrimaryKeyRequest} from '../../utils/primaryKeys';
+
 export class UpdateQueryBuilder<G extends OrmGenerics> extends PaginationBuilder<G>{
     protected createSelectBuilder(request: any) {
         return new SelectQueryBuilder(this.config as any, request, this.useNamedParams);
@@ -13,6 +15,7 @@ export class UpdateQueryBuilder<G extends OrmGenerics> extends PaginationBuilder
     build(
         table: string,
     ): SqlBuilderResult {
+        this.request = normalizePrimaryKeyRequest('PATCH', this.request, this.config.C6.TABLES[table] ?? this.config.restModel);
         if (!this.request.WHERE && this.config.allowUnfilteredWrites !== true) {
             throw new Error('UPDATE/DELETE requires WHERE; use trusted allowUnfilteredWrites for intentional bulk writes.');
         }

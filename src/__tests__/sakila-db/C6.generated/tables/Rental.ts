@@ -29,7 +29,7 @@ CREATE TABLE `rental` (
   CONSTRAINT `fk_rental_staff` FOREIGN KEY (`staff_id`) REFERENCES `staff` (`staff_id`) ON DELETE RESTRICT ON UPDATE CASCADE
 ) ENGINE=InnoDB AUTO_INCREMENT=16160 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
-CREATE DEFINER=`root`@`localhost` TRIGGER `rental_date` BEFORE INSERT ON `rental` FOR EACH ROW SET NEW.rental_date = NOW();
+
 **/
 
 export interface iRental {
@@ -42,11 +42,16 @@ export interface iRental {
     'last_update'?: Date | number | string;
 }
 
-export type RentalPrimaryKeys = 
+export type RentalPrimaryKeys =
         'rental_id'
     ;
 
-const rental:
+export type PK_rental = {
+    'rental_id': number;
+};
+export type RentalPK_shape = PK_rental;
+
+export const rental:
     C6RestfulModel<
         'rental',
         iRental,
@@ -54,6 +59,8 @@ const rental:
     > & Record<string, any> & {
         RELATION_TYPE: 'TABLE';
         READ_ONLY: false;
+        PRIMARY: readonly ['rental.rental_id'];
+        PRIMARY_SHORT: readonly ['rental_id'];
     } = {
     TABLE_NAME: 'rental',
     RELATION_TYPE: 'TABLE',
@@ -67,10 +74,10 @@ const rental:
     LAST_UPDATE: 'rental.last_update',
     PRIMARY: [
         'rental.rental_id',
-    ],
+    ] as const,
     PRIMARY_SHORT: [
         'rental_id',
-    ],
+    ] as const,
     COLUMNS: {
         'rental.rental_id': 'rental_id',
         'rental.rental_date': 'rental_date',
@@ -132,9 +139,9 @@ const rental:
             EVENT_MANIPULATION: "INSERT",
             ACTION_TIMING: "BEFORE",
             EVENT_OBJECT_TABLE: "rental",
-            ACTION_STATEMENT: "SET NEW.rental_date = NOW()",
-            CREATE_STATEMENT: "CREATE DEFINER=`root`@`localhost` TRIGGER `rental_date` BEFORE INSERT ON `rental` FOR EACH ROW SET NEW.rental_date = NOW();",
-            DEFINER: "`root`@`localhost`",
+            ACTION_STATEMENT: "",
+            CREATE_STATEMENT: "",
+            DEFINER: null,
         },
     ],
     LIFECYCLE_HOOKS: {

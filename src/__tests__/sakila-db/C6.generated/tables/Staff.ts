@@ -45,11 +45,16 @@ export interface iStaff {
     'last_update'?: Date | number | string;
 }
 
-export type StaffPrimaryKeys = 
+export type StaffPrimaryKeys =
         'staff_id'
     ;
 
-const staff:
+export type PK_staff = {
+    'staff_id': number;
+};
+export type StaffPK_shape = PK_staff;
+
+export const staff:
     C6RestfulModel<
         'staff',
         iStaff,
@@ -57,6 +62,8 @@ const staff:
     > & Record<string, any> & {
         RELATION_TYPE: 'TABLE';
         READ_ONLY: false;
+        PRIMARY: readonly ['staff.staff_id'];
+        PRIMARY_SHORT: readonly ['staff_id'];
     } = {
     TABLE_NAME: 'staff',
     RELATION_TYPE: 'TABLE',
@@ -74,10 +81,10 @@ const staff:
     LAST_UPDATE: 'staff.last_update',
     PRIMARY: [
         'staff.staff_id',
-    ],
+    ] as const,
     PRIMARY_SHORT: [
         'staff_id',
-    ],
+    ] as const,
     COLUMNS: {
         'staff.staff_id': 'staff_id',
         'staff.first_name': 'first_name',

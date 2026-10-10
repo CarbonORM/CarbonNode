@@ -28,11 +28,16 @@ export interface iActor {
     'last_update'?: Date | number | string;
 }
 
-export type ActorPrimaryKeys = 
+export type ActorPrimaryKeys =
         'actor_id'
     ;
 
-const actor:
+export type PK_actor = {
+    'actor_id': number;
+};
+export type ActorPK_shape = PK_actor;
+
+export const actor:
     C6RestfulModel<
         'actor',
         iActor,
@@ -40,6 +45,8 @@ const actor:
     > & Record<string, any> & {
         RELATION_TYPE: 'TABLE';
         READ_ONLY: false;
+        PRIMARY: readonly ['actor.actor_id'];
+        PRIMARY_SHORT: readonly ['actor_id'];
     } = {
     TABLE_NAME: 'actor',
     RELATION_TYPE: 'TABLE',
@@ -50,10 +57,10 @@ const actor:
     LAST_UPDATE: 'actor.last_update',
     PRIMARY: [
         'actor.actor_id',
-    ],
+    ] as const,
     PRIMARY_SHORT: [
         'actor_id',
-    ],
+    ] as const,
     COLUMNS: {
         'actor.actor_id': 'actor_id',
         'actor.first_name': 'first_name',
@@ -97,7 +104,7 @@ const actor:
         DELETE: {beforeProcessing:{}, beforeExecution:{}, afterExecution:{}, afterCommit:{}},
     },
     TABLE_REFERENCES: {
-        
+
     },
     TABLE_REFERENCED_BY: {
         'actor_id': [{

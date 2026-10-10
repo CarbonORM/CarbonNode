@@ -41,7 +41,7 @@ describe('browser HTTP response safety', () => {
         const config: any = {...buildTestConfig(), logLevel: 1, requestMethod: method, skipPrimaryCheck: false,
             restURL: 'https://example.test/rest/', axios: {[method.toLowerCase()]: dispatch}};
         config.restModel = config.C6.TABLES.film_actor;
-        await expect(restRequest<any>(config)({secret: 'private-token'} as any)).rejects.toThrow('Mutation requires');
+        await expect(restRequest<any>(config)({secret: 'private-token'} as any)).rejects.toThrow('CompositePrimaryKeyMissingColumns');
         expect(JSON.stringify(errorLog.mock.calls)).not.toContain('private-token'); expect(dispatch).not.toHaveBeenCalled();
     });
 });

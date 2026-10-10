@@ -21,6 +21,7 @@ import type { iFilm } from "./tables/Film";
 import type { iFilm_Actor } from "./tables/Film_Actor";
 import type { iFilm_Category } from "./tables/Film_Category";
 import type { iFilm_Text } from "./tables/Film_Text";
+import type { iGroup_Permissions } from "./tables/Group_Permissions";
 import type { iInventory } from "./tables/Inventory";
 import type { iLanguage } from "./tables/Language";
 import type { iPayment } from "./tables/Payment";
@@ -48,6 +49,7 @@ export type RestTableNames = 'actor'
  | 'film_actor'
  | 'film_category'
  | 'film_text'
+ | 'group_permissions'
  | 'inventory'
  | 'language'
  | 'payment'
@@ -73,6 +75,7 @@ export type RestShortTableNames = 'actor'
  | 'film_actor'
  | 'film_category'
  | 'film_text'
+ | 'group_permissions'
  | 'inventory'
  | 'language'
  | 'payment'
@@ -114,6 +117,7 @@ export type RestTableInterfaces = iActor
  | iFilm_Actor
  | iFilm_Category
  | iFilm_Text
+ | iGroup_Permissions
  | iInventory
  | iLanguage
  | iPayment
@@ -128,12 +132,40 @@ export type RestTableInterfaces = iActor
  | iSales_By_Store
  | iStaff_List;
 
+export type RestRelationInterfaces = {
+    'actor': iActor;
+    'address': iAddress;
+    'binary_test': iBinary_Test;
+    'category': iCategory;
+    'city': iCity;
+    'country': iCountry;
+    'customer': iCustomer;
+    'film': iFilm;
+    'film_actor': iFilm_Actor;
+    'film_category': iFilm_Category;
+    'film_text': iFilm_Text;
+    'group_permissions': iGroup_Permissions;
+    'inventory': iInventory;
+    'language': iLanguage;
+    'payment': iPayment;
+    'rental': iRental;
+    'staff': iStaff;
+    'store': iStore;
+    'actor_info': iActor_Info;
+    'customer_list': iCustomer_List;
+    'film_list': iFilm_List;
+    'nicer_but_slower_film_list': iNicer_But_Slower_Film_List;
+    'sales_by_film_category': iSales_By_Film_Category;
+    'sales_by_store': iSales_By_Store;
+    'staff_list': iStaff_List;
+};
+
 export const TABLES = {} as Record<RestShortTableNames, C6RestfulModel<any, any, any>>;
 export const VIEWS = {} as Record<RestShortViewNames, C6RestfulModel<any, any, any>>;
 
-export const C6Core: iC6Object<RestTableInterfaces> = {
+export const C6Core: iC6Object<RestRelationInterfaces> = {
     ...C6Constants,
-    C6VERSION: '6.4.2',
+    C6VERSION: '7.1.0',
     IMPORT: async (tableName: string): Promise<iDynamicApiImport> => {
         tableName = tableName.toLowerCase();
 
@@ -167,7 +199,7 @@ export const C6Core: iC6Object<RestTableInterfaces> = {
     PREFIX: RestTablePrefix,
     TABLES: TABLES as any,
     VIEWS: VIEWS as any,
-    ORM: {},
+    ORM: {} as iC6Object<RestRelationInterfaces>["ORM"],
 };
 
 export type tStatefulApiData<T> = T[] | undefined;
@@ -185,6 +217,7 @@ export interface iRestfulObjectArrayTypes {
     film_actor: tStatefulApiData<iFilm_Actor>,
     film_category: tStatefulApiData<iFilm_Category>,
     film_text: tStatefulApiData<iFilm_Text>,
+    group_permissions: tStatefulApiData<iGroup_Permissions>,
     inventory: tStatefulApiData<iInventory>,
     language: tStatefulApiData<iLanguage>,
     payment: tStatefulApiData<iPayment>,
@@ -214,6 +247,7 @@ export const initialRestfulObjectsState: iRestfulObjectArrayTypes = {
     film_actor: undefined,
     film_category: undefined,
     film_text: undefined,
+    group_permissions: undefined,
     inventory: undefined,
     language: undefined,
     payment: undefined,
@@ -241,6 +275,7 @@ export const COLUMNS = {
 'film_actor.actor_id': 'actor_id','film_actor.film_id': 'film_id','film_actor.last_update': 'last_update',
 'film_category.film_id': 'film_id','film_category.category_id': 'category_id','film_category.last_update': 'last_update',
 'film_text.film_id': 'film_id','film_text.title': 'title','film_text.description': 'description',
+'group_permissions.group_id': 'group_id','group_permissions.permission_id': 'permission_id','group_permissions.effect': 'effect','group_permissions.created_by': 'created_by','group_permissions.created_at': 'created_at',
 'inventory.inventory_id': 'inventory_id','inventory.film_id': 'film_id','inventory.store_id': 'store_id','inventory.last_update': 'last_update',
 'language.language_id': 'language_id','language.name': 'name','language.last_update': 'last_update',
 'payment.payment_id': 'payment_id','payment.customer_id': 'customer_id','payment.staff_id': 'staff_id','payment.rental_id': 'rental_id','payment.amount': 'amount','payment.payment_date': 'payment_date','payment.last_update': 'last_update',

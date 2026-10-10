@@ -45,7 +45,9 @@ export abstract class Executor<
         phase: Phase,
         args: Parameters<NonNullable<iRestReactiveLifecycle<G>[Phase]>[string]>[0]
     ): Promise<void> {
-        const lifecycleGroup = this.config.restModel.LIFECYCLE_HOOKS[this.config.requestMethod]?.[phase];
+        const hooks = this.config.restModel.LIFECYCLE_HOOKS;
+        const lifecycleGroup = hooks[this.config.requestMethod]?.[phase]
+            ?? (this.config.requestMethod === 'PATCH' ? hooks.PUT?.[phase] : undefined);
 
         if (!lifecycleGroup) return;
         const logContext = getLogContext(this.config, args.request);

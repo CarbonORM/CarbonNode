@@ -25,11 +25,16 @@ export interface iCategory {
     'last_update'?: Date | number | string;
 }
 
-export type CategoryPrimaryKeys = 
+export type CategoryPrimaryKeys =
         'category_id'
     ;
 
-const category:
+export type PK_category = {
+    'category_id': number;
+};
+export type CategoryPK_shape = PK_category;
+
+export const category:
     C6RestfulModel<
         'category',
         iCategory,
@@ -37,6 +42,8 @@ const category:
     > & Record<string, any> & {
         RELATION_TYPE: 'TABLE';
         READ_ONLY: false;
+        PRIMARY: readonly ['category.category_id'];
+        PRIMARY_SHORT: readonly ['category_id'];
     } = {
     TABLE_NAME: 'category',
     RELATION_TYPE: 'TABLE',
@@ -46,10 +53,10 @@ const category:
     LAST_UPDATE: 'category.last_update',
     PRIMARY: [
         'category.category_id',
-    ],
+    ] as const,
     PRIMARY_SHORT: [
         'category_id',
-    ],
+    ] as const,
     COLUMNS: {
         'category.category_id': 'category_id',
         'category.name': 'name',
@@ -86,7 +93,7 @@ const category:
         DELETE: {beforeProcessing:{}, beforeExecution:{}, afterExecution:{}, afterCommit:{}},
     },
     TABLE_REFERENCES: {
-        
+
     },
     TABLE_REFERENCED_BY: {
         'category_id': [{

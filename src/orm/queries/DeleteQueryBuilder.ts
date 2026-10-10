@@ -4,6 +4,8 @@ import { JoinBuilder } from "../builders/JoinBuilder";
 import { SelectQueryBuilder } from "./SelectQueryBuilder";
 import { isDerivedTableKey } from "../queryHelpers";
 
+import {normalizePrimaryKeyRequest} from '../../utils/primaryKeys';
+
 export class DeleteQueryBuilder<G extends OrmGenerics> extends JoinBuilder<G> {
     protected createSelectBuilder(request: any) {
         return new SelectQueryBuilder(this.config as any, request, this.useNamedParams);
@@ -66,6 +68,7 @@ export class DeleteQueryBuilder<G extends OrmGenerics> extends JoinBuilder<G> {
     build(
         table: string
     ): SqlBuilderResult {
+        this.request = normalizePrimaryKeyRequest('DELETE', this.request, this.config.C6.TABLES[table] ?? this.config.restModel);
         if (!this.request.WHERE && this.config.allowUnfilteredWrites !== true) {
             throw new Error('UPDATE/DELETE requires WHERE; use trusted allowUnfilteredWrites for intentional bulk writes.');
         }

@@ -29,11 +29,16 @@ export interface iCity {
     'last_update'?: Date | number | string;
 }
 
-export type CityPrimaryKeys = 
+export type CityPrimaryKeys =
         'city_id'
     ;
 
-const city:
+export type PK_city = {
+    'city_id': number;
+};
+export type CityPK_shape = PK_city;
+
+export const city:
     C6RestfulModel<
         'city',
         iCity,
@@ -41,6 +46,8 @@ const city:
     > & Record<string, any> & {
         RELATION_TYPE: 'TABLE';
         READ_ONLY: false;
+        PRIMARY: readonly ['city.city_id'];
+        PRIMARY_SHORT: readonly ['city_id'];
     } = {
     TABLE_NAME: 'city',
     RELATION_TYPE: 'TABLE',
@@ -51,10 +58,10 @@ const city:
     LAST_UPDATE: 'city.last_update',
     PRIMARY: [
         'city.city_id',
-    ],
+    ] as const,
     PRIMARY_SHORT: [
         'city_id',
-    ],
+    ] as const,
     COLUMNS: {
         'city.city_id': 'city_id',
         'city.city': 'city',

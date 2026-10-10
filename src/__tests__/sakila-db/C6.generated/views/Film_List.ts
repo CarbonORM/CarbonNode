@@ -90,7 +90,7 @@ const film_list: Record<string, any> & {
         },
         'film_list.rating': {
             MYSQL_TYPE: 'enum',
-            MAX_LENGTH: '&#x27;G&#x27;,&#x27;PG&#x27;,&#x27;PG-13&#x27;,&#x27;R&#x27;,&#x27;NC-17&#x27;',
+            MAX_LENGTH: '\'G\',\'PG\',\'PG-13\',\'R\',\'NC-17\'',
             AUTO_INCREMENT: false,
             SKIP_COLUMN_IN_POST: true
         },

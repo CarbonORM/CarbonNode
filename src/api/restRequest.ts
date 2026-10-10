@@ -30,7 +30,9 @@ export default function restRequest<
             G['RestTableInterface'],
             G['CustomAndRequiredFields'],
             G['RequestTableOverrides']
-        >,
+        > | (Partial<G['RestTableInterface']> & {
+            [Table in G['RestShortTableName'] & string]?: Partial<G['RestTableInterface']>
+        }),
     ): Promise<DetermineResponseDataType<G['RequestMethod'], G['RestTableInterface']>> => {
 
         const baseConfig = {...(typeof configX === "function" ? configX() : configX)};
@@ -65,7 +67,7 @@ export default function restRequest<
 
         // HTTP path fallback
         const {HttpExecutor} = await import('../executors/HttpExecutor');
-        const http = new HttpExecutor<G>(config as any, request);
+        const http = new HttpExecutor<G>(config as any, request as any);
         return http.execute();
     };
 }

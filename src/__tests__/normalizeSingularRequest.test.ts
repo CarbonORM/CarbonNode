@@ -158,10 +158,58 @@ describe('normalizeSingularRequest', () => {
     expect(out[C6C.WHERE]).toEqual({ 'actor.actor_id': litEq(77) });
   });
 
+  it('retains scalar columns named after their table', () => {
+    const model = makeModel('city', ['city_id'], ['city']);
+    const out = normalizeSingularRequest('PUT', {city_id: 4, city: 'New city'} as any, model) as any;
+    expect(out.UPDATE).toEqual({city: 'New city'});
+  });
+
+  it.each(['GET', 'PATCH', 'PUT', 'DELETE'] as const)('rejects null composite identity components for %s', method => {
+    const model = makeModel('link', ['from_id', 'to_id']);
+    expect(() => normalizeSingularRequest(method, {link: {from_id: 1, to_id: null}, label: 'X'} as any, model))
+      .toThrow(/CompositePrimaryKeyMissingColumns.*Missing: \[to_id\]/);
+  });
+
+  it('infers every composite key for explicit UPDATE without WHERE', () => {
+    const model = makeModel('link', ['from_id', 'to_id'], ['label']);
+    const out = normalizeSingularRequest('PATCH', {link: {from_id: 1, to_id: 2}, UPDATE: {label: 'X'}} as any, model) as any;
+    expect(out.WHERE).toEqual({'link.from_id': litEq(1), 'link.to_id': litEq(2)});
+    expect(out.UPDATE).toEqual({label: 'X'});
+    expect(() => normalizeSingularRequest('PATCH', {from_id: 1, UPDATE: {label: 'X'}} as any, model))
+      .toThrow(/CompositePrimaryKeyMissingColumns/);
+  });
+  it('rejects explicitly empty GET identities instead of treating them as collection queries', () => {
+    const model = makeModel('link', ['from_id', 'to_id']);
+    for (const value of [null, undefined]) {
+      expect(() => normalizeSingularRequest('GET', {link: {from_id: value}} as any, model))
+        .toThrow(/CompositePrimaryKeyMissingColumns.*Missing: \[from_id, to_id\]/);
+    }
+    const collection = {SELECT: ['*']} as any;
+    expect(normalizeSingularRequest('GET', collection, model)).toBe(collection);
+  });
+
+  it('requires all composite POST keys, including each batch row', () => {
+    const model = makeModel('link', ['from_id', 'to_id']);
+    expect(() => normalizeSingularRequest('POST', {INSERT: {from_id: 1}} as any, model))
+      .toThrow(/CompositePrimaryKeyMissingColumns/);
+    expect(() => normalizeSingularRequest('POST', {dataInsertMultipleRows: [{from_id: 1, to_id: 2}, {from_id: 3}]} as any, model))
+      .toThrow(/Missing: \[to_id\]/);
+    expect(() => normalizeSingularRequest('POST', [{from_id: 1, to_id: 2}, {from_id: 3}] as any, model))
+      .toThrow(/Missing: \[to_id\]/);
+  });
+
+  it('PUT emits INSERT and duplicate-key update columns for complete composite data', () => {
+    const model = makeModel('link', ['from_id', 'to_id'], ['label']);
+    const out = normalizeSingularRequest('PUT', {link: {from_id: 1, to_id: 2, label: 'X'}} as any, model) as any;
+    expect(out.INSERT).toEqual({from_id: 1, to_id: 2, label: 'X'});
+    expect(out.UPDATE).toEqual(['label']);
+    expect(out.WHERE).toBeUndefined();
+  });
+
   it('supports composite PKs with fully-qualified keys', () => {
     const model = makeModel('link', ['from_id', 'to_id']);
     const req = { 'link.from_id': 1, 'link.to_id': 2, 'link.label': 'L' } as any;
-    const out = normalizeSingularRequest('PUT', req, model) as any;
+    const out = normalizeSingularRequest('PATCH', req, model) as any;
     expect(out[C6C.WHERE]).toEqual({ 'link.from_id': litEq(1), 'link.to_id': litEq(2) });
   });
 });

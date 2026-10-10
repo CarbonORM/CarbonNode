@@ -31,11 +31,16 @@ export interface iInventory {
     'last_update'?: Date | number | string;
 }
 
-export type InventoryPrimaryKeys = 
+export type InventoryPrimaryKeys =
         'inventory_id'
     ;
 
-const inventory:
+export type PK_inventory = {
+    'inventory_id': number;
+};
+export type InventoryPK_shape = PK_inventory;
+
+export const inventory:
     C6RestfulModel<
         'inventory',
         iInventory,
@@ -43,6 +48,8 @@ const inventory:
     > & Record<string, any> & {
         RELATION_TYPE: 'TABLE';
         READ_ONLY: false;
+        PRIMARY: readonly ['inventory.inventory_id'];
+        PRIMARY_SHORT: readonly ['inventory_id'];
     } = {
     TABLE_NAME: 'inventory',
     RELATION_TYPE: 'TABLE',
@@ -53,10 +60,10 @@ const inventory:
     LAST_UPDATE: 'inventory.last_update',
     PRIMARY: [
         'inventory.inventory_id',
-    ],
+    ] as const,
     PRIMARY_SHORT: [
         'inventory_id',
-    ],
+    ] as const,
     COLUMNS: {
         'inventory.inventory_id': 'inventory_id',
         'inventory.film_id': 'film_id',

@@ -29,10 +29,10 @@ export const SCOPED_C6_BY_DATABASE: Record<string, iC6Object<any>> = {
             LAST_UPDATE: 'actor.last_update',
             PRIMARY: [
                 'actor.actor_id',
-            ],
+            ] as const,
             PRIMARY_SHORT: [
                 'actor_id',
-            ],
+            ] as const,
             COLUMNS: {
                 'actor.actor_id': 'actor_id',
                 'actor.first_name': 'first_name',
@@ -74,7 +74,7 @@ export const SCOPED_C6_BY_DATABASE: Record<string, iC6Object<any>> = {
                 DELETE: {beforeProcessing:{}, beforeExecution:{}, afterExecution:{}, afterCommit:{}},
             },
             TABLE_REFERENCES: {
-                
+
             },
             TABLE_REFERENCED_BY: {
                 'actor_id': [{
@@ -103,10 +103,10 @@ export const SCOPED_C6_BY_DATABASE: Record<string, iC6Object<any>> = {
             LAST_UPDATE: 'address.last_update',
             PRIMARY: [
                 'address.address_id',
-            ],
+            ] as const,
             PRIMARY_SHORT: [
                 'address_id',
-            ],
+            ] as const,
             COLUMNS: {
                 'address.address_id': 'address_id',
                 'address.address': 'address',
@@ -217,10 +217,10 @@ export const SCOPED_C6_BY_DATABASE: Record<string, iC6Object<any>> = {
             BIN_COL: 'binary_test.bin_col',
             PRIMARY: [
                 'binary_test.id',
-            ],
+            ] as const,
             PRIMARY_SHORT: [
                 'id',
-            ],
+            ] as const,
             COLUMNS: {
                 'binary_test.id': 'id',
                 'binary_test.bin_col': 'bin_col',
@@ -248,10 +248,10 @@ export const SCOPED_C6_BY_DATABASE: Record<string, iC6Object<any>> = {
                 DELETE: {beforeProcessing:{}, beforeExecution:{}, afterExecution:{}, afterCommit:{}},
             },
             TABLE_REFERENCES: {
-                
+
             },
             TABLE_REFERENCED_BY: {
-                
+
             }
         };
         const sakila_category: Record<string, any> & {
@@ -267,10 +267,10 @@ export const SCOPED_C6_BY_DATABASE: Record<string, iC6Object<any>> = {
             LAST_UPDATE: 'category.last_update',
             PRIMARY: [
                 'category.category_id',
-            ],
+            ] as const,
             PRIMARY_SHORT: [
                 'category_id',
-            ],
+            ] as const,
             COLUMNS: {
                 'category.category_id': 'category_id',
                 'category.name': 'name',
@@ -305,7 +305,7 @@ export const SCOPED_C6_BY_DATABASE: Record<string, iC6Object<any>> = {
                 DELETE: {beforeProcessing:{}, beforeExecution:{}, afterExecution:{}, afterCommit:{}},
             },
             TABLE_REFERENCES: {
-                
+
             },
             TABLE_REFERENCED_BY: {
                 'category_id': [{
@@ -329,10 +329,10 @@ export const SCOPED_C6_BY_DATABASE: Record<string, iC6Object<any>> = {
             LAST_UPDATE: 'city.last_update',
             PRIMARY: [
                 'city.city_id',
-            ],
+            ] as const,
             PRIMARY_SHORT: [
                 'city_id',
-            ],
+            ] as const,
             COLUMNS: {
                 'city.city_id': 'city_id',
                 'city.city': 'city',
@@ -401,10 +401,10 @@ export const SCOPED_C6_BY_DATABASE: Record<string, iC6Object<any>> = {
             LAST_UPDATE: 'country.last_update',
             PRIMARY: [
                 'country.country_id',
-            ],
+            ] as const,
             PRIMARY_SHORT: [
                 'country_id',
-            ],
+            ] as const,
             COLUMNS: {
                 'country.country_id': 'country_id',
                 'country.country': 'country',
@@ -439,7 +439,7 @@ export const SCOPED_C6_BY_DATABASE: Record<string, iC6Object<any>> = {
                 DELETE: {beforeProcessing:{}, beforeExecution:{}, afterExecution:{}, afterCommit:{}},
             },
             TABLE_REFERENCES: {
-                
+
             },
             TABLE_REFERENCED_BY: {
                 'country_id': [{
@@ -468,10 +468,10 @@ export const SCOPED_C6_BY_DATABASE: Record<string, iC6Object<any>> = {
             LAST_UPDATE: 'customer.last_update',
             PRIMARY: [
                 'customer.customer_id',
-            ],
+            ] as const,
             PRIMARY_SHORT: [
                 'customer_id',
-            ],
+            ] as const,
             COLUMNS: {
                 'customer.customer_id': 'customer_id',
                 'customer.store_id': 'store_id',
@@ -593,10 +593,10 @@ export const SCOPED_C6_BY_DATABASE: Record<string, iC6Object<any>> = {
             LAST_UPDATE: 'film.last_update',
             PRIMARY: [
                 'film.film_id',
-            ],
+            ] as const,
             PRIMARY_SHORT: [
                 'film_id',
-            ],
+            ] as const,
             COLUMNS: {
                 'film.film_id': 'film_id',
                 'film.title': 'title',
@@ -675,13 +675,13 @@ export const SCOPED_C6_BY_DATABASE: Record<string, iC6Object<any>> = {
                 },
                 'film.rating': {
                     MYSQL_TYPE: 'enum',
-                    MAX_LENGTH: '&#x27;G&#x27;,&#x27;PG&#x27;,&#x27;PG-13&#x27;,&#x27;R&#x27;,&#x27;NC-17&#x27;',
+                    MAX_LENGTH: '\'G\',\'PG\',\'PG-13\',\'R\',\'NC-17\'',
                     AUTO_INCREMENT: false,
                     SKIP_COLUMN_IN_POST: false
                 },
                 'film.special_features': {
                     MYSQL_TYPE: 'set',
-                    MAX_LENGTH: '&#x27;Trailers&#x27;,&#x27;Commentaries&#x27;,&#x27;Deleted Scenes&#x27;,&#x27;Behind the Scenes&#x27;',
+                    MAX_LENGTH: '\'Trailers\',\'Commentaries\',\'Deleted Scenes\',\'Behind the Scenes\'',
                     AUTO_INCREMENT: false,
                     SKIP_COLUMN_IN_POST: false
                 },
@@ -741,11 +741,11 @@ export const SCOPED_C6_BY_DATABASE: Record<string, iC6Object<any>> = {
             PRIMARY: [
                 'film_actor.actor_id',
                 'film_actor.film_id',
-            ],
+            ] as const,
             PRIMARY_SHORT: [
                 'actor_id',
                 'film_id',
-            ],
+            ] as const,
             COLUMNS: {
                 'film_actor.actor_id': 'actor_id',
                 'film_actor.film_id': 'film_id',
@@ -791,7 +791,7 @@ export const SCOPED_C6_BY_DATABASE: Record<string, iC6Object<any>> = {
                 },],
             },
             TABLE_REFERENCED_BY: {
-                
+
             }
         };
         const sakila_film_category: Record<string, any> & {
@@ -808,11 +808,11 @@ export const SCOPED_C6_BY_DATABASE: Record<string, iC6Object<any>> = {
             PRIMARY: [
                 'film_category.film_id',
                 'film_category.category_id',
-            ],
+            ] as const,
             PRIMARY_SHORT: [
                 'film_id',
                 'category_id',
-            ],
+            ] as const,
             COLUMNS: {
                 'film_category.film_id': 'film_id',
                 'film_category.category_id': 'category_id',
@@ -858,7 +858,7 @@ export const SCOPED_C6_BY_DATABASE: Record<string, iC6Object<any>> = {
                 },],
             },
             TABLE_REFERENCED_BY: {
-                
+
             }
         };
         const sakila_film_text: Record<string, any> & {
@@ -874,10 +874,10 @@ export const SCOPED_C6_BY_DATABASE: Record<string, iC6Object<any>> = {
             DESCRIPTION: 'film_text.description',
             PRIMARY: [
                 'film_text.film_id',
-            ],
+            ] as const,
             PRIMARY_SHORT: [
                 'film_id',
-            ],
+            ] as const,
             COLUMNS: {
                 'film_text.film_id': 'film_id',
                 'film_text.title': 'title',
@@ -912,10 +912,85 @@ export const SCOPED_C6_BY_DATABASE: Record<string, iC6Object<any>> = {
                 DELETE: {beforeProcessing:{}, beforeExecution:{}, afterExecution:{}, afterCommit:{}},
             },
             TABLE_REFERENCES: {
-                
+
             },
             TABLE_REFERENCED_BY: {
-                
+
+            }
+        };
+        const sakila_group_permissions: Record<string, any> & {
+            TABLE_NAME: string;
+            RELATION_TYPE: 'TABLE' | 'VIEW';
+            READ_ONLY: boolean;
+        } = {
+            TABLE_NAME: 'group_permissions',
+            RELATION_TYPE: 'TABLE',
+            READ_ONLY: false,
+            GROUP_ID: 'group_permissions.group_id',
+            PERMISSION_ID: 'group_permissions.permission_id',
+            EFFECT: 'group_permissions.effect',
+            CREATED_BY: 'group_permissions.created_by',
+            CREATED_AT: 'group_permissions.created_at',
+            PRIMARY: [
+                'group_permissions.group_id',
+                'group_permissions.permission_id',
+            ] as const,
+            PRIMARY_SHORT: [
+                'group_id',
+                'permission_id',
+            ] as const,
+            COLUMNS: {
+                'group_permissions.group_id': 'group_id',
+                'group_permissions.permission_id': 'permission_id',
+                'group_permissions.effect': 'effect',
+                'group_permissions.created_by': 'created_by',
+                'group_permissions.created_at': 'created_at',
+            },
+            TYPE_VALIDATION: {
+                'group_permissions.group_id': {
+                    MYSQL_TYPE: 'binary',
+                    MAX_LENGTH: '16',
+                    AUTO_INCREMENT: false,
+                    SKIP_COLUMN_IN_POST: false
+                },
+                'group_permissions.permission_id': {
+                    MYSQL_TYPE: 'binary',
+                    MAX_LENGTH: '16',
+                    AUTO_INCREMENT: false,
+                    SKIP_COLUMN_IN_POST: false
+                },
+                'group_permissions.effect': {
+                    MYSQL_TYPE: 'enum',
+                    MAX_LENGTH: '\'ALLOW\',\'DENY\'',
+                    AUTO_INCREMENT: false,
+                    SKIP_COLUMN_IN_POST: false
+                },
+                'group_permissions.created_by': {
+                    MYSQL_TYPE: 'binary',
+                    MAX_LENGTH: '16',
+                    AUTO_INCREMENT: false,
+                    SKIP_COLUMN_IN_POST: false
+                },
+                'group_permissions.created_at': {
+                    MYSQL_TYPE: 'timestamp',
+                    MAX_LENGTH: '',
+                    AUTO_INCREMENT: false,
+                    SKIP_COLUMN_IN_POST: false
+                },
+            },
+            REGEX_VALIDATION: {
+            },
+            LIFECYCLE_HOOKS: {
+                GET: {beforeProcessing:{}, beforeExecution:{}, afterExecution:{}, afterCommit:{}},
+                PUT: {beforeProcessing:{}, beforeExecution:{}, afterExecution:{}, afterCommit:{}},
+                POST: {beforeProcessing:{}, beforeExecution:{}, afterExecution:{}, afterCommit:{}},
+                DELETE: {beforeProcessing:{}, beforeExecution:{}, afterExecution:{}, afterCommit:{}},
+            },
+            TABLE_REFERENCES: {
+
+            },
+            TABLE_REFERENCED_BY: {
+
             }
         };
         const sakila_inventory: Record<string, any> & {
@@ -932,10 +1007,10 @@ export const SCOPED_C6_BY_DATABASE: Record<string, iC6Object<any>> = {
             LAST_UPDATE: 'inventory.last_update',
             PRIMARY: [
                 'inventory.inventory_id',
-            ],
+            ] as const,
             PRIMARY_SHORT: [
                 'inventory_id',
-            ],
+            ] as const,
             COLUMNS: {
                 'inventory.inventory_id': 'inventory_id',
                 'inventory.film_id': 'film_id',
@@ -1008,10 +1083,10 @@ export const SCOPED_C6_BY_DATABASE: Record<string, iC6Object<any>> = {
             LAST_UPDATE: 'language.last_update',
             PRIMARY: [
                 'language.language_id',
-            ],
+            ] as const,
             PRIMARY_SHORT: [
                 'language_id',
-            ],
+            ] as const,
             COLUMNS: {
                 'language.language_id': 'language_id',
                 'language.name': 'name',
@@ -1046,7 +1121,7 @@ export const SCOPED_C6_BY_DATABASE: Record<string, iC6Object<any>> = {
                 DELETE: {beforeProcessing:{}, beforeExecution:{}, afterExecution:{}, afterCommit:{}},
             },
             TABLE_REFERENCES: {
-                
+
             },
             TABLE_REFERENCED_BY: {
                 'language_id': [{
@@ -1077,10 +1152,10 @@ export const SCOPED_C6_BY_DATABASE: Record<string, iC6Object<any>> = {
             LAST_UPDATE: 'payment.last_update',
             PRIMARY: [
                 'payment.payment_id',
-            ],
+            ] as const,
             PRIMARY_SHORT: [
                 'payment_id',
-            ],
+            ] as const,
             COLUMNS: {
                 'payment.payment_id': 'payment_id',
                 'payment.customer_id': 'customer_id',
@@ -1158,7 +1233,7 @@ export const SCOPED_C6_BY_DATABASE: Record<string, iC6Object<any>> = {
                 },],
             },
             TABLE_REFERENCED_BY: {
-                
+
             }
         };
         const sakila_rental: Record<string, any> & {
@@ -1178,10 +1253,10 @@ export const SCOPED_C6_BY_DATABASE: Record<string, iC6Object<any>> = {
             LAST_UPDATE: 'rental.last_update',
             PRIMARY: [
                 'rental.rental_id',
-            ],
+            ] as const,
             PRIMARY_SHORT: [
                 'rental_id',
-            ],
+            ] as const,
             COLUMNS: {
                 'rental.rental_id': 'rental_id',
                 'rental.rental_date': 'rental_date',
@@ -1287,10 +1362,10 @@ export const SCOPED_C6_BY_DATABASE: Record<string, iC6Object<any>> = {
             LAST_UPDATE: 'staff.last_update',
             PRIMARY: [
                 'staff.staff_id',
-            ],
+            ] as const,
             PRIMARY_SHORT: [
                 'staff_id',
-            ],
+            ] as const,
             COLUMNS: {
                 'staff.staff_id': 'staff_id',
                 'staff.first_name': 'first_name',
@@ -1421,10 +1496,10 @@ export const SCOPED_C6_BY_DATABASE: Record<string, iC6Object<any>> = {
             LAST_UPDATE: 'store.last_update',
             PRIMARY: [
                 'store.store_id',
-            ],
+            ] as const,
             PRIMARY_SHORT: [
                 'store_id',
-            ],
+            ] as const,
             COLUMNS: {
                 'store.store_id': 'store_id',
                 'store.manager_staff_id': 'manager_staff_id',
@@ -1505,9 +1580,9 @@ export const SCOPED_C6_BY_DATABASE: Record<string, iC6Object<any>> = {
             LAST_NAME: 'actor_info.last_name',
             FILM_INFO: 'actor_info.film_info',
             PRIMARY: [
-            ],
+            ] as const,
             PRIMARY_SHORT: [
-            ],
+            ] as const,
             COLUMNS: {
                 'actor_info.actor_id': 'actor_id',
                 'actor_info.first_name': 'first_name',
@@ -1549,10 +1624,10 @@ export const SCOPED_C6_BY_DATABASE: Record<string, iC6Object<any>> = {
                 DELETE: {beforeProcessing:{}, beforeExecution:{}, afterExecution:{}, afterCommit:{}},
             },
             TABLE_REFERENCES: {
-                
+
             },
             TABLE_REFERENCED_BY: {
-                
+
             }
         };
         const sakila_customer_list: Record<string, any> & {
@@ -1573,9 +1648,9 @@ export const SCOPED_C6_BY_DATABASE: Record<string, iC6Object<any>> = {
             NOTES: 'customer_list.notes',
             SID: 'customer_list.SID',
             PRIMARY: [
-            ],
+            ] as const,
             PRIMARY_SHORT: [
-            ],
+            ] as const,
             COLUMNS: {
                 'customer_list.ID': 'ID',
                 'customer_list.name': 'name',
@@ -1652,10 +1727,10 @@ export const SCOPED_C6_BY_DATABASE: Record<string, iC6Object<any>> = {
                 DELETE: {beforeProcessing:{}, beforeExecution:{}, afterExecution:{}, afterCommit:{}},
             },
             TABLE_REFERENCES: {
-                
+
             },
             TABLE_REFERENCED_BY: {
-                
+
             }
         };
         const sakila_film_list: Record<string, any> & {
@@ -1675,9 +1750,9 @@ export const SCOPED_C6_BY_DATABASE: Record<string, iC6Object<any>> = {
             RATING: 'film_list.rating',
             ACTORS: 'film_list.actors',
             PRIMARY: [
-            ],
+            ] as const,
             PRIMARY_SHORT: [
-            ],
+            ] as const,
             COLUMNS: {
                 'film_list.FID': 'FID',
                 'film_list.title': 'title',
@@ -1727,7 +1802,7 @@ export const SCOPED_C6_BY_DATABASE: Record<string, iC6Object<any>> = {
                 },
                 'film_list.rating': {
                     MYSQL_TYPE: 'enum',
-                    MAX_LENGTH: '&#x27;G&#x27;,&#x27;PG&#x27;,&#x27;PG-13&#x27;,&#x27;R&#x27;,&#x27;NC-17&#x27;',
+                    MAX_LENGTH: '\'G\',\'PG\',\'PG-13\',\'R\',\'NC-17\'',
                     AUTO_INCREMENT: false,
                     SKIP_COLUMN_IN_POST: true
                 },
@@ -1747,10 +1822,10 @@ export const SCOPED_C6_BY_DATABASE: Record<string, iC6Object<any>> = {
                 DELETE: {beforeProcessing:{}, beforeExecution:{}, afterExecution:{}, afterCommit:{}},
             },
             TABLE_REFERENCES: {
-                
+
             },
             TABLE_REFERENCED_BY: {
-                
+
             }
         };
         const sakila_nicer_but_slower_film_list: Record<string, any> & {
@@ -1770,9 +1845,9 @@ export const SCOPED_C6_BY_DATABASE: Record<string, iC6Object<any>> = {
             RATING: 'nicer_but_slower_film_list.rating',
             ACTORS: 'nicer_but_slower_film_list.actors',
             PRIMARY: [
-            ],
+            ] as const,
             PRIMARY_SHORT: [
-            ],
+            ] as const,
             COLUMNS: {
                 'nicer_but_slower_film_list.FID': 'FID',
                 'nicer_but_slower_film_list.title': 'title',
@@ -1822,7 +1897,7 @@ export const SCOPED_C6_BY_DATABASE: Record<string, iC6Object<any>> = {
                 },
                 'nicer_but_slower_film_list.rating': {
                     MYSQL_TYPE: 'enum',
-                    MAX_LENGTH: '&#x27;G&#x27;,&#x27;PG&#x27;,&#x27;PG-13&#x27;,&#x27;R&#x27;,&#x27;NC-17&#x27;',
+                    MAX_LENGTH: '\'G\',\'PG\',\'PG-13\',\'R\',\'NC-17\'',
                     AUTO_INCREMENT: false,
                     SKIP_COLUMN_IN_POST: true
                 },
@@ -1842,10 +1917,10 @@ export const SCOPED_C6_BY_DATABASE: Record<string, iC6Object<any>> = {
                 DELETE: {beforeProcessing:{}, beforeExecution:{}, afterExecution:{}, afterCommit:{}},
             },
             TABLE_REFERENCES: {
-                
+
             },
             TABLE_REFERENCED_BY: {
-                
+
             }
         };
         const sakila_sales_by_film_category: Record<string, any> & {
@@ -1859,9 +1934,9 @@ export const SCOPED_C6_BY_DATABASE: Record<string, iC6Object<any>> = {
             CATEGORY: 'sales_by_film_category.category',
             TOTAL_SALES: 'sales_by_film_category.total_sales',
             PRIMARY: [
-            ],
+            ] as const,
             PRIMARY_SHORT: [
-            ],
+            ] as const,
             COLUMNS: {
                 'sales_by_film_category.category': 'category',
                 'sales_by_film_category.total_sales': 'total_sales',
@@ -1889,10 +1964,10 @@ export const SCOPED_C6_BY_DATABASE: Record<string, iC6Object<any>> = {
                 DELETE: {beforeProcessing:{}, beforeExecution:{}, afterExecution:{}, afterCommit:{}},
             },
             TABLE_REFERENCES: {
-                
+
             },
             TABLE_REFERENCED_BY: {
-                
+
             }
         };
         const sakila_sales_by_store: Record<string, any> & {
@@ -1907,9 +1982,9 @@ export const SCOPED_C6_BY_DATABASE: Record<string, iC6Object<any>> = {
             MANAGER: 'sales_by_store.manager',
             TOTAL_SALES: 'sales_by_store.total_sales',
             PRIMARY: [
-            ],
+            ] as const,
             PRIMARY_SHORT: [
-            ],
+            ] as const,
             COLUMNS: {
                 'sales_by_store.store': 'store',
                 'sales_by_store.manager': 'manager',
@@ -1944,10 +2019,10 @@ export const SCOPED_C6_BY_DATABASE: Record<string, iC6Object<any>> = {
                 DELETE: {beforeProcessing:{}, beforeExecution:{}, afterExecution:{}, afterCommit:{}},
             },
             TABLE_REFERENCES: {
-                
+
             },
             TABLE_REFERENCED_BY: {
-                
+
             }
         };
         const sakila_staff_list: Record<string, any> & {
@@ -1967,9 +2042,9 @@ export const SCOPED_C6_BY_DATABASE: Record<string, iC6Object<any>> = {
             COUNTRY: 'staff_list.country',
             SID: 'staff_list.SID',
             PRIMARY: [
-            ],
+            ] as const,
             PRIMARY_SHORT: [
-            ],
+            ] as const,
             COLUMNS: {
                 'staff_list.ID': 'ID',
                 'staff_list.name': 'name',
@@ -2039,10 +2114,10 @@ export const SCOPED_C6_BY_DATABASE: Record<string, iC6Object<any>> = {
                 DELETE: {beforeProcessing:{}, beforeExecution:{}, afterExecution:{}, afterCommit:{}},
             },
             TABLE_REFERENCES: {
-                
+
             },
             TABLE_REFERENCED_BY: {
-                
+
             }
         };
 
@@ -2058,6 +2133,7 @@ export const SCOPED_C6_BY_DATABASE: Record<string, iC6Object<any>> = {
             'film_actor': sakila_film_actor,
             'film_category': sakila_film_category,
             'film_text': sakila_film_text,
+            'group_permissions': sakila_group_permissions,
             'inventory': sakila_inventory,
             'language': sakila_language,
             'payment': sakila_payment,
@@ -2075,7 +2151,7 @@ export const SCOPED_C6_BY_DATABASE: Record<string, iC6Object<any>> = {
 
         const scopedC6: iC6Object<any> = {
             ...C6Constants,
-            C6VERSION: '6.4.2',
+            C6VERSION: '7.1.0',
             PREFIX: RestTablePrefix,
             TABLES: scopedTables as any,
             ORM: {},
@@ -2168,6 +2244,14 @@ export const SCOPED_C6_BY_DATABASE: Record<string, iC6Object<any>> = {
                 ...GLOBAL_REST_PARAMETERS,
                 C6: scopedC6,
                 restModel: sakila_film_text as any
+            }))
+        };
+        const Sakila_Group_Permissions = {
+            ...sakila_group_permissions,
+            ...restOrm<any>(() => ({
+                ...GLOBAL_REST_PARAMETERS,
+                C6: scopedC6,
+                restModel: sakila_group_permissions as any
             }))
         };
         const Sakila_Inventory = {
@@ -2294,6 +2378,7 @@ export const SCOPED_C6_BY_DATABASE: Record<string, iC6Object<any>> = {
             Film_Actor: Sakila_Film_Actor,
             Film_Category: Sakila_Film_Category,
             Film_Text: Sakila_Film_Text,
+            Group_Permissions: Sakila_Group_Permissions,
             Inventory: Sakila_Inventory,
             Language: Sakila_Language,
             Payment: Sakila_Payment,

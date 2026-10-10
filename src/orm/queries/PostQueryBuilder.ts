@@ -2,6 +2,8 @@ import {C6C} from "../../constants/C6Constants";
 import {ConditionBuilder} from "../builders/ConditionBuilder";
 import {OrmGenerics} from "../../types/ormGenerics";
 
+import {normalizePrimaryKeyRequest} from '../../utils/primaryKeys';
+
 export class PostQueryBuilder<G extends OrmGenerics> extends ConditionBuilder<G>{
 
     private readonly REQUEST_METADATA_KEYS = new Set<string>([
@@ -33,6 +35,7 @@ export class PostQueryBuilder<G extends OrmGenerics> extends ConditionBuilder<G>
 
 
     build(table: string) {
+        this.request = normalizePrimaryKeyRequest('POST', this.request, this.config.C6.TABLES[table] ?? this.config.restModel);
         this.initAlias(table);
         const verb = C6C.REPLACE in this.request ? C6C.REPLACE : C6C.INSERT;
         const directRows = Array.isArray(this.request)
