@@ -46,12 +46,12 @@ export default function restRequest<
 
         const logContext = getLogContext(config, request);
 
-        if (!config.mysqlPool && !config.postgresPool && !config.axios) {
-            throw new Error("No execution method available: neither mysqlPool, postgresPool, nor axios instance provided in config.");
+        if (!config.mysqlPool && !config.mysqlWriterPool && !config.postgresPool && !config.axios) {
+            throw new Error("No execution method available: neither mysqlPool/mysqlWriterPool, postgresPool, nor axios instance provided in config.");
         }
 
         // SQL path if on Node with a provided pool
-        if (config.mysqlPool || config.postgresPool) {
+        if (config.mysqlPool || config.mysqlWriterPool || config.postgresPool) {
             logWithLevel(LogLevel.DEBUG, logContext, console.log, "Using SQL Executor");
             const {SqlExecutor} = await import('../executors/SqlExecutor');
             const sanitizedRequest = stripDatabaseKeyFromRequest(request);
