@@ -928,3 +928,14 @@ historical findings, intentional SQL grammar, SQL-allowlist mitigations, and fix
 - The CommonJS export uses a `.cjs` extension. Regenerate bindings to receive
   generator fixes. Existing installed applications do not change merely because
   this repository's fixes merge.
+
+### Explicit MySQL writer registration
+
+Register `mysqlWriterPool` alongside `mysqlPool` when reads use a replica:
+
+```ts
+GLOBAL_REST_PARAMETERS.mysqlPool = guardedReaderPool;
+GLOBAL_REST_PARAMETERS.mysqlWriterPool = writerPool;
+```
+
+GET uses `mysqlPool` (or the writer when no read pool is registered). POST, PUT, PATCH and DELETE acquire `mysqlWriterPool`, falling back to `mysqlPool` for existing single-pool applications. The complete mutation lifecycle, including transaction and session settings, stays on that writer connection. Register these trusted options globally or per database; never accept pools from request input. Replica health, replication fences and read-after-write policy belong to the registered pool provider.

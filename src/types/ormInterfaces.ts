@@ -247,7 +247,10 @@ export interface iDatabaseRuntimeOptions extends QuerySafetyConfig {
     /** Trusted view names allowed through generic REST, including JOINs and subselects. */
     restViewAllowlist?: readonly string[];
     sqlDialect?: SqlDialectName | SqlDialect;
+    /** Default/read pool. Existing single-pool configurations remain supported. */
     mysqlPool?: Pool;
+    /** Explicit writer for mutations; defaults to mysqlPool. Never supplied by REST input. */
+    mysqlWriterPool?: Pool;
     postgresPool?: iPostgresPool;
     axios?: AxiosInstance;
     restURL?: string;
@@ -283,7 +286,10 @@ export interface iRest<
     restViewAllowlist?: readonly string[];
     axios?: AxiosInstance;
     restURL?: string;
+    /** Default/read pool. Existing single-pool configurations remain supported. */
     mysqlPool?: Pool;
+    /** Explicit writer for mutations; defaults to mysqlPool. Never supplied by REST input. */
+    mysqlWriterPool?: Pool;
     withCredentials?: boolean;
     restModel: C6RestfulModel<RestShortTableName, RestTableInterface, PrimaryKey>;
     reactBootstrap?: CarbonReact<any, any>;

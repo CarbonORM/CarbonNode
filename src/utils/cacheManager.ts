@@ -78,7 +78,7 @@ export const userCustomClearCache: (() => void)[] = [];
 const backendIds = new WeakMap<object, number>();
 let nextBackendId = 0;
 export function scopedCacheRequest(config: any, request: unknown, transport: 'sql' | 'http'): unknown {
-    const backend = transport === 'sql' ? (config.mysqlPool ?? config.postgresPool) : config.axios;
+    const backend = transport === 'sql' ? (config.mysqlPool ?? config.mysqlWriterPool ?? config.postgresPool) : config.axios;
     if (backend && !backendIds.has(backend)) backendIds.set(backend, ++nextBackendId);
     return [transport, backend ? backendIds.get(backend) : null, config.restURL ?? '',
         config.cacheScope, config.sqlAllowListPath ?? '', config.cacheDatabaseKey ?? '',

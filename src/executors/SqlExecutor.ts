@@ -388,9 +388,12 @@ export class SqlExecutor<
             console.log,
             `[SQL EXECUTOR] 📡 Getting DB connection`,
         );
+        const mysqlPool = this.config.requestMethod === C6C.GET
+            ? (this.config.mysqlPool ?? this.config.mysqlWriterPool)
+            : (this.config.mysqlWriterPool ?? this.config.mysqlPool);
         const conn = this.isPostgresRuntime()
             ? await this.config.postgresPool!.connect()
-            : await this.config.mysqlPool!.getConnection();
+            : await mysqlPool!.getConnection();
         try {
             logWithLevel(
                 LogLevel.DEBUG,
