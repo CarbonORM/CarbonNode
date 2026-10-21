@@ -1,6 +1,8 @@
 name: Publish to npm on version bump (registry check)
 
 on:
+  pull_request:
+    branches: [ main ]
   push:
     branches: [ main ]
     paths: [ package.json ]
@@ -10,7 +12,162 @@ permissions:
   contents: read
 
 jobs:
+  check:
+    if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: none
+    services:
+      mysql:
+        # Pinned mysql:8.0 image digest; avoids executing a mutable third-party setup action.
+        image: mysql@sha256:7dcddc01f13bab2f15cde676d44d01f61fc9f99fe7785e86196dfc07d358ae2b
+        env:
+          MYSQL_ROOT_PASSWORD: password
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -ppassword --silent"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=12
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '25'
+          registry-url: 'https://registry.npmjs.org'
+          scope: '@carbonorm'
+          cache: 'npm'
+
+      - run: npm whoami || echo "OIDC mode (expected)"
+
+      - name: Install MySQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y default-mysql-client
+
+      - name: Setup MySQL client config
+        run: |
+          cat > ~/my.cnf <<'EOF'
+          [client]
+          user=root
+          password=password
+          host=127.0.0.1
+          port=3306
+          protocol=tcp
+          EOF
+          chmod 600 ~/my.cnf
+          mysql --defaults-file="$HOME/my.cnf" -e "SET GLOBAL local_infile = 1; SET GLOBAL max_connections = 50;"
+
+      - name: Load schema
+        if: hashFiles('src/__tests__/sakila-db/sakila-schema.sql') != ''
+        run: |
+          mysql --defaults-file="$HOME/my.cnf" -e "CREATE DATABASE IF NOT EXISTS sakila;"
+          mysql --defaults-file="$HOME/my.cnf" sakila < src/__tests__/sakila-db/sakila-schema.sql
+          mysql --defaults-file="$HOME/my.cnf" sakila < src/__tests__/sakila-db/sakila-data.sql
+
+      - name: Read package name & version
+        id: pkg
+        run: |
+          set -euo pipefail
+          NAME=$(jq -r .name package.json)
+          VER=$(jq -r .version package.json)
+          echo "name=$NAME" >> "$GITHUB_OUTPUT"
+          echo "version=$VER" >> "$GITHUB_OUTPUT"
+
+      # Public packages: npm view does not need auth.
+      # Private/scoped packages: npm view will use NODE_AUTH_TOKEN if provided.
+      - name: Check if version already published
+        id: exists
+        env:
+          NAME: ${{ steps.pkg.outputs.name }}
+          VER: ${{ steps.pkg.outputs.version }}
+        run: |
+          set -euo pipefail
+
+          if npm view "$NAME@$VER" version >/dev/null 2>&1; then
+            echo "published=true"  >> "$GITHUB_OUTPUT"
+            echo "Package $NAME@$VER already on npm. Skipping publish."
+          else
+            echo "published=false" >> "$GITHUB_OUTPUT"
+            echo "Package $NAME@$VER not found on npm. Will publish."
+          fi
+
+      - name: Install
+        run: npm ci
+
+      - name: Test (including original build lifecycle)
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          import fs from 'node:fs';
+          const scripts = JSON.parse(fs.readFileSync('package.json', 'utf8')).scripts;
+          assert.ok(typeof scripts.test === 'string' && scripts.test.trim().length > 0, 'Package test gate required');
+          assert.ok(typeof scripts.build === 'string' && scripts.build.trim().length > 0, 'Package build gate required');
+          assert.ok(scripts.pretest === 'npm run build && npm run c6', 'Original pretest lifecycle required');
+          NODE
+          npm --ignore-scripts=false test --if-present
+
+      - name: Retain the actual checked native package
+        run: |
+          set -euo pipefail
+          PACKAGE_DIR="$RUNNER_TEMP/carbonorm-native-package"
+          mkdir -m 700 "$PACKAGE_DIR"
+          npm pack --ignore-scripts --json --pack-destination "$PACKAGE_DIR" > "$PACKAGE_DIR/npm-pack.json"
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          import { createHash } from 'node:crypto';
+          import fs from 'node:fs';
+          import path from 'node:path';
+          const root = path.join(process.env.RUNNER_TEMP, 'carbonorm-native-package');
+          const records = JSON.parse(fs.readFileSync(path.join(root, 'npm-pack.json'), 'utf8'));
+          assert.equal(records.length, 1);
+          const record = records[0];
+          const manifest = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+          assert.equal(record.name, manifest.name);
+          assert.equal(record.version, manifest.version);
+          assert.match(process.env.GITHUB_SHA, /^[a-f0-9]{40}$/);
+          assert.match(record.filename, /^[a-zA-Z0-9][a-zA-Z0-9._-]*\.tgz$/);
+          const bytes = fs.readFileSync(path.join(root, record.filename));
+          const sha512 = createHash('sha512').update(bytes);
+          const proof = {
+            schemaVersion: 1,
+            authority: 'unverified-native-package-build-result',
+            sourceSha: process.env.GITHUB_SHA,
+            name: record.name,
+            version: record.version,
+            filename: record.filename,
+            bytes: bytes.length,
+            sha256: createHash('sha256').update(bytes).digest('hex'),
+            sha512: sha512.copy().digest('hex'),
+            integrity: 'sha512-' + sha512.digest('base64'),
+          };
+          assert.equal(record.size, proof.bytes);
+          assert.equal(record.integrity, proof.integrity);
+          fs.writeFileSync(path.join(root, 'native-package-proof.json'), JSON.stringify(proof, null, 2) + '\n', {flag: 'wx', mode: 0o600});
+          NODE
+
+      - name: Upload checked native package
+        uses: actions/upload-artifact@ff15f0306b3f739f7b6fd43fb5d26cd321bd4de5
+        with:
+          name: carbonorm-native-package-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/carbonorm-native-package/*.tgz
+            ${{ runner.temp }}/carbonorm-native-package/native-package-proof.json
+          if-no-files-found: error
+          retention-days: 3
+
   publish:
+    needs: check
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.CARBONORM_NPM_PUBLICATION_ENABLED == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -106,7 +263,7 @@ jobs:
         run: npm test --if-present
 
       - name: Publish
-        if: steps.exists.outputs.published == 'false'
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.CARBONORM_NPM_PUBLICATION_ENABLED == 'true' && steps.exists.outputs.published == 'false'
         run: npm publish --provenance --access public
 
       - name: Skip (already published)
