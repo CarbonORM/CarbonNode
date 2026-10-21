@@ -2,6 +2,8 @@ import { DeleteQueryBuilder } from "../orm/queries/DeleteQueryBuilder";
 import { PostQueryBuilder } from "../orm/queries/PostQueryBuilder";
 import { SelectQueryBuilder } from "../orm/queries/SelectQueryBuilder";
 import { UpdateQueryBuilder } from "../orm/queries/UpdateQueryBuilder";
+import {validateSqlBudget, validateResponseBudget} from '../utils/querySafety';
+import {withSqlWireBudget, withMySqlMutationDeadline} from '../utils/sqlTransportSafety';
 import { OrmGenerics } from "../types/ormGenerics";
 import { C6Constants as C6C } from "../constants/C6Constants";
 import {
@@ -18,7 +20,7 @@ import namedPlaceholders from 'named-placeholders';
 import type { PoolConnection } from 'mysql2/promise';
 import { Buffer } from 'buffer';
 import { Executor } from "./Executor";
-import {checkCache, evictCacheEntry, setCache} from "../utils/cacheManager";
+import {scopedCacheRequest, checkCache, evictCacheEntry, setCache} from "../utils/cacheManager";
 import logSql, {
     SqlAllowListStatus,
 } from "../utils/logSql";
@@ -113,6 +115,7 @@ const createSqlAllowListBlockedError = (args: {
 export class SqlExecutor<
     G extends OrmGenerics
 > extends Executor<G> {
+    private connectionRetired = false;
     private getPostRequestRows(): Record<string, any>[] {
         const request = this.request as any;
         if (!request) return [];
@@ -385,9 +388,12 @@ export class SqlExecutor<
             console.log,
             `[SQL EXECUTOR] 📡 Getting DB connection`,
         );
+        const mysqlPool = this.config.requestMethod === C6C.GET
+            ? (this.config.mysqlPool ?? this.config.mysqlWriterPool)
+            : (this.config.mysqlWriterPool ?? this.config.mysqlPool);
         const conn = this.isPostgresRuntime()
             ? await this.config.postgresPool!.connect()
-            : await this.config.mysqlPool!.getConnection();
+            : await mysqlPool!.getConnection();
         try {
             logWithLevel(
                 LogLevel.DEBUG,
@@ -403,7 +409,8 @@ export class SqlExecutor<
                 console.log,
                 `[SQL EXECUTOR] 🔌 Releasing DB connection`,
             );
-            conn.release();
+            if (this.connectionRetired && this.isPostgresRuntime()) (conn as iPostgresClient).release(true);
+            else conn.release();
         }
     }
 
@@ -739,9 +746,9 @@ export class SqlExecutor<
                 TABLE_NAME: this.config.restModel.TABLE_NAME as string,
                 TABLE_PREFIX: this.config.C6?.PREFIX ?? "",
                 METHOD: this.config.requestMethod,
-                REQUEST: normalizedRequest,
+                REQUEST: this.config.websocketIncludeRows === true ? normalizedRequest : {},
                 REQUEST_PRIMARY_KEY: this.extractPrimaryKeyValues(),
-                RESPONSE: responseRest,
+                RESPONSE: this.config.websocketIncludeRows === true ? responseRest : undefined,
                 RESPONSE_PRIMARY_KEY: responsePrimaryKey,
             },
         };
@@ -783,13 +790,16 @@ export class SqlExecutor<
         const tableName = this.config.restModel.TABLE_NAME;
         const logContext = getLogContext(this.config, this.request);
         const cacheResults = method === C6C.GET
-            && (this.request.cacheResults ?? true);
+            && typeof this.config.cacheScope === 'string' && this.config.cacheScope.length > 0
+            && this.request.cacheResults === true
+            && !Object.values(this.config.restModel.LIFECYCLE_HOOKS.GET ?? {}).some(group =>
+                group && Object.keys(group).length > 0);
         const cacheAllowListStatus: SqlAllowListStatus = this.config.sqlAllowListPath
             ? "allowed"
             : "not verified";
 
         const cacheRequestData = cacheResults
-            ? JSON.parse(JSON.stringify(this.request ?? {}))
+            ? scopedCacheRequest(this.config, JSON.parse(JSON.stringify(this.request ?? {})), 'sql')
             : undefined;
 
         const requestArgumentsSerialized = cacheResults
@@ -816,6 +826,8 @@ export class SqlExecutor<
                 cacheAllowListStatus,
             );
             if (cachedRequest) {
+                const currentSql = this.buildSqlExecutionContext(method, tableName, logContext);
+                await this.validateSqlAllowList(currentSql.sql);
                 const cachedData = (await cachedRequest).data;
                 if (evictFromCache
                     && cachedData
@@ -895,6 +907,7 @@ export class SqlExecutor<
     ): iRestSqlExecutionContext {
         const builder = this.getQueryBuilder(method);
         const queryResult = builder.build(tableName);
+        validateSqlBudget(queryResult.sql, queryResult.params, this.config);
 
         logWithLevel(
             LogLevel.DEBUG,
@@ -943,6 +956,7 @@ export class SqlExecutor<
             const rows = this.isPostgresRuntime()
                 ? ((result as iPostgresQueryResult).rows ?? [])
                 : result;
+            validateResponseBudget(rows, this.config);
             return {
                 rest: rows.map(this.serialize),
                 sql: { sql: sqlExecution.sql, values: sqlExecution.values },
@@ -1068,7 +1082,7 @@ export class SqlExecutor<
                     method: sqlMethod,
                     sql: sqlExecution.sql,
                     context: logContext,
-                    cacheStatus: this.request.cacheResults === false ? "ignored" : "miss",
+                    cacheStatus: this.request.cacheResults === true ? "miss" : "ignored",
                     allowListStatus: "denied",
                 });
                 throw error;
@@ -1078,7 +1092,7 @@ export class SqlExecutor<
                 method: sqlMethod,
                 sql: sqlExecution.sql,
                 context: logContext,
-                cacheStatus: this.request.cacheResults === false ? "ignored" : "miss",
+                cacheStatus: this.request.cacheResults === true ? "miss" : "ignored",
                 allowListStatus,
             });
 
@@ -1090,7 +1104,11 @@ export class SqlExecutor<
                     sqlExecution,
                 },
             );
-            const result = await this.runSqlStatement(conn, sqlExecution);
+            // Hooks may rewrite SQL; approve the statement that actually reaches the driver.
+            validateSqlBudget(sqlExecution.sql, sqlExecution.values, this.config);
+            await this.validateSqlAllowList(sqlExecution.sql);
+            const result = await withSqlWireBudget(conn, this.config,
+                () => this.runWithStatementTimeout(conn, sqlExecution), () => {this.connectionRetired = true;});
 
             const response = this.createResponseFromQueryResult(
                 method,
@@ -1152,6 +1170,34 @@ export class SqlExecutor<
             }
             throw err;
         }
+    }
+
+    private async runWithStatementTimeout(conn: SqlConnection, sql: iRestSqlExecutionContext): Promise<any> {
+        const timeout = this.config.statementTimeoutMs;
+        if (timeout === undefined) return this.runSqlStatement(conn, sql);
+        if (!Number.isSafeInteger(timeout) || timeout < 1 || timeout > 300000) throw new Error('Invalid trusted statement timeout.');
+        if (this.isPostgresRuntime()) {
+            const pg = conn as iPostgresClient;
+            if (this.config.requestMethod !== C6C.GET) {
+                // Transaction-local settings restore automatically on commit or rollback,
+                // including a timeout that leaves the transaction aborted.
+                await pg.query("SELECT set_config('statement_timeout', $1, true)", [String(timeout)]);
+                return this.runSqlStatement(conn, sql);
+            }
+            const prior = await pg.query('SHOW statement_timeout');
+            await pg.query("SELECT set_config('statement_timeout', $1, false)", [String(timeout)]);
+            try {return await this.runSqlStatement(conn, sql);}
+            finally {await pg.query("SELECT set_config('statement_timeout', $1, false)", [prior.rows?.[0]?.statement_timeout ?? '0']);}
+        }
+        if (this.config.requestMethod !== C6C.GET) {
+            return withMySqlMutationDeadline(conn, timeout, this.config,
+                () => this.runSqlStatement(conn, sql), () => {this.connectionRetired = true;});
+        }
+        const mysql = conn as PoolConnection;
+        const [prior] = await mysql.query<any[]>('SELECT @@SESSION.max_execution_time AS timeout');
+        await mysql.query('SET SESSION max_execution_time = ?', [timeout]);
+        try {return await this.runSqlStatement(conn, sql);}
+        finally {await mysql.query('SET SESSION max_execution_time = ?', [prior[0]?.timeout ?? 0]);}
     }
 
     private async validateSqlAllowList(sql: string): Promise<SqlAllowListStatus> {

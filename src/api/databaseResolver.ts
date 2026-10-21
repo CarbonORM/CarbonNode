@@ -11,6 +11,7 @@ type iDatabaseSelectableConfig = {
     databases?: Record<string, iDatabaseRuntimeConfig>;
     defaultDatabase?: string;
     mysqlPool?: Pool;
+    mysqlWriterPool?: Pool;
     postgresPool?: any;
     axios?: any;
     restURL?: string;
@@ -69,7 +70,7 @@ const resolveTableModelForC6 = (
 
     for (const candidate of candidates) {
         if (!candidate) continue;
-        if (candidate in c6.TABLES) {
+        if (hasOwn(c6.TABLES, candidate)) {
             return c6.TABLES[candidate] as C6RestfulModel<string, any, any>;
         }
     }
@@ -87,6 +88,7 @@ const mergeDatabaseEntry = <
         return {
             ...baseConfig,
             mysqlPool: entry,
+            mysqlWriterPool: undefined,
             postgresPool: undefined,
             axios: undefined,
         };
@@ -96,6 +98,7 @@ const mergeDatabaseEntry = <
         return {
             ...baseConfig,
             mysqlPool: undefined,
+            mysqlWriterPool: undefined,
             postgresPool: entry,
             sqlDialect: "postgresql",
             axios: undefined,
@@ -111,10 +114,13 @@ const mergeDatabaseEntry = <
         ...(entry as Record<string, unknown>),
     } as T;
 
-    const hasMysqlField = hasOwn(entry, "mysqlPool");
+    const hasMysqlField = hasOwn(entry, "mysqlPool") || hasOwn(entry, "mysqlWriterPool");
     const hasPostgresField = hasOwn(entry, "postgresPool");
     const hasAxiosField = hasOwn(entry, "axios");
-    const mysqlPool = (entry as Record<string, unknown>).mysqlPool;
+    const mysqlPool = (entry as Record<string, unknown>).mysqlPool ?? (entry as Record<string, unknown>).mysqlWriterPool;
+    // A selected database must not inherit a writer belonging to another database.
+    if (hasMysqlField && !hasOwn(entry, "mysqlWriterPool")) merged.mysqlWriterPool = undefined;
+    if (hasMysqlField && !hasOwn(entry, "mysqlPool")) merged.mysqlPool = undefined;
     const postgresPool = (entry as Record<string, unknown>).postgresPool;
     const axios = (entry as Record<string, unknown>).axios;
 
@@ -124,9 +130,11 @@ const mergeDatabaseEntry = <
     } else if (hasPostgresField && !hasMysqlField && !hasAxiosField && postgresPool) {
         merged.axios = undefined;
         merged.mysqlPool = undefined;
+        merged.mysqlWriterPool = undefined;
         (merged as any).sqlDialect = (merged as any).sqlDialect ?? "postgresql";
     } else if (hasAxiosField && !hasMysqlField && !hasPostgresField && axios) {
         merged.mysqlPool = undefined;
+        merged.mysqlWriterPool = undefined;
         merged.postgresPool = undefined;
     }
 
@@ -192,7 +200,7 @@ export const resolveDatabaseSelection = <
         );
     }
 
-    const entry = configuredDatabases[databaseKey];
+    const entry = hasOwn(configuredDatabases, databaseKey) ? configuredDatabases[databaseKey] : undefined;
     if (!entry) {
         throw new Error(
             `Unknown database key '${databaseKey}'. Known keys: ${Object.keys(configuredDatabases).join(", ") || "(none)"}.`,
@@ -200,7 +208,7 @@ export const resolveDatabaseSelection = <
     }
 
     return {
-        config: mergeDatabaseEntry(baseConfig, entry),
+        config: {...mergeDatabaseEntry(baseConfig, entry), cacheDatabaseKey: databaseKey},
         databaseKey,
     };
 };

@@ -10,17 +10,21 @@ export abstract class ConditionBuilder<
     G extends OrmGenerics
 > extends AggregateBuilder<G> {
 
-    protected aliasMap: Record<string, string> = {};
+    protected aliasMap: Record<string, string> = Object.create(null);
     protected derivedAliases: Set<string> = new Set<string>();
 
     protected initAlias(baseTable: string, joins?: any): void {
-        this.aliasMap = { [baseTable]: baseTable };
+        this.aliasMap = Object.create(null);
         this.derivedAliases = new Set<string>();
+        this.registerAlias(baseTable, baseTable);
 
         if (!joins) return;
 
-        for (const joinType in joins) {
-            for (const raw in joins[joinType]) {
+        const sections = joins instanceof Map ? Array.from(joins.values()) : Object.values(joins);
+        for (const section of sections) {
+            const keys = section instanceof Map ? Array.from(section.keys()) : Object.keys(section ?? {});
+            for (const rawKey of keys) {
+                const raw = String(rawKey);
                 const [table, alias] = raw.trim().split(/\s+/, 2);
                 if (!table) continue;
                 this.registerAlias(alias || table, table);
@@ -29,24 +33,49 @@ export abstract class ConditionBuilder<
     }
 
     protected registerAlias(alias: string, table: string): void {
+        if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(alias)) {
+            throw new Error(`Invalid JOIN alias '${alias}'.`);
+        }
+        if (!isDerivedTableKey(table) && !Object.prototype.hasOwnProperty.call(this.config.C6?.TABLES ?? {}, table)) {
+            throw new Error(`Unknown JOIN table '${table}'.`);
+        }
         this.aliasMap[alias] = table;
         if (isDerivedTableKey(table)) {
             this.derivedAliases.add(alias);
         }
     }
 
+    protected normalizeWritableColumn(table: string, column: string, context: string): string {
+        const parts = typeof column === 'string' ? column.split('.') : [];
+        if (parts.length < 1 || parts.length > 2 || (parts.length === 2 && parts[0] !== table)) {
+            throw new Error(`Invalid column in ${context}: '${column}'.`);
+        }
+        const name = parts[parts.length - 1];
+        if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) {
+            throw new Error(`Invalid column in ${context}: '${column}'.`);
+        }
+        const columns = this.config.C6?.TABLES?.[table]?.COLUMNS ?? {};
+        if (!Object.prototype.hasOwnProperty.call(columns, `${table}.${name}`) && !Object.values(columns).includes(name)) {
+            throw new Error(`Unknown column in ${context}: '${column}'.`);
+        }
+        return name;
+    }
+
     protected assertValidIdentifier(identifier: string, context: string): void {
         if (typeof identifier !== 'string') return;
         if (!identifier.includes('.')) return;
 
-        const [alias] = identifier.split('.', 2);
-        if (!(alias in this.aliasMap)) {
+        if (!/^[A-Za-z_][A-Za-z0-9_]*\.(?:[A-Za-z_][A-Za-z0-9_]*|\*)$/.test(identifier)) {
+            throw new Error(`Invalid SQL reference in ${context}: '${identifier}'.`);
+        }
+        const [alias] = identifier.split('.');
+        if (!Object.prototype.hasOwnProperty.call(this.aliasMap, alias)) {
             throw new Error(`Unknown table or alias '${alias}' referenced in ${context}: '${identifier}'.`);
         }
     }
 
     protected isColumnRef(ref: string): boolean {
-        if (typeof ref !== 'string' || !ref.includes('.')) return false;
+        if (typeof ref !== 'string' || !/^[A-Za-z_][A-Za-z0-9_]*\.[A-Za-z_][A-Za-z0-9_]*$/.test(ref)) return false;
 
         const [prefix, column] = ref.split('.', 2);
         const tableName = this.aliasMap[prefix] || prefix;
@@ -59,7 +88,7 @@ export abstract class ConditionBuilder<
         if (!table) return false;
 
         const fullKey = `${tableName}.${column}`;
-        if (table.COLUMNS && (fullKey in table.COLUMNS)) return true;
+        if (table.COLUMNS && (Object.prototype.hasOwnProperty.call(table.COLUMNS, fullKey))) return true;
         if (table.COLUMNS && Object.values(table.COLUMNS).includes(column)) return true;
 
         return false;
@@ -73,6 +102,7 @@ export abstract class ConditionBuilder<
 
         if (trimmed.includes('.')) {
             if (/^[A-Za-z_][A-Za-z0-9_]*\.\*$/.test(trimmed)) {
+                this.assertValidIdentifier(trimmed, 'SQL reference');
                 return true;
             }
             if (this.isTableReference(trimmed) || this.isColumnRef(trimmed)) {
@@ -80,7 +110,6 @@ export abstract class ConditionBuilder<
             }
             if (/^[A-Za-z_][A-Za-z0-9_]*\.[A-Za-z_][A-Za-z0-9_]*$/.test(trimmed)) {
                 this.assertValidIdentifier(trimmed, 'SQL reference');
-                return true;
             }
             return false;
         }
@@ -154,6 +183,7 @@ export abstract class ConditionBuilder<
             }
             return false;
         }
+        if (!/^[A-Za-z_][A-Za-z0-9_]*\.[A-Za-z_][A-Za-z0-9_]*$/.test(val)) return false;
         const [prefix, column] = val.split('.');
         const tableName = this.aliasMap[prefix] ?? prefix;
         if (isDerivedTableKey(tableName) || this.derivedAliases.has(prefix)) {
@@ -165,7 +195,7 @@ export abstract class ConditionBuilder<
         const fullKey = `${tableName}.${column}`;
 
         return (
-            fullKey in table.COLUMNS ||
+            Object.prototype.hasOwnProperty.call(table.COLUMNS, fullKey) ||
             Object.values(table.COLUMNS).includes(column)
         );
     }
@@ -311,7 +341,7 @@ export abstract class ConditionBuilder<
         throw new Error('Unsupported operand type in SQL expression.');
     }
 
-    private isExpressionTuple(value: any): boolean {
+    protected isExpressionTuple(value: any): boolean {
         if (!Array.isArray(value) || value.length === 0 || typeof value[0] !== 'string') {
             return false;
         }
@@ -773,6 +803,9 @@ export abstract class ConditionBuilder<
 
         if (typeof value === 'object' && value !== null) {
             const entries = Object.entries(value);
+            if (!entries.length || entries.some(([op]) => !this.isOperator(op))) {
+                throw new Error('Column condition objects must contain comparison operators.');
+            }
             if (entries.length === 1) {
                 const [op, operand] = entries[0];
                 if (this.isOperator(op)) {
@@ -909,7 +942,7 @@ export abstract class ConditionBuilder<
 
     buildWhereClause(whereArg: any, params: any[] | Record<string, any>): string {
         const clause = this.buildBooleanJoinedConditions(whereArg, true, params);
-        if (!clause) return '';
+        if (!clause) throw new Error('WHERE must contain a predicate.');
 
         let trimmed = clause.trim();
         const upper = trimmed.toUpperCase();

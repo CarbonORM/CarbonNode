@@ -9,18 +9,13 @@ export class UpdateQueryBuilder<G extends OrmGenerics> extends PaginationBuilder
         return new SelectQueryBuilder(this.config as any, request, this.useNamedParams);
     }
 
-    private trimTablePrefix(table: string, column: string): string {
-        if (!column.includes('.')) return column;
-        const [prefix, col] = column.split('.', 2);
-        if (prefix !== table) {
-            throw new Error(`Invalid prefixed column: '${column}'. Expected prefix '${table}.'`);
-        }
-        return col;
-    }
 
     build(
         table: string,
     ): SqlBuilderResult {
+        if (!this.request.WHERE && this.config.allowUnfilteredWrites !== true) {
+            throw new Error('UPDATE/DELETE requires WHERE; use trusted allowUnfilteredWrites for intentional bulk writes.');
+        }
         this.aliasMap = {};
         const args = this.request;
         const params = this.useNamedParams ? {} : [];
@@ -37,7 +32,7 @@ export class UpdateQueryBuilder<G extends OrmGenerics> extends PaginationBuilder
 
         const setClauses = Object.entries(this.request[C6C.UPDATE])
             .map(([col, val]) => {
-                const trimmed = this.trimTablePrefix(table, col);
+                const trimmed = this.normalizeWritableColumn(table, col, 'UPDATE SET');
                 const qualified = `${table}.${trimmed}`;
                 this.assertValidIdentifier(qualified, 'UPDATE SET');
                 const rightSql = this.serializeUpdateValue(val, params, qualified);

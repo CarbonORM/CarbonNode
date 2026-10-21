@@ -52,9 +52,8 @@ export class DeleteQueryBuilder<G extends OrmGenerics> extends JoinBuilder<G> {
 
         if (this.request.WHERE) {
             const whereClause = this.buildBooleanJoinedConditions(this.request.WHERE, true, params);
-            if (whereClause) {
-                conditionParts.push(whereClause);
-            }
+            if (!whereClause) throw new Error('WHERE must contain a predicate.');
+            conditionParts.push(whereClause);
         }
 
         if (conditionParts.length > 0) {
@@ -67,6 +66,9 @@ export class DeleteQueryBuilder<G extends OrmGenerics> extends JoinBuilder<G> {
     build(
         table: string
     ): SqlBuilderResult {
+        if (!this.request.WHERE && this.config.allowUnfilteredWrites !== true) {
+            throw new Error('UPDATE/DELETE requires WHERE; use trusted allowUnfilteredWrites for intentional bulk writes.');
+        }
         this.aliasMap = {};
         const params = this.useNamedParams ? {} : [];
         this.initAlias(table, this.request.JOIN);

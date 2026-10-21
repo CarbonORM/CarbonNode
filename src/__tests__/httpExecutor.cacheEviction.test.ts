@@ -16,17 +16,30 @@ describe("HttpExecutor cache eviction", () => {
   const buildOrm = (get: ReturnType<typeof vi.fn>) => {
     const baseConfig = buildTestConfig() as any;
 
+    const axios = {get};
     return restOrm<any>(() => ({
       ...baseConfig,
       requestMethod: C6C.GET,
       restURL: "http://127.0.0.1:9999/rest/",
-      axios: { get },
+      axios,
+      cacheScope: 'test-user',
       verbose: false,
     }));
   };
 
   beforeEach(() => {
     clearCache({ ignoreWarning: true });
+  });
+
+  it("does not cache GET responses by default", async () => {
+    const get = vi.fn().mockResolvedValue({ data: makeResponsePayload() });
+    const actorHttp = buildOrm(get);
+
+    await actorHttp.Get({ actor_id: 1 } as any);
+    await actorHttp.Get({ actor_id: 1 } as any);
+
+    expect(get).toHaveBeenCalledTimes(2);
+    expect(apiRequestCache.size).toBe(0);
   });
 
   it("adds evictFromCache for cached GET responses", async () => {

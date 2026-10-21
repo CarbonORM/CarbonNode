@@ -6,6 +6,7 @@ import {
 } from "../types/ormInterfaces";
 import {applyLogLevelDefaults, getLogContext, LogLevel, logWithLevel} from "../utils/logLevel";
 import {resolveRestConfigForRequest, stripDatabaseKeyFromRequest} from "./databaseResolver";
+import {validateQueryRequest} from '../utils/querySafety';
 
 /**
  * Facade: routes API calls to SQL or HTTP executors based on runtime context.
@@ -32,8 +33,9 @@ export default function restRequest<
         >,
     ): Promise<DetermineResponseDataType<G['RequestMethod'], G['RestTableInterface']>> => {
 
-        const baseConfig = typeof configX === "function" ? configX() : configX;
+        const baseConfig = {...(typeof configX === "function" ? configX() : configX)};
         const { config } = resolveRestConfigForRequest(baseConfig as any, request as any);
+        validateQueryRequest(request, config);
 
         if ((config.restModel as any)?.READ_ONLY === true && config.requestMethod !== "GET") {
             const relationName = (config.restModel as any)?.TABLE_NAME ?? "relation";
@@ -44,12 +46,12 @@ export default function restRequest<
 
         const logContext = getLogContext(config, request);
 
-        if (!config.mysqlPool && !config.postgresPool && !config.axios) {
-            throw new Error("No execution method available: neither mysqlPool, postgresPool, nor axios instance provided in config.");
+        if (!config.mysqlPool && !config.mysqlWriterPool && !config.postgresPool && !config.axios) {
+            throw new Error("No execution method available: neither mysqlPool/mysqlWriterPool, postgresPool, nor axios instance provided in config.");
         }
 
         // SQL path if on Node with a provided pool
-        if (config.mysqlPool || config.postgresPool) {
+        if (config.mysqlPool || config.mysqlWriterPool || config.postgresPool) {
             logWithLevel(LogLevel.DEBUG, logContext, console.log, "Using SQL Executor");
             const {SqlExecutor} = await import('../executors/SqlExecutor');
             const sanitizedRequest = stripDatabaseKeyFromRequest(request);

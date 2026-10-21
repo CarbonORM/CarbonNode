@@ -35,7 +35,7 @@ import type { iSales_By_Film_Category } from "./views/Sales_By_Film_Category";
 import type { iSales_By_Store } from "./views/Sales_By_Store";
 import type { iStaff_List } from "./views/Staff_List";
 
-export const RestTablePrefix = '';
+export const RestTablePrefix = "";
 
 export type RestTableNames = 'actor'
  | 'address'
@@ -141,12 +141,12 @@ export const C6Core: iC6Object<RestTableInterfaces> = {
             throw Error('Table (' + table + ') does not exist in the TABLES object. Possible values include (' + Object.keys(TABLES).join(', ') + ')');
         };
 
-        if (!TABLES[tableName as RestShortTableNames]) {
+        if (!Object.prototype.hasOwnProperty.call(TABLES, tableName)) {
             if (!tableName.startsWith(RestTablePrefix.toLowerCase())) {
                 error(tableName);
             }
             tableName = removePrefixIfExists(tableName, RestTablePrefix);
-            if (!TABLES[tableName as RestShortTableNames]) {
+            if (!Object.prototype.hasOwnProperty.call(TABLES, tableName)) {
                 error(tableName);
             }
         }

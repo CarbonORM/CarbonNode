@@ -11,6 +11,7 @@ src/api/rest/
 C6MySqlDump.json
 MySqlDump.sql
 mysql.cnf
+*.mysql.cnf
 C6.tsx
 src/*.js
 src/__tests__/sakila-db/sqlResponses

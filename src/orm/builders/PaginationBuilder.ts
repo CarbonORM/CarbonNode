@@ -2,6 +2,7 @@ import {C6Constants} from "../../constants/C6Constants";
 import {OrmGenerics} from "../../types/ormGenerics";
 import {JoinBuilder} from "./JoinBuilder";
 import {getLogContext, LogLevel, logWithLevel} from "../../utils/logLevel";
+import {safePagination} from '../../utils/querySafety';
 
 export abstract class PaginationBuilder<G extends OrmGenerics> extends JoinBuilder<G> {
 
@@ -50,13 +51,8 @@ export abstract class PaginationBuilder<G extends OrmGenerics> extends JoinBuild
         }
 
         /* -------- LIMIT / OFFSET -------- */
-        if (pagination?.[C6Constants.LIMIT] != null) {
-            const lim = parseInt(pagination[C6Constants.LIMIT], 10);
-            const pageRaw = pagination[C6Constants.PAGE];
-            const pageParsed = parseInt(pageRaw ?? 1, 10);
-            const page = isFinite(pageParsed) && pageParsed > 1 ? pageParsed : 1;
-            sql += this.sqlDialect.pagination(lim, page);
-        }
+        const {LIMIT: lim, PAGE: page} = safePagination(pagination, this.config);
+        sql += this.sqlDialect.pagination(lim, page);
 
         logWithLevel(
             LogLevel.DEBUG,

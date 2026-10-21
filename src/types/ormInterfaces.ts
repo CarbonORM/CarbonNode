@@ -7,6 +7,7 @@ import type {CarbonReact, iStateAdapter} from "@carbonorm/carbonreact";
 import type {OrmGenerics} from "./ormGenerics";
 import {restOrm} from "../api/restOrm";
 import type {SqlDialect, SqlDialectName} from "../orm/dialects/SqlDialect";
+import type {QuerySafetyConfig} from '../utils/querySafety';
 
 
 type RestOrmFactory = typeof restOrm<OrmGenerics<any>>;
@@ -76,7 +77,7 @@ export type RequestGetPutDeleteBody<T extends { [key: string]: any } = any> = T 
     WHERE?: WhereClause<T>;
     JOIN?: Join<T>;
     ORDER?: OrderTerm[];
-    GROUP_BY?: string | string[];
+    GROUP_BY?: SQLExpression | SQLExpression[];
     HAVING?: WhereClause<T>;
     INDEX_HINTS?: IndexHints;
     PAGINATION?: Pagination;
@@ -230,16 +231,26 @@ export interface iPostgresQueryResult<Row = any> {
 
 export interface iPostgresClient {
     query: (sql: string, values?: any[]) => Promise<iPostgresQueryResult> | iPostgresQueryResult;
-    release: () => void;
+    release: (destroy?: boolean) => void;
 }
 
 export interface iPostgresPool {
     connect: () => Promise<iPostgresClient> | iPostgresClient;
 }
 
-export interface iDatabaseRuntimeOptions {
+export interface iDatabaseRuntimeOptions extends QuerySafetyConfig {
+    /** Trusted SQL execution deadline in milliseconds. */
+    statementTimeoutMs?: number;
+    /** Trusted pagination cap and maximum offset. Defaults: 1000 rows, 100000 offset. */
+    maxPageSize?: number;
+    maxPageOffset?: number;
+    /** Trusted view names allowed through generic REST, including JOINs and subselects. */
+    restViewAllowlist?: readonly string[];
     sqlDialect?: SqlDialectName | SqlDialect;
+    /** Default/read pool. Existing single-pool configurations remain supported. */
     mysqlPool?: Pool;
+    /** Explicit writer for mutations; defaults to mysqlPool. Never supplied by REST input. */
+    mysqlWriterPool?: Pool;
     postgresPool?: iPostgresPool;
     axios?: AxiosInstance;
     restURL?: string;
@@ -248,6 +259,12 @@ export interface iDatabaseRuntimeOptions {
     reactBootstrap?: CarbonReact<any, any>;
     stateAdapter?: iStateAdapter<any>;
     websocketBroadcast?: tWebsocketBroadcast;
+    /** Opt in only when the broadcast callback authorizes every recipient. */
+    websocketIncludeRows?: boolean;
+    /** Trusted identity/tenant scope. Rotate on permission changes; never copy from REST input. */
+    cacheScope?: string;
+    /** Trusted opt-in for intentional UPDATE/DELETE statements without WHERE. */
+    allowUnfilteredWrites?: boolean;
     logLevel?: number;
     verbose?: boolean;
     sqlAllowListPath?: string;
@@ -260,11 +277,19 @@ export interface iRest<
     RestShortTableName extends string = any,
     RestTableInterface extends Record<string, any> = any,
     PrimaryKey extends keyof RestTableInterface & string = keyof RestTableInterface & string
-> {
+> extends QuerySafetyConfig {
     C6: iC6Object;
+    statementTimeoutMs?: number;
+    maxPageSize?: number;
+    maxPageOffset?: number;
+    /** Trusted view names allowed through generic REST, including JOINs and subselects. */
+    restViewAllowlist?: readonly string[];
     axios?: AxiosInstance;
     restURL?: string;
+    /** Default/read pool. Existing single-pool configurations remain supported. */
     mysqlPool?: Pool;
+    /** Explicit writer for mutations; defaults to mysqlPool. Never supplied by REST input. */
+    mysqlWriterPool?: Pool;
     withCredentials?: boolean;
     restModel: C6RestfulModel<RestShortTableName, RestTableInterface, PrimaryKey>;
     reactBootstrap?: CarbonReact<any, any>;
@@ -274,6 +299,12 @@ export interface iRest<
     clearCache?: () => void;
     skipPrimaryCheck?: boolean;
     websocketBroadcast?: tWebsocketBroadcast;
+    /** Opt in only when the broadcast callback authorizes every recipient. */
+    websocketIncludeRows?: boolean;
+    /** Trusted identity/tenant scope. Rotate on permission changes; never copy from REST input. */
+    cacheScope?: string;
+    /** Trusted opt-in for intentional UPDATE/DELETE statements without WHERE. */
+    allowUnfilteredWrites?: boolean;
     logLevel?: number;
     verbose?: boolean;
     sqlAllowListPath?: string;
@@ -393,3 +424,7 @@ export interface tC6RestApi {
         DELETE: Function;
     };
 }
+
+/** @deprecated Use C6RestfulModel. */
+export type iC6RestfulModel<T extends string, R extends Record<string, any> = any,
+    P extends keyof R & string = keyof R & string> = C6RestfulModel<T, R, P>;

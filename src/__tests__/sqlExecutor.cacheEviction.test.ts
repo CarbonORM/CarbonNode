@@ -23,11 +23,11 @@ describe("SqlExecutor cache eviction", () => {
 
     const baseConfig = buildTestConfig() as any;
 
+    const mysqlPool = {getConnection: vi.fn(async () => conn)};
     const actorSql = restOrm<any>(() => ({
       ...baseConfig,
-      mysqlPool: {
-        getConnection: vi.fn(async () => conn),
-      },
+      mysqlPool,
+      cacheScope: 'test-user',
       verbose: false,
     }));
 
@@ -39,6 +39,16 @@ describe("SqlExecutor cache eviction", () => {
 
   beforeEach(() => {
     clearCache({ ignoreWarning: true });
+  });
+
+  it("requires explicit cache opt-in even with a trusted identity scope", async () => {
+    const { actorSql, conn } = buildOrm();
+    const first = await actorSql.Get({ actor_id: 1 } as any);
+    const second = await actorSql.Get({ actor_id: 1 } as any);
+    expect(conn.query).toHaveBeenCalledTimes(2);
+    expect(first.evictFromCache).toBeUndefined();
+    expect(second.evictFromCache).toBeUndefined();
+    expect(apiRequestCache.size).toBe(0);
   });
 
   it("adds evictFromCache for cached GET responses", async () => {

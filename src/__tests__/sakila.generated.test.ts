@@ -35,6 +35,10 @@ describe('sakila-db generated C6 bindings', () => {
     GLOBAL_REST_PARAMETERS.mysqlPool = mockPool;
   });
 
+  it.each(['constructor', '__proto__', 'toString'])('rejects inherited IMPORT table keys: %s', async key => {
+    await expect(C6.IMPORT(key)).rejects.toThrow(/does not exist/);
+  });
+
   it('Get(...LIMIT...) returns array rest for every generated table', async () => {
     // Iterate over each table short name present in generated C6
     for (const [shortName] of Object.entries(C6.TABLES as Record<string, any>)) {
@@ -160,7 +164,8 @@ describe('sakila-db generated C6 bindings', () => {
     const postPayload = broadcast.mock.calls[0][0];
     expect(postPayload.REST.TABLE_NAME).toBe("actor");
     expect(postPayload.REST.METHOD).toBe("POST");
-    expect(postPayload.REST.REQUEST.first_name).toBe("Web");
+    expect(postPayload.REST.REQUEST).toEqual({});
+    expect(postPayload.REST.RESPONSE).toBeUndefined();
     expect(postPayload.REST.REQUEST_PRIMARY_KEY).toEqual({ actor_id: actorId });
 
     broadcast.mockClear();
@@ -168,7 +173,7 @@ describe('sakila-db generated C6 bindings', () => {
     expect(broadcast).toHaveBeenCalledTimes(1);
     const putPayload = broadcast.mock.calls[0][0];
     expect(putPayload.REST.METHOD).toBe("PUT");
-    expect(putPayload.REST.REQUEST.last_name).toBe("Update");
+    expect(putPayload.REST.REQUEST).toEqual({});
     expect(putPayload.REST.REQUEST_PRIMARY_KEY).toEqual({ actor_id: actorId });
 
     broadcast.mockClear();

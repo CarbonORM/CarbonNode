@@ -62,7 +62,7 @@ function chmodExecutables(hooksDir) {
 
     logInfo('Starting git hooks setup...');
 
-    if (!isGitRepo()) {
+    if (!fs.existsSync(path.join(repoRoot, '.git')) || !isGitRepo()) {
       logWarn('Not a git repository (or no .git directory found). Skipping git hooks setup.');
       return;
     }

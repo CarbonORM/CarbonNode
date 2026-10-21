@@ -16,7 +16,7 @@ import {
 } from "../core";
 
 /**
-{{{TABLE_DEFINITION}}}
+{{{tsComment TABLE_DEFINITION}}}
 {{#each TRIGGERS}}
 
 {{{CREATE_STATEMENT}}}
@@ -25,13 +25,13 @@ import {
 
 export interface i{{TABLE_NAME_SHORT_PASCAL_CASE}} {
 {{#each TYPE_VALIDATION}}
-    '{{this.COLUMN_NAME}}'?: {{{this.TYPESCRIPT_TYPE}}}{{^NOT_NULL}} | null{{/NOT_NULL}};
+    {{{tsString this.COLUMN_NAME}}}?: {{{this.TYPESCRIPT_TYPE}}}{{^NOT_NULL}} | null{{/NOT_NULL}};
 {{/each}}
 }
 
 export type {{TABLE_NAME_SHORT_PASCAL_CASE}}PrimaryKeys = {{#if PRIMARY_SHORT.length}}
     {{#each PRIMARY_SHORT}}
-        '{{this}}'{{#unless @last}} |{{/unless}}
+        {{{tsString this}}}{{#unless @last}} |{{/unless}}
     {{/each}};
 {{else}}
     never;
@@ -39,39 +39,39 @@ export type {{TABLE_NAME_SHORT_PASCAL_CASE}}PrimaryKeys = {{#if PRIMARY_SHORT.le
 
 const {{TABLE_NAME_SHORT}}:
     C6RestfulModel<
-        '{{TABLE_NAME_SHORT}}',
+        {{{tsString TABLE_NAME_SHORT}}},
         i{{TABLE_NAME_SHORT_PASCAL_CASE}},
         {{TABLE_NAME_SHORT_PASCAL_CASE}}PrimaryKeys
     > & Record<string, any> & {
         RELATION_TYPE: 'TABLE';
         READ_ONLY: false;
     } = {
-    TABLE_NAME: '{{TABLE_NAME}}',
+    TABLE_NAME: {{{tsString TABLE_NAME}}},
     RELATION_TYPE: 'TABLE',
     READ_ONLY: false,
     {{#each COLUMNS_UPPERCASE}}
-    {{@key}}: '{{this}}',
+    {{{tsKey @key}}}: {{{tsString this}}},
     {{/each}}
     PRIMARY: [
     {{#PRIMARY}}
-        '{{this}}',
+        {{{tsString this}}},
     {{/PRIMARY}}
     ],
     PRIMARY_SHORT: [
     {{#each PRIMARY_SHORT}}
-        '{{this}}',
+        {{{tsString this}}},
     {{/each}}
     ],
     COLUMNS: {
     {{#each COLUMNS}}
-        '{{@key}}': '{{this}}',
+        {{{tsString @key}}}: {{{tsString this}}},
     {{/each}}
     },
     TYPE_VALIDATION: {
     {{#each TYPE_VALIDATION}}
-        '{{@key}}': {
-            MYSQL_TYPE: '{{this.MYSQL_TYPE}}',
-            MAX_LENGTH: '{{this.MAX_LENGTH}}',
+        {{{tsString @key}}}: {
+            MYSQL_TYPE: {{{tsString this.MYSQL_TYPE}}},
+            MAX_LENGTH: {{{tsString this.MAX_LENGTH}}},
             AUTO_INCREMENT: {{this.AUTO_INCREMENT}},
             SKIP_COLUMN_IN_POST: {{this.SKIP_COLUMN_IN_POST}}
         },
@@ -79,7 +79,7 @@ const {{TABLE_NAME_SHORT}}:
     },
     REGEX_VALIDATION: {
     {{#each REGEX_VALIDATION}}
-        '{{@key}}': '{{this}}',
+        {{{tsString @key}}}: {{{tsString this}}},
     {{/each}}
     },
     TRIGGERS: [
@@ -102,17 +102,17 @@ const {{TABLE_NAME_SHORT}}:
         DELETE: {beforeProcessing:{}, beforeExecution:{}, afterExecution:{}, afterCommit:{}},
     },
     TABLE_REFERENCES: {
-        {{#each TABLE_REFERENCES}}'{{@key}}': [{{#this}}{
-            TABLE: '{{TABLE}}',
-            COLUMN: '{{COLUMN}}',
-            CONSTRAINT: '{{CONSTRAINT}}',
+        {{#each TABLE_REFERENCES}}{{{tsString @key}}}: [{{#this}}{
+            TABLE: {{{tsString TABLE}}},
+            COLUMN: {{{tsString COLUMN}}},
+            CONSTRAINT: {{{tsString CONSTRAINT}}},
         },{{/this}}],{{/each}}
     },
     TABLE_REFERENCED_BY: {
-        {{#each TABLE_REFERENCED_BY}}'{{@key}}': [{{#this}}{
-            TABLE: '{{TABLE}}',
-            COLUMN: '{{COLUMN}}',
-            CONSTRAINT: '{{CONSTRAINT}}',
+        {{#each TABLE_REFERENCED_BY}}{{{tsString @key}}}: [{{#this}}{
+            TABLE: {{{tsString TABLE}}},
+            COLUMN: {{{tsString COLUMN}}},
+            CONSTRAINT: {{{tsString CONSTRAINT}}},
         },{{/this}}],{{/each}}
     }
 }
@@ -120,7 +120,7 @@ const {{TABLE_NAME_SHORT}}:
 export const {{TABLE_NAME_SHORT_PASCAL_CASE}} = {
     ...{{TABLE_NAME_SHORT}},
     ...restOrm<
-        OrmGenerics<any, '{{TABLE_NAME_SHORT}}', i{{TABLE_NAME_SHORT_PASCAL_CASE}}, {{TABLE_NAME_SHORT_PASCAL_CASE}}PrimaryKeys{{#if INTERFACE_OVERRIDES}}, {{{INTERFACE_OVERRIDES}}}{{/if}}>
+        OrmGenerics<any, {{{tsString TABLE_NAME_SHORT}}}, i{{TABLE_NAME_SHORT_PASCAL_CASE}}, {{TABLE_NAME_SHORT_PASCAL_CASE}}PrimaryKeys{{#if INTERFACE_OVERRIDES}}, {{{INTERFACE_OVERRIDES}}}{{/if}}>
     >(() => ({
         ...GLOBAL_REST_PARAMETERS,
         restModel: {{TABLE_NAME_SHORT}}{{#if OBJECT_OVERRIDES}},
@@ -129,8 +129,8 @@ export const {{TABLE_NAME_SHORT_PASCAL_CASE}} = {
 }
 
 registerC6Table(
-    '{{TABLE_NAME_SHORT}}',
-    '{{TABLE_NAME_SHORT_PASCAL_CASE}}',
+    {{{tsString TABLE_NAME_SHORT}}},
+    {{{tsString TABLE_NAME_SHORT_PASCAL_CASE}}},
     {{TABLE_NAME_SHORT}},
     {{TABLE_NAME_SHORT_PASCAL_CASE}},
     'TABLE',

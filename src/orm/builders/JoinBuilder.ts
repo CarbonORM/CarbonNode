@@ -169,6 +169,9 @@ export abstract class JoinBuilder<G extends OrmGenerics> extends ConditionBuilde
 
         for (const [joinTypeRaw, joinSection] of joinTypeEntries) {
             const joinKind = joinTypeRaw.replace('_', ' ').toUpperCase();
+            if (!['INNER', 'LEFT', 'RIGHT', 'FULL', 'LEFT OUTER', 'RIGHT OUTER', 'FULL OUTER', 'CROSS'].includes(joinKind)) {
+                throw new Error(`Invalid JOIN type '${joinTypeRaw}'.`);
+            }
             const entries: Array<[any, any]> = [];
 
             if (joinSection instanceof Map) {
@@ -225,9 +228,7 @@ export abstract class JoinBuilder<G extends OrmGenerics> extends ConditionBuilde
                     }
                 } else {
                     const alias = aliasCandidate;
-                    if (alias) {
-                        this.registerAlias(alias, table);
-                    }
+                    this.registerAlias(alias || table, table);
                     const hintClause = this.getIndexHintClause(table, alias);
                     const joinSql = this.sqlDialect.formatJoinedTable(table, alias, hintClause);
                     const onClause = this.buildBooleanJoinedConditions(conditions, true, params);
@@ -257,20 +258,19 @@ export abstract class JoinBuilder<G extends OrmGenerics> extends ConditionBuilde
         if (!subParams) return subSql;
 
         if (this.useNamedParams) {
-            let normalized = subSql;
-            const extras = subParams as Record<string, any>;
-            for (const key of Object.keys(extras)) {
-                const placeholder = this.addParam(target, '', extras[key]);
-                const original = `:${key}`;
-                if (original !== placeholder) {
-                    normalized = normalized.split(original).join(placeholder);
-                }
+            const replacements: Record<string, string> = {};
+            for (const [key, value] of Object.entries(subParams)) {
+                replacements[key] = this.addParam(target, '', value);
             }
-            return normalized;
+            return subSql.replace(/:([A-Za-z_][A-Za-z0-9_]*)\b/g,
+                (match, key) => replacements[key] ?? match);
         }
 
+        const offset = (target as any[]).length;
         (target as any[]).push(...(subParams as any[]));
-        return subSql;
+        return this.sqlDialect.name === 'postgresql'
+            ? subSql.replace(/\$(\d+)\b/g, (_, index) => `$${Number(index) + offset}`)
+            : subSql;
     }
 
     protected buildScalarSubSelect(

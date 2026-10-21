@@ -1,10 +1,30 @@
 #!/usr/bin/env node
 
-const {execFileSync, execSync} = require('child_process');
+const {execFileSync} = require('child_process');
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
+const noDatabase = () => process.env.C6_NO_DB === '1' || argMap['--no-db'] === '1';
+const credentialDirs: string[] = [];
+process.on('exit', () => {
+    for (const directory of credentialDirs) fs.rmSync(directory, {recursive: true, force: true});
+});
 const readline = require('readline');
 const Handlebars = require('handlebars');
+// Schema names are data, even when MySQL permits punctuation in quoted identifiers.
+const typeScriptString = (value: unknown): string => {
+    const escaped = JSON.stringify(String(value))
+        .slice(1, -1)
+        .replace(/'/g, "\\'")
+        .replace(/\u2028/g, '\\u2028')
+        .replace(/\u2029/g, '\\u2029');
+    return `'${escaped}'`;
+};
+Handlebars.registerHelper('tsString', (value: unknown) => new Handlebars.SafeString(typeScriptString(value)));
+Handlebars.registerHelper('tsKey', (value: unknown) => new Handlebars.SafeString(
+    /^[A-Za-z_][A-Za-z0-9_]*$/.test(String(value)) ? String(value) : typeScriptString(value),
+));
+Handlebars.registerHelper('tsComment', (value: unknown) => new Handlebars.SafeString(String(value).replace(/\*\//g, '* /')));
 import {version} from '../package.json';
 
 const args = process.argv.slice(2);  // Slice the first two elements
@@ -13,6 +33,21 @@ const argMap = {};
 for (let i = 0; i < args.length; i += 2) {
     argMap[args[i]] = args[i + 1];
 }
+
+// Credential-bearing subprocesses never search ambient PATH.
+const clientEnvironment = () => ({...process.env, PATH: [path.dirname(process.execPath), '/usr/bin', '/bin', '/opt/homebrew/bin', '/usr/local/bin'].join(path.delimiter)});
+const clientPath = (name: string): string => {
+    const flags = {mysql: '--mysql-client', mysqldump: '--mysqldump-client', psql: '--psql-client', pg_dump: '--pg-dump-client'};
+    const explicit = argMap[flags[name]];
+    if (explicit && !path.isAbsolute(explicit)) throw new Error('Database client paths must be absolute.');
+    const candidates = explicit ? [explicit] : ['/usr/bin', '/opt/homebrew/bin', '/usr/local/mysql/bin', '/usr/local/bin',
+        ...[18, 17, 16, 15].map(v => `/opt/homebrew/opt/postgresql@${v}/bin`)].map(dir => path.join(dir, name));
+    for (const candidate of candidates) {
+        try {const real = fs.realpathSync(candidate); if (!fs.statSync(real).isFile()) continue; fs.accessSync(real, fs.constants.X_OK); return real;}
+        catch {if (explicit) throw new Error('Configured database client is unavailable.');}
+    }
+    throw new Error(`Trusted ${name} client unavailable; configure ${flags[name]} with an absolute path.`);
+};
 
 type iDatabaseConnection = {
     host: string;
@@ -228,6 +263,7 @@ const buildScopedDefinitionsFromConfig = (
 const CONFIG_DISCOVERY_NAMES = [
     ".C6.ts",
     ".C6.json",
+    "C6.config.local.json",
     "C6.config.ts",
     "C6.config.json",
 ];
@@ -266,7 +302,7 @@ const buildConfigInteractively = async (): Promise<iGeneratorConfig> => {
     });
 
     try {
-        console.log("[generateRestBindings] No config found. Let's create C6.config.json.");
+        console.log("[generateRestBindings] No config found. Let's create a secret-free C6.config.local.json.");
         const databases: iGeneratorDatabaseConfigEntry[] = [];
 
         while (true) {
@@ -279,7 +315,8 @@ const buildConfigInteractively = async (): Promise<iGeneratorConfig> => {
             const defaultPort = dialect === "postgresql" ? "5432" : "3306";
             const port = (await askQuestion(rl, `Port (default ${defaultPort}): `)) || defaultPort;
             const user = ensureString(await askQuestion(rl, "User: "), "user");
-            const pass = ensureString(await askQuestion(rl, "Password: "), "pass");
+            const passEnv = (await askQuestion(rl, "Password environment variable (default C6_DB_PASSWORD): ")) || 'C6_DB_PASSWORD';
+            if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(passEnv)) throw new Error('Invalid password environment variable name.');
             const dbnamesRaw = ensureString(
                 await askQuestion(rl, "Schema names (comma-separated, e.g. app,billing): "),
                 "dbnames",
@@ -291,7 +328,7 @@ const buildConfigInteractively = async (): Promise<iGeneratorConfig> => {
                 host,
                 port,
                 user,
-                pass,
+                passEnv,
                 dbnames: dbnamesRaw.split(",").map((name) => name.trim()).filter(Boolean),
             });
 
@@ -386,12 +423,13 @@ class MySQLDump {
         cnfTag: string = '',
     ) {
 
+        const optionValue = (value: string) => JSON.stringify(String(value));
         const cnf = [
             '[client]',
-            `user = ${connection.user}`,
-            `password = ${connection.pass}`,
-            `host = ${connection.host}`,
-            `port = ${connection.port}`,
+            `user = ${optionValue(connection.user)}`,
+            `password = ${optionValue(connection.pass)}`,
+            `host = ${optionValue(connection.host)}`,
+            `port = ${optionValue(connection.port)}`,
             '',
         ];
 
@@ -399,16 +437,17 @@ class MySQLDump {
 
         if ('' === cnfFile) {
 
-            const suffix = cnfTag ? `.${sanitizeIdentifier(cnfTag)}` : '';
-            cnfFile = path.join(this.OUTPUT_DIR, `C6${suffix}.mysql.cnf`);
+            const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'carbonnode-mysql-'));
+            credentialDirs.push(directory);
+            cnfFile = path.join(directory, 'client.cnf');
 
         }
 
         try {
 
-            fs.writeFileSync(cnfFile, cnf.join('\n'));
+            fs.writeFileSync(cnfFile, cnf.join('\n'), {mode: 0o600});
 
-            fs.chmodSync(cnfFile, 0o750);
+            fs.chmodSync(cnfFile, 0o600);
 
             console.log(`Successfully created C6.mysql.cnf file in (${cnfFile})`);
 
@@ -450,29 +489,38 @@ class MySQLDump {
             console.warn("MysqlDump is running with --no-create-info and --no-data. Why?");
         }
 
+        if (noDatabase()) {
+            if (!fs.existsSync(outputFile)) throw new Error(`Missing offline dump at ${outputFile}.`);
+            return (this.mysqldump = outputFile);
+        }
         const defaultsExtraFile = this.buildCNF(connection, "", cnfTag);
-
-        const hexBlobOption = data ? '--hex-blob ' : '--no-data ';
-
-        const createInfoOption = schemas ? '' : ' --no-create-info ';
-
         const tempOutputFile = `${outputFile}.tmp`;
-        const cmd = `${mysqldump} --defaults-extra-file="${defaultsExtraFile}" ${otherOption} --set-gtid-purged="OFF" --skip-add-locks --lock-tables=false --single-transaction --quick ${createInfoOption}${hexBlobOption}${databaseName} ${specificTable} > '${tempOutputFile}'`;
-
-        const succeeded = this.executeAndCheckStatus(cmd, false);
-        if (succeeded && fs.existsSync(tempOutputFile)) {
-            fs.renameSync(tempOutputFile, outputFile);
-        } else if (fs.existsSync(tempOutputFile)) {
-            fs.unlinkSync(tempOutputFile);
+        let succeeded = false;
+        let outputFd: number | undefined;
+        try {
+            outputFd = fs.openSync(tempOutputFile, 'w', 0o600);
+            const dumpClient = clientPath(mysqldump);
+            const mariaDB = /mariadb/i.test(execFileSync(dumpClient, ['--version'], {encoding: 'utf8', env: clientEnvironment()}));
+            execFileSync(dumpClient, [
+                `--defaults-extra-file=${defaultsExtraFile}`,
+                ...otherOption.split(/\s+/).filter(Boolean),
+                ...(mariaDB ? [] : ['--set-gtid-purged=OFF']), '--skip-add-locks', '--lock-tables=false',
+                '--single-transaction', '--quick',
+                ...(schemas ? [] : ['--no-create-info']),
+                data ? '--hex-blob' : '--no-data', '--', databaseName,
+                ...(specificTable ? [specificTable] : []),
+            ], {stdio: ['ignore', outputFd, 'pipe'], env: clientEnvironment()});
+            succeeded = true;
+        } catch {
+            console.warn('[generateRestBindings] mysqldump failed.');
+        } finally {
+            if (outputFd !== undefined) fs.closeSync(outputFd);
+            fs.rmSync(defaultsExtraFile, {force: true});
         }
+        if (succeeded) fs.renameSync(tempOutputFile, outputFile);
+        else fs.rmSync(tempOutputFile, {force: true});
 
-        if (!succeeded && fs.existsSync(outputFile)) {
-            console.warn(`[generateRestBindings] mysqldump for '${databaseName}' failed. Reusing existing dump file at ${outputFile}.`);
-        }
-
-        if (!fs.existsSync(outputFile)) {
-            console.warn(`[generateRestBindings] mysqldump output not found at ${outputFile}. If running in CI/no-DB environment, ensure a prebuilt dump file exists at this path.`);
-        }
+        if (!succeeded) throw new Error('Online MySQL schema acquisition failed. Use explicit --no-db only for a verified offline dump.');
 
         return (this.mysqldump = outputFile);
 
@@ -488,6 +536,7 @@ class MySQLDump {
         },
         cnfTag: string = "",
     ): iSchemaMetadata {
+        if (noDatabase()) return {};
         const defaultsExtraFile = this.buildCNF(connection, "", cnfTag);
         const escapedDatabaseName = databaseName.replace(/\\/g, "\\\\").replace(/'/g, "''");
         const query = `
@@ -509,7 +558,7 @@ class MySQLDump {
 
         try {
             const stdout = execFileSync(
-                "mysql",
+                clientPath('mysql'),
                 [
                     `--defaults-extra-file=${defaultsExtraFile}`,
                     "--batch",
@@ -518,7 +567,7 @@ class MySQLDump {
                     "-e",
                     query,
                 ],
-                {encoding: "utf-8"},
+                {encoding: "utf-8", env: clientEnvironment()},
             );
 
             const schemaMetadata: iSchemaMetadata = {};
@@ -556,34 +605,7 @@ class MySQLDump {
 
             return schemaMetadata;
         } catch (error) {
-            console.warn(`[generateRestBindings] information_schema lookup for '${databaseName}' failed. Falling back to dump-derived metadata where possible.`);
-            return {};
-        }
-
-    }
-
-    static executeAndCheckStatus(command: string, exitOnFailure = true, output: any[] = []): boolean {
-
-        try {
-
-            const stdout = execSync(command, {encoding: 'utf-8'});
-
-            output.push(stdout);
-
-            return true;
-
-        } catch (e) {
-
-            console.log(`Command output::`, e);
-
-            if (exitOnFailure) {
-
-                process.exit(1);
-
-            }
-
-            return false;
-
+            throw new Error('Online MySQL metadata acquisition failed.');
         }
 
     }
@@ -606,6 +628,10 @@ class PostgreSQLDump {
             outputFile = path.join(MySQLDump.OUTPUT_DIR, 'C6.pg_dump.sql');
         }
 
+        if (noDatabase()) {
+            if (!fs.existsSync(outputFile)) throw new Error(`Missing offline dump at ${outputFile}.`);
+            return outputFile;
+        }
         const tempOutputFile = `${outputFile}.tmp`;
         const env = {
             ...process.env,
@@ -623,7 +649,8 @@ class PostgreSQLDump {
                 '--dbname', databaseName,
                 '--file', tempOutputFile,
             ];
-            execFileSync(pgDump, args, { encoding: 'utf-8', env });
+            execFileSync(clientPath(pgDump), args, {encoding: 'utf-8', env: {...env, PATH: clientEnvironment().PATH}});
+            if (!fs.existsSync(tempOutputFile)) throw new Error('PostgreSQL dump client did not produce output.');
             if (fs.existsSync(tempOutputFile)) {
                 fs.renameSync(tempOutputFile, outputFile);
             }
@@ -631,11 +658,7 @@ class PostgreSQLDump {
             if (fs.existsSync(tempOutputFile)) {
                 fs.unlinkSync(tempOutputFile);
             }
-            if (fs.existsSync(outputFile)) {
-                console.warn(`[generateRestBindings] pg_dump for '${databaseName}' failed. Reusing existing dump file at ${outputFile}.`);
-            } else {
-                console.warn(`[generateRestBindings] pg_dump output not found at ${outputFile}. If running in CI/no-DB environment, ensure a prebuilt dump file exists at this path.`);
-            }
+            throw new Error('Online PostgreSQL schema acquisition failed. Use explicit --no-db only for a verified offline dump.');
         }
 
         return outputFile;
@@ -650,6 +673,7 @@ class PostgreSQLDump {
             port: MySQLDump.DB_PORT,
         },
     ): iSchemaMetadata {
+        if (noDatabase()) return {};
         const query = `
             SELECT
                 c.table_name,
@@ -673,12 +697,14 @@ class PostgreSQLDump {
 
         try {
             const stdout = execFileSync(
-                'psql',
+                clientPath('psql'),
                 [
                     '--host', connection.host,
                     '--port', connection.port,
                     '--username', connection.user,
                     '--dbname', databaseName,
+                    '--no-psqlrc',
+                    '--no-password',
                     '--tuples-only',
                     '--no-align',
                     '--field-separator', '\t',
@@ -687,7 +713,7 @@ class PostgreSQLDump {
                 {
                     encoding: 'utf-8',
                     env: {
-                        ...process.env,
+                        ...clientEnvironment(),
                         PGPASSWORD: connection.pass,
                     },
                 },
@@ -728,8 +754,7 @@ class PostgreSQLDump {
 
             return schemaMetadata;
         } catch (error) {
-            console.warn(`[generateRestBindings] PostgreSQL information_schema lookup for '${databaseName}' failed. Falling back to dump-derived metadata where possible.`);
-            return {};
+            throw new Error('Online PostgreSQL metadata acquisition failed.');
         }
     }
 }
@@ -1227,7 +1252,10 @@ const parseSQLToTypeScript = (sql: string, schemaMetadata: iSchemaMetadata = {})
             TABLE_REFERENCES: {},
             TABLE_REFERENCED_BY: {},
             HAS_GEOJSON_TYPES: false,
-            TRIGGERS: triggersByTable.get(tableName) ?? [],
+            TRIGGERS: (triggersByTable.get(tableName) ?? []).map(trigger =>
+                argMap['--includeTriggerDefinitions'] === '1' ? trigger : {
+                    ...trigger, ACTION_STATEMENT: '', CREATE_STATEMENT: '', DEFINER: null,
+                }),
             REACT_IMPORT: REACT_IMPORT,
             CARBON_REACT_INSTANCE: CARBON_REACT_INSTANCE,
         };
@@ -1607,7 +1635,45 @@ const applyGeneratedModuleMetadata = (tableData: any) => {
     }
 };
 
+const validateGeneratedOutput = (outputDir: string, tableData: any) => {
+    const root = path.resolve(outputDir);
+    const symbols = new Set<string>();
+    const targets = ['C6.ts', 'C6.test.ts', 'C6.mysqldump.json', 'C6.generated/core.ts',
+        'C6.generated/scoped.ts', 'C6.generated/tables/index.ts', 'C6.generated/views/index.ts'];
+    const reservedSymbols = new Set(['await', 'break', 'case', 'catch', 'class', 'const', 'continue',
+        'debugger', 'default', 'delete', 'do', 'else', 'enum', 'export', 'extends', 'false', 'finally',
+        'for', 'function', 'if', 'implements', 'import', 'in', 'instanceof', 'interface', 'let', 'new',
+        'null', 'package', 'private', 'protected', 'public', 'return', 'static', 'super', 'switch',
+        'this', 'throw', 'true', 'try', 'typeof', 'var', 'void', 'while', 'with', 'yield']);
+    for (const relation of tableData.RELATIONS) {
+        const name = relation.TABLE_NAME_SHORT_PASCAL_CASE;
+        if (![relation.TABLE_NAME, relation.TABLE_NAME_SHORT, name].every(value =>
+            typeof value === 'string' && /^[A-Za-z_][A-Za-z0-9_]*$/.test(value))) {
+            throw new Error('Unsafe generated relation name; SQL names must map to safe symbols and filenames.');
+        }
+        const key = name.toLowerCase();
+        if (reservedSymbols.has(relation.TABLE_NAME_SHORT) || /^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/.test(key)
+            || ['index', 'core', 'scoped', 'c6'].includes(key) || symbols.has(key)) throw new Error('Reserved or colliding generated relation name.');
+        symbols.add(key);
+        targets.push(`C6.generated/${relation.RELATION_TYPE === 'VIEW' ? 'views' : 'tables'}/${name}.ts`);
+    }
+    for (const relative of targets) {
+        const target = path.resolve(root, relative);
+        if (!target.startsWith(root + path.sep)) throw new Error('Generated path escapes output directory.');
+        let current = root;
+        for (const part of ['', ...relative.split('/')]) {
+            current = path.join(current, part);
+            try {
+                if (fs.lstatSync(current).isSymbolicLink()) throw new Error('Generated output refuses symbolic links.');
+            } catch (error) {
+                if ((error as any).code !== 'ENOENT') throw error;
+            }
+        }
+    }
+};
+
 const writeGeneratedBindings = (outputDir: string, tableData: any) => {
+    validateGeneratedOutput(outputDir, tableData);
     const templatesDir = path.resolve(__dirname, 'assets/handlebars');
     const readTemplate = (templateName: string) =>
         fs.readFileSync(path.join(templatesDir, templateName), 'utf-8');
@@ -1714,7 +1780,7 @@ const resolveConfigPathFromArgsOrDiscovery = async (): Promise<string> => {
         output: process.stdout,
     });
     try {
-        const answer = (await askQuestion(rl, "No config found. Create ./C6.config.json now? (y/N): ")).toLowerCase();
+        const answer = (await askQuestion(rl, "No config found. Create ./C6.config.local.json now? (y/N): ")).toLowerCase();
         if (answer !== "y" && answer !== "yes") {
             throw new Error("Config is required. Generation cancelled.");
         }
@@ -1723,8 +1789,8 @@ const resolveConfigPathFromArgsOrDiscovery = async (): Promise<string> => {
     }
 
     const generatedConfig = await buildConfigInteractively();
-    const generatedPath = path.resolve(process.cwd(), "C6.config.json");
-    fs.writeFileSync(generatedPath, `${JSON.stringify(generatedConfig, null, 2)}\n`);
+    const generatedPath = path.resolve(process.cwd(), "C6.config.local.json");
+    fs.writeFileSync(generatedPath, `${JSON.stringify(generatedConfig, null, 2)}\n`, {mode: 0o600, flag: 'wx'});
     console.log(`[generateRestBindings] Created config at ${generatedPath}`);
     return generatedPath;
 };
@@ -1777,8 +1843,8 @@ const typeCheckGeneratedC6 = (outputDir: string) => {
     );
 
     try {
-        execFileSync("npx", [
-            "tsc",
+        execFileSync(process.execPath, [
+            require.resolve("typescript/bin/tsc"),
             "--project",
             tempTsConfigPath,
         ], { encoding: "utf-8" });
@@ -1949,6 +2015,7 @@ const main = async () => {
 
     tableData.SCOPED_DATABASES = scopedDatabaseSchemas;
     applyGeneratedModuleMetadata(tableData);
+    validateGeneratedOutput(MySQLDump.OUTPUT_DIR, tableData);
 
     // write to file
     fs.writeFileSync(path.join(MySQLDump.OUTPUT_DIR, 'C6.mysqldump.json'), JSON.stringify(tableData));
@@ -1960,11 +2027,7 @@ const main = async () => {
     if (process.env.C6_SKIP_GENERATED_TSC === "1") {
         console.log("[generateRestBindings] Skipping generated C6.ts type check (C6_SKIP_GENERATED_TSC=1).");
     } else {
-        try {
-            typeCheckGeneratedC6(outputDir);
-        } catch (e) {
-            console.warn('TypeScript type check for generated C6.ts reported errors:', e);
-        }
+        typeCheckGeneratedC6(outputDir);
     }
 
     console.log('Successfully created CarbonORM bindings!');

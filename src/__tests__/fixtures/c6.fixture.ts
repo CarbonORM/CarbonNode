@@ -43,6 +43,7 @@ export function buildTestConfig() {
     'actor.actor_id': 'actor_id',
     'actor.first_name': 'first_name',
     'actor.last_name': 'last_name',
+    'actor.last_update': 'last_update',
     'actor.binarycol': 'binarycol',
     'actor.json_data': 'json_data',
   } as const;

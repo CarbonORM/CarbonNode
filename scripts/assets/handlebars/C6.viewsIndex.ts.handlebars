@@ -3,3 +3,7 @@
 {{#VIEWS}}
 export * from "./{{TABLE_NAME_SHORT_PASCAL_CASE}}";
 {{/VIEWS}}
+
+{{^VIEWS}}
+export {};
+{{/VIEWS}}
