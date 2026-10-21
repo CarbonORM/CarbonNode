@@ -285,6 +285,6 @@ test("original build and Vitest test gates retain declaration regression in thei
 	);
 	assert.equal(
 		pkg.scripts.test,
-		"node --test scripts/portable-declarations.test.mjs && vitest run --reporter=dot",
+		"node --test scripts/portable-declarations.test.mjs scripts/setup-git-hooks.test.mjs && vitest run --reporter=dot",
 	);
 });
