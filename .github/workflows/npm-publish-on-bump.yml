@@ -53,6 +53,13 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y default-mysql-client
 
+      - name: Start owned MySQL loopback fixture
+        id: mysql_loopback
+        if: github.server_url == 'https://git.miles.systems'
+        run: |
+          node --test scripts/mysql-loopback.test.mjs
+          node scripts/mysql-loopback.mjs start --state "$RUNNER_TEMP/carbonorm-mysql-loopback"
+
       - name: Setup MySQL client config
         run: |
           cat > ~/my.cnf <<'EOF'
@@ -165,6 +172,10 @@ jobs:
           if-no-files-found: error
           retention-days: 3
 
+      - name: Stop owned MySQL loopback fixture
+        if: always() && (steps.mysql_loopback.outcome == 'success' || steps.mysql_loopback.outcome == 'failure')
+        run: node scripts/mysql-loopback.mjs stop --state "$RUNNER_TEMP/carbonorm-mysql-loopback"
+
   publish:
     needs: check
     if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.CARBONORM_NPM_PUBLICATION_ENABLED == 'true'
@@ -206,6 +217,13 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y default-mysql-client
+
+      - name: Start owned MySQL loopback fixture
+        id: mysql_loopback
+        if: github.server_url == 'https://git.miles.systems'
+        run: |
+          node --test scripts/mysql-loopback.test.mjs
+          node scripts/mysql-loopback.mjs start --state "$RUNNER_TEMP/carbonorm-mysql-loopback"
 
       - name: Setup MySQL client config
         run: |
@@ -269,3 +287,7 @@ jobs:
       - name: Skip (already published)
         if: steps.exists.outputs.published == 'true'
         run: echo "Version already on npm; skipping publish."
+
+      - name: Stop owned MySQL loopback fixture
+        if: always() && (steps.mysql_loopback.outcome == 'success' || steps.mysql_loopback.outcome == 'failure')
+        run: node scripts/mysql-loopback.mjs stop --state "$RUNNER_TEMP/carbonorm-mysql-loopback"

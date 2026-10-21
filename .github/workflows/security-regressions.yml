@@ -29,6 +29,13 @@ jobs:
         with:
           node-version: '25'
           cache: npm
+      - name: Start owned MySQL loopback fixture
+        id: mysql_loopback
+        if: github.server_url == 'https://git.miles.systems'
+        run: |
+          node --test scripts/mysql-loopback.test.mjs
+          node scripts/mysql-loopback.mjs start --state "$RUNNER_TEMP/carbonorm-mysql-loopback"
+
       - name: Prepare test database
         run: |
           sudo apt-get update
@@ -47,3 +54,7 @@ jobs:
           mysql --defaults-file="$HOME/my.cnf" sakila < src/__tests__/sakila-db/sakila-data.sql
       - run: npm ci
       - run: npm test
+
+      - name: Stop owned MySQL loopback fixture
+        if: always() && (steps.mysql_loopback.outcome == 'success' || steps.mysql_loopback.outcome == 'failure')
+        run: node scripts/mysql-loopback.mjs stop --state "$RUNNER_TEMP/carbonorm-mysql-loopback"
