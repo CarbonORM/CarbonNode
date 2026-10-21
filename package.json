@@ -1,6 +1,6 @@
 {
   "name": "@carbonorm/carbonnode",
-  "version": "7.1.1",
+  "version": "7.1.2",
   "browser": "dist/index.umd.js",
   "repository": {
     "type": "git",
@@ -84,7 +84,7 @@
   "scripts": {
     "build": "rm -rf src/api/rest && npm run build:index && npm run build:generateRestBindings && rollup -c && node scripts/portable-declarations.mjs",
     "dev": "rollup -c -w",
-    "test": "node --test scripts/portable-declarations.test.mjs && vitest run --reporter=dot",
+    "test": "node --test scripts/portable-declarations.test.mjs scripts/setup-git-hooks.test.mjs && vitest run --reporter=dot",
     "pretest": "npm run build && npm run c6",
     "prepare": "npm run build",
     "build:index": "npx barrelsby -d ./src --delete --exclude '(__tests__.*|jestHoc|\\.test|\\.d).(js|tsx?)$' --exportDefault --verbose",

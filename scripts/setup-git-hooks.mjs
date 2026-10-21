@@ -3,15 +3,14 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { execSync } from 'child_process';
-import chalk from 'chalk';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-function logInfo(msg) { console.log(chalk.cyan(`[hooks-setup] ${msg}`)); }
-function logSuccess(msg) { console.log(chalk.green(`[hooks-setup] ${msg}`)); }
-function logWarn(msg) { console.warn(chalk.yellow(`[hooks-setup] ${msg}`)); }
-function logError(msg) { console.error(chalk.red(`[hooks-setup] ${msg}`)); }
+function logInfo(msg) { console.log(`[hooks-setup] ${msg}`); }
+function logSuccess(msg) { console.log(`[hooks-setup] ${msg}`); }
+function logWarn(msg) { console.warn(`[hooks-setup] ${msg}`); }
+function logError(msg) { console.error(`[hooks-setup] ${msg}`); }
 
 function isGitRepo() {
   try {
