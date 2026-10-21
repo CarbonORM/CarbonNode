@@ -163,7 +163,7 @@ jobs:
           NODE
 
       - name: Upload checked native package
-        uses: actions/upload-artifact@ff15f0306b3f739f7b6fd43fb5d26cd321bd4de5
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4; GitHub-hosted publication adapter
         with:
           name: carbonorm-native-package-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
