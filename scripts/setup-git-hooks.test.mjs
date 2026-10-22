@@ -9,6 +9,13 @@ import test from 'node:test';
 const sourceRoot = fileURLToPath(new URL('../', import.meta.url));
 const manifest = JSON.parse(await fs.readFile(path.join(sourceRoot, 'package.json'), 'utf8'));
 
+test('published package does not register automatic Git hook setup', () => {
+    assert.equal(manifest.scripts.postinstall, undefined);
+    assert.equal(manifest.scripts.install, undefined);
+    assert.equal(manifest.scripts.preinstall, undefined);
+    assert.equal(manifest.scripts['setup:hooks'], 'node ./scripts/setup-git-hooks.mjs');
+});
+
 async function fixture(t, { nested = false, development = false } = {}) {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), 'carbonnode-install-hook-'));
     await fs.chmod(root, 0o700);
@@ -21,7 +28,7 @@ async function fixture(t, { nested = false, development = false } = {}) {
     await fs.writeFile(path.join(bin, 'package.json'), '{"type":"module"}\n');
     await fs.writeFile(path.join(bin, 'git'), `#!${process.execPath}\nimport fs from 'node:fs';\nfs.appendFileSync(${JSON.stringify(calls)}, JSON.stringify(process.argv.slice(2)) + '\\n');\n`, { mode: 0o700 });
     await fs.copyFile(path.join(sourceRoot, 'scripts/setup-git-hooks.mjs'), path.join(packageRoot, 'scripts/setup-git-hooks.mjs'));
-    await fs.writeFile(path.join(packageRoot, 'package.json'), JSON.stringify({ name: manifest.name, type: 'module', scripts: { postinstall: manifest.scripts.postinstall } }));
+    await fs.writeFile(path.join(packageRoot, 'package.json'), JSON.stringify({ name: manifest.name, type: 'module', scripts: { 'setup:hooks': manifest.scripts['setup:hooks'] } }));
     if (nested || development) {
         const gitRoot = development ? packageRoot : root;
         await fs.mkdir(path.join(gitRoot, '.git'));
@@ -29,7 +36,7 @@ async function fixture(t, { nested = false, development = false } = {}) {
     }
     const env = { PATH: bin, HOME: root, LANG: 'C', LC_ALL: 'C', NO_COLOR: '1' };
     function run() {
-        assert.equal(manifest.scripts.postinstall, 'node ./scripts/setup-git-hooks.mjs');
+        assert.equal(manifest.scripts['setup:hooks'], 'node ./scripts/setup-git-hooks.mjs');
         const result = spawnSync(process.execPath, ['--input-type=module', '-e', `
             import assert from 'node:assert/strict';
             await assert.rejects(import('chalk'), { code: 'ERR_MODULE_NOT_FOUND' });
@@ -42,7 +49,7 @@ async function fixture(t, { nested = false, development = false } = {}) {
     return { root, packageRoot, calls, run };
 }
 
-test('published install hook succeeds without development dependencies or Git', async t => {
+test('explicit hook setup succeeds without development dependencies or Git', async t => {
     const f = await fixture(t);
     f.run();
     await assert.rejects(fs.stat(f.calls), { code: 'ENOENT' });

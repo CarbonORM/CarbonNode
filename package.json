@@ -1,6 +1,6 @@
 {
   "name": "@carbonorm/carbonnode",
-  "version": "7.1.2",
+  "version": "7.1.3",
   "browser": "dist/index.umd.js",
   "repository": {
     "type": "git",
@@ -91,7 +91,7 @@
     "build:generateRestBindings": "cd ./scripts/ && tsc --downlevelIteration --resolveJsonModule generateRestBindings.ts && mv generateRestBindings.js generateRestBindings.cjs",
     "generateRestBindings": "npm run build:generateRestBindings && node ./scripts/generateRestBindings.cjs --output src/__tests__/sakila-db",
     "c6": "npm run generateRestBindings",
-    "postinstall": "node ./scripts/setup-git-hooks.mjs"
+    "setup:hooks": "node ./scripts/setup-git-hooks.mjs"
   },
   "bin": {
     "generateRestBindings": "scripts/generateRestBindings.cjs"
