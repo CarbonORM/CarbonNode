@@ -822,11 +822,16 @@ carbonnode:
 
 ## Git Hooks
 
-This project uses Git hooks via `postinstall`:
+Git hooks are optional contributor tooling for the CarbonNode repository. After
+installing development dependencies in a checkout, enable them explicitly:
 
-- `pre-commit`: builds project and blocks commits on build failure
-- `post-push`: publishes to npm when version changes
-- `npm install` runs `postinstall` to ensure hooks are configured
+```bash
+npm run setup:hooks
+```
+
+The `pre-commit` hook builds the project and blocks commits on build failure.
+Starting with 7.1.3, installing CarbonNode does not run Git hook setup or require
+install-script approval. Applications using CarbonNode do not need these hooks.
 
 ## Support
 
