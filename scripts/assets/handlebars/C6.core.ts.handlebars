@@ -10,23 +10,38 @@ import type {
     C6RestfulModel,
     iDynamicApiImport,
 } from "@carbonorm/carbonnode";
-{{#TABLES}}
+{{#RELATIONS}}
+{{#if READ_ONLY}}
+import type { i{{TABLE_NAME_SHORT_PASCAL_CASE}} } from "./views/{{TABLE_NAME_SHORT_PASCAL_CASE}}";
+{{else}}
 import type { i{{TABLE_NAME_SHORT_PASCAL_CASE}} } from "./tables/{{TABLE_NAME_SHORT_PASCAL_CASE}}";
-{{/TABLES}}
+{{/if}}
+{{/RELATIONS}}
 
-export const RestTablePrefix = '{{{PREFIX}}}';
+export const RestTablePrefix = {{{json PREFIX}}};
 
 export type RestTableNames = {{{RestTableNames}}};
 
 export type RestShortTableNames = {{{RestShortTableNames}}};
 
+export type RestViewNames = {{{RestViewNames}}};
+
+export type RestShortViewNames = {{{RestShortViewNames}}};
+
 export type RestTableInterfaces = {{{RestTableInterfaces}}};
 
-export const TABLES = {} as Record<RestShortTableNames, C6RestfulModel<any, any, any>>;
+export type RestRelationInterfaces = {
+{{#RELATIONS}}
+    {{{tsString TABLE_NAME_SHORT}}}: i{{TABLE_NAME_SHORT_PASCAL_CASE}};
+{{/RELATIONS}}
+};
 
-export const C6Core: iC6Object<RestTableInterfaces> = {
+export const TABLES = {} as Record<RestShortTableNames, C6RestfulModel<any, any, any>>;
+export const VIEWS = {} as Record<RestShortViewNames, C6RestfulModel<any, any, any>>;
+
+export const C6Core: iC6Object<RestRelationInterfaces> = {
     ...C6Constants,
-    C6VERSION: '{{C6VERSION}}',
+    C6VERSION: {{{tsString C6VERSION}}},
     IMPORT: async (tableName: string): Promise<iDynamicApiImport> => {
         tableName = tableName.toLowerCase();
 
@@ -34,12 +49,12 @@ export const C6Core: iC6Object<RestTableInterfaces> = {
             throw Error('Table (' + table + ') does not exist in the TABLES object. Possible values include (' + Object.keys(TABLES).join(', ') + ')');
         };
 
-        if (!TABLES[tableName as RestShortTableNames]) {
+        if (!Object.prototype.hasOwnProperty.call(TABLES, tableName)) {
             if (!tableName.startsWith(RestTablePrefix.toLowerCase())) {
                 error(tableName);
             }
             tableName = removePrefixIfExists(tableName, RestTablePrefix);
-            if (!TABLES[tableName as RestShortTableNames]) {
+            if (!Object.prototype.hasOwnProperty.call(TABLES, tableName)) {
                 error(tableName);
             }
         }
@@ -50,35 +65,39 @@ export const C6Core: iC6Object<RestTableInterfaces> = {
                 .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
                 .join("_");
 
+        const relation = TABLES[tableName as RestShortTableNames];
+        const moduleDir = relation?.RELATION_TYPE === 'VIEW' ? 'views' : 'tables';
+
         return import(
-            /* @vite-ignore */ `./tables/${toPascalUnderscore(tableName)}`
+            /* @vite-ignore */ `./${moduleDir}/${toPascalUnderscore(tableName)}`
         );
     },
     PREFIX: RestTablePrefix,
     TABLES: TABLES as any,
-    ORM: {},
+    VIEWS: VIEWS as any,
+    ORM: {} as iC6Object<RestRelationInterfaces>["ORM"],
 };
 
 export type tStatefulApiData<T> = T[] | undefined;
 
 // this refers to the value types of the keys above, aka values in the state
 export interface iRestfulObjectArrayTypes {
-    {{#TABLES}}
+    {{#RELATIONS}}
     {{TABLE_NAME_SHORT}}: tStatefulApiData<i{{TABLE_NAME_SHORT_PASCAL_CASE}}>,
-    {{/TABLES}}
+    {{/RELATIONS}}
 }
 
 export type tRestfulObjectArrayValues = iRestfulObjectArrayTypes[keyof iRestfulObjectArrayTypes];
 
 export const initialRestfulObjectsState: iRestfulObjectArrayTypes = {
-    {{#TABLES}}
+    {{#RELATIONS}}
     {{TABLE_NAME_SHORT}}: undefined,
-    {{/TABLES}}
+    {{/RELATIONS}}
 };
 
 export const COLUMNS = {
-    {{#TABLES}}{{#each TYPE_VALIDATION}}'{{@key}}': '{{this.COLUMN_NAME}}',{{/each}}
- {{/TABLES}}
+    {{#RELATIONS}}{{#each TYPE_VALIDATION}}{{{tsString @key}}}: {{{tsString this.COLUMN_NAME}}},{{/each}}
+ {{/RELATIONS}}
 };
 
 export const GLOBAL_REST_PARAMETERS: Omit<iRest<
@@ -93,8 +112,12 @@ export const registerC6Table = (
     bindingName: string,
     tableModel: Record<string, any>,
     restBinding: Record<string, any>,
+    relationType: 'TABLE' | 'VIEW' = 'TABLE',
 ) => {
     (TABLES as Record<string, C6RestfulModel<any, any, any>>)[shortName] = tableModel as C6RestfulModel<any, any, any>;
+    if (relationType === 'VIEW') {
+        (VIEWS as Record<string, C6RestfulModel<any, any, any>>)[shortName] = tableModel as C6RestfulModel<any, any, any>;
+    }
     (C6Core as Record<string, unknown>)[shortName] = tableModel;
     (C6Core.ORM as Record<string, unknown>)[bindingName] = restBinding;
 };

@@ -1,7 +1,7 @@
 // noinspection JSUnusedGlobalSymbols,SpellCheckingInspection
 
 import "./C6.generated/tables";
-// @ts-ignore createScopedC6Proxy is available in CarbonNode >= 7.0.0
+import "./C6.generated/views";
 import { createScopedC6Proxy } from "@carbonorm/carbonnode";
 import {
     C6Core,
@@ -15,16 +15,20 @@ export {
     initialRestfulObjectsState,
     RestTablePrefix,
     TABLES,
+    VIEWS,
 } from "./C6.generated/core";
 export type {
     iRestfulObjectArrayTypes,
     RestShortTableNames,
     RestTableInterfaces,
     RestTableNames,
+    RestShortViewNames,
+    RestViewNames,
     tRestfulObjectArrayValues,
     tStatefulApiData,
 } from "./C6.generated/core";
 export * from "./C6.generated/tables";
+export * from "./C6.generated/views";
 
 export const C6 = createScopedC6Proxy(C6Core, GLOBAL_REST_PARAMETERS, {
     scopedC6ByDatabase: SCOPED_C6_BY_DATABASE,

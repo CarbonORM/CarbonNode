@@ -1,7 +1,7 @@
 ![npm](https://img.shields.io/npm/v/%40carbonorm%2Fcarbonnode)
 ![License](https://img.shields.io/npm/l/%40carbonorm%2Fcarbonnode)
 ![Size](https://img.shields.io/github/languages/code-size/carbonorm/carbonnode)
-![Documentation](https://img.shields.io/website?down_color=lightgrey&down_message=Offline&up_color=green&up_message=Online&url=https%3A%2F%2Fcarbonorm.dev)
+![Documentation](https://img.shields.io/website?down_color=lightgrey&down_message=Offline&up_color=green&up_message=Online&url=https%3A%2F%2Fcarbonorm.miles.systems%2F)
 ![Monthly Downloads](https://img.shields.io/npm/dm/%40carbonorm%2Fcarbonnode)
 ![All Downloads](https://img.shields.io/npm/dt/%40carbonorm%2Fcarbonnode)
 ![Star](https://img.shields.io/github/stars/carbonorm/carbonnode?style=social)
@@ -9,7 +9,7 @@
 
 # CarbonNode
 
-CarbonNode is a typed MySQL ORM runtime plus code generator for REST bindings.
+CarbonNode is a typed SQL ORM runtime plus code generator for REST bindings, with MySQL support and PostgreSQL runtime/generator support.
 
 It is built for:
 
@@ -107,7 +107,7 @@ Each `dbnames` entry creates a generated scoped namespace. If one entry has mult
 
 Example above yields `C6.analytics` and `C6.analytics_app`.
 
-Starter template: `./rest.config.example.json`.
+Starter template: `./C6.config.example.json`.
 TS starter template: `./C6.config.example.ts`.
 
 Beginner-friendly TS setup (recommended when you want env/vault secrets):
@@ -126,7 +126,7 @@ export BILLING_DB_PASS='replace-me'
 export ANALYTICS_DB_PASS='replace-me'
 ```
 
-3. Open `C6.config.ts` and update `host`, `user`, `dbnames`, and `primaryAlias` for your databases.
+3. Open `C6.config.ts` and update `host`, `user`, `dbnames`, `primaryAlias`, and `dialect` for your databases. Use `dialect: "postgresql"` for PostgreSQL targets; omitted dialects default to MySQL.
 
 4. Generate bindings.
 
@@ -161,6 +161,23 @@ GLOBAL_REST_PARAMETERS.mysqlPool = mysql.createPool({
   database: "sakila",
 });
 ```
+
+PostgreSQL runtime execution is available by providing a `pg` pool and selecting the PostgreSQL SQL dialect:
+
+```ts
+import { Pool } from "pg";
+import { GLOBAL_REST_PARAMETERS } from "./shared/rest/C6";
+
+GLOBAL_REST_PARAMETERS.postgresPool = new Pool({
+  host: "127.0.0.1",
+  user: "postgres",
+  password: "password",
+  database: "app",
+});
+GLOBAL_REST_PARAMETERS.sqlDialect = "postgresql";
+```
+
+Current PostgreSQL support covers runtime SQL building/execution for the canonical expression grammar, basic CRUD shapes, `RETURNING *` for inserts, `ON CONFLICT` upserts when primary-key metadata is available, and inner-join deletes via `DELETE ... USING`. MySQL-only forms such as `REPLACE` and MySQL index hints fail explicitly; non-inner or derived-table delete joins should use a `WHERE` subselect for now. Binding generation supports `dialect: "postgresql"` in `C6.config.*`, uses `pg_dump`/`psql` when available, and can reuse a prebuilt `C6.pg_dump.sql` in CI or no-database environments.
 
 #### SQL executor mode with multiple databases (request-scoped)
 
@@ -263,12 +280,12 @@ const result = await Actor.Get({
 ```mermaid
 flowchart LR
     Client["App Code\nActor.Get(...)"] --> Request["restRequest facade"]
-    Request -->|"mysqlPool configured"| SQL["SqlExecutor"] --> DB[("MySQL")]
-    Request -->|"no mysqlPool"| HTTP["HttpExecutor"] --> REST["/api/rest/:table"]
+    Request -->|"mysqlPool/postgresPool configured"| SQL["SqlExecutor"] --> DB[("SQL Database")]
+    Request -->|"no SQL pool"| HTTP["HttpExecutor"] --> REST["/api/rest/:table"]
     REST --> Express["ExpressHandler"] --> SQL
 ```
 
-`restRequest` chooses SQL executor when `mysqlPool` is present; otherwise it uses HTTP executor.
+`restRequest` chooses SQL executor when `mysqlPool` or `postgresPool` is present; otherwise it uses HTTP executor.
 
 ## C6 + CarbonReact State Management
 
@@ -429,7 +446,7 @@ await Actor.Put({
 CarbonNode exports typed builders for canonical expression tuples and common literal-safe `WHERE` / `HAVING` predicates:
 
 ```ts
-import { fn, call, alias, distinct, lit, eqLit, inLit, betweenLit, order } from "@carbonorm/carbonnode";
+import { fn, call, alias, distinct, lit, eqLit, inLit, notInLit, betweenLit, asc, desc } from "@carbonorm/carbonnode";
 import { C6, Actor } from "./shared/rest/C6";
 
 const response = await Actor.Get({
@@ -441,18 +458,19 @@ const response = await Actor.Get({
   [C6.WHERE]: {
     [Actor.FIRST_NAME]: eqLit("NICK"),
     [Actor.LAST_NAME]: inLit(["WAHLBERG", "CHASE"]),
+    [Actor.ACTOR_ID]: notInLit([1, 2]),
     0: {
       [Actor.LAST_UPDATE]: betweenLit("2006-02-15", "2006-02-16"),
     },
   },
   [C6.PAGINATION]: {
-    [C6.ORDER]: [order(fn(C6.COUNT, Actor.ACTOR_ID), C6.DESC)],
+    [C6.ORDER]: [desc(fn(C6.COUNT, Actor.ACTOR_ID)), asc(Actor.FIRST_NAME)],
     [C6.LIMIT]: 5,
   },
 });
 ```
 
-Use `eqLit()`, `inLit()`, and `betweenLit()` when the comparison value is a string or other non-reference literal that should be wrapped with `C6.LIT` automatically.
+Use `eqLit()`, `inLit()`, `notInLit()`, and `betweenLit()` when the comparison value is a string or other non-reference literal that should be wrapped with `C6.LIT` automatically. Use `asc()` / `desc()` for the common one-direction `ORDER` terms.
 
 ## Singular vs Complex Requests
 
@@ -499,12 +517,13 @@ Recommendation: use generated bindings + axios executor, not manual URL construc
 - `C6.ts` (stable compatibility facade and public entrypoint)
 - `C6.generated/core.ts` (shared runtime state such as `TABLES`, `COLUMNS`, `initialRestfulObjectsState`, and `GLOBAL_REST_PARAMETERS`)
 - `C6.generated/tables/*.ts` (one generated table module per table, including the interface, primary-key type, base model, and REST binding)
+- `C6.generated/views/*.ts` (one generated read-only view module per SQL view, with `Get` only)
 - `C6.generated/scoped.ts` (scoped database bindings)
 - `C6.test.ts` (generated test suite)
-- `C6.mysqldump.sql`
+- `C6.mysqldump.sql` for MySQL generation, or `C6.pg_dump.sql` for PostgreSQL generation
 - `C6.mysqldump.json`
-- `C6.mysql.cnf`
-- `C6.<databaseKey>.mysqldump.sql` for each resolved config database alias
+- `C6.mysql.cnf` for MySQL generation
+- `C6.<databaseKey>.mysqldump.sql` or `C6.<databaseKey>.pg_dump.sql` for each resolved non-primary config database alias
 
 `C6.ts` re-exports the selected public symbols from `C6.generated/**`, so existing imports such as
 `import { C6, Actor, type iActor, TABLES } from "./rest/C6"` remain the public contract. Auto-barrel
@@ -512,12 +531,19 @@ tools should exclude `C6.generated/**` to avoid publishing noisy internals. Corr
 on that exclusion: re-exporting both `C6.ts` and an individual generated table module resolves to the
 same table export.
 
+SQL views are emitted as readonly relations with `RELATION_TYPE: "VIEW"` and `READ_ONLY: true`.
+They are registered in `TABLES` for query composition and `VIEWS` for view-only discovery, so a
+view can be used anywhere a selectable relation is valid, including `JOIN`; generated REST bindings
+only expose `Get`, and runtime request resolution rejects write methods against read-only models.
+
 Template sources:
 
 - `scripts/assets/handlebars/C6.ts.handlebars`
 - `scripts/assets/handlebars/C6.core.ts.handlebars`
 - `scripts/assets/handlebars/C6.table.ts.handlebars`
 - `scripts/assets/handlebars/C6.tablesIndex.ts.handlebars`
+- `scripts/assets/handlebars/C6.view.ts.handlebars`
+- `scripts/assets/handlebars/C6.viewsIndex.ts.handlebars`
 - `scripts/assets/handlebars/C6.scoped.ts.handlebars`
 - `scripts/assets/handlebars/C6.test.ts.handlebars`
 
@@ -707,11 +733,12 @@ Flag migration:
 - `--port` -> `databases[].port`
 - `--dbname` -> `databases[].dbname` / `databases[].dbnames[]`
 - `--databases` (legacy alias map) -> explicit `databases[]` entries in config
+- PostgreSQL targets should also set `databases[].dialect` to `"postgresql"`.
 
 Behavior changes:
 
-- Config discovery now checks `.C6.ts`, `.C6.json`, `C6.config.ts`, and `C6.config.json` from CWD upward.
-- If no config is found and the process is interactive, a guided prompt can scaffold `C6.config.json`.
+- Config discovery checks `.C6.ts`, `.C6.json`, `C6.config.local.json`, `C6.config.ts`, and `C6.config.json` from CWD upward.
+- Guided setup scaffolds ignored `C6.config.local.json` with mode 0600 and a `passEnv` reference (default `C6_DB_PASSWORD`). Export that environment variable before generation; the wizard never collects a password.
 - Multi-schema aliases are explicit via `dbnames` and emitted as `C6.<alias>` / `C6.<alias>_<dbname>`.
 
 Security recommendation:
@@ -797,7 +824,7 @@ carbonnode:
 
 This project uses Git hooks via `postinstall`:
 
-- `post-commit`: builds project
+- `pre-commit`: builds project and blocks commits on build failure
 - `post-push`: publishes to npm when version changes
 - `npm install` runs `postinstall` to ensure hooks are configured
 
@@ -806,3 +833,109 @@ This project uses Git hooks via `postinstall`:
 Report issues at:
 
 - [CarbonNode Issues](https://github.com/CarbonORM/CarbonNode/issues)
+
+## Security behavior and migration
+
+Version 7.0.0 includes the [new repository-scan remediation](docs/security-remediation-7.0.0.md).
+Version 7.0.1 also prevents deeply nested expression tokens from triggering recursive
+string conversion inside request validation; the iterative budget rejects them first.
+Version 7.0.2 closes the eight [verification-scan findings](docs/security-remediation-7.0.2.md),
+including SQL/browser transport budgets, MySQL write cancellation, and trusted generator tooling.
+This major bump reflects stricter request defaults and rejection of previously
+accepted unsafe or ambiguous inputs. Regenerate bindings and review these changes:
+
+- HTTP lifecycle phases are awaited. A rejected `beforeExecution` hook prevents dispatch.
+  HTTP primary keys must be scalar, nonempty URL segments. Delimiters, percent escapes,
+  control characters, and dot segments are rejected; remaining characters are encoded.
+- Composite identities use complete payload keys or WHERE with a table-only URL.
+  `/rest/:table/:primary` is rejected for composite-key models, even with complete body keys.
+- Every supplied pagination object retains a limit: default 100, maximum 1000,
+  maximum offset 100000. LIMIT/PAGE must be positive safe integers (decimal query-string
+  values are accepted). Trusted `maxPageSize` and `maxPageOffset` can adjust these caps.
+- Generic REST denies custom CALLs unless trusted `restFunctionAllowlist` approves them.
+  Delay, file, lock, and listed side-effect functions remain denied. Trusted direct ORM
+  CALL grammar remains available. REST sets `statementTimeoutMs` to 5000 by default:
+  MySQL read execution uses `max_execution_time`; PostgreSQL uses `statement_timeout`.
+  Previous session settings are restored; PostgreSQL mutations use transaction-local settings.
+  MySQL writes reserve a separate cancellation connection before execution and terminate the
+  target session on deadline. Custom MySQL drivers must supply trusted `mysqlCancellation`.
+- All request trees have shared iterative budgets: depth 32, 10000 nodes, 1000 items
+  per collection, 1 MiB input, 1000 SQL parameters, and 256 KiB generated SQL.
+  Trusted `queryLimits` can adjust individual budgets; request JSON cannot raise them.
+  `maxResponseBytes` defaults to 8 MiB. SQL results and HTTP payloads are checked;
+  Native mysql2/pg receipt is bounded before row parsing; unsupported REST transports fail closed.
+  Browser Axios fetch streams are bounded before decoding/JSON parsing; Node uses the capped HTTP
+  adapter. Custom SQL drivers must expose `sqlResponseStream`; compressed MySQL needs a decoded stream.
+  HTTP requests retain a 30-second default timeout.
+- Response cache storage is bounded to 1000 entries, 16 MiB total, 1 MiB per entry,
+  and a nonrenewable 60-second TTL. LRU eviction, expired entries, oversized/unserializable
+  responses, and rejected promises force a fresh request. Existing trusted scopes remain required.
+- Generator relation names must map to safe identifiers and noncolliding filenames.
+  Reserved names, separators, traversal, and symbolic links fail before generated-source writes.
+  Generated typecheck failures are fatal unless explicitly skipped for a controlled offline workflow.
+  The compiler is a pinned local runtime dependency. Database clients come from trusted fixed paths
+  or absolute `--mysql-client`, `--mysqldump-client`, `--psql-client`, `--pg-dump-client` flags.
+  Failed online schema/metadata acquisition is fatal; existing dumps require explicit `--no-db 1` reuse.
+- Warning/error string fields escape terminal controls, line breaks, and Unicode record controls.
+
+The [October 2026 finding review](docs/security-review-2026-10-03.md) distinguishes
+historical findings, intentional SQL grammar, SQL-allowlist mitigations, and fixes.
+
+- GET response caching now requires a nonempty `cacheScope` in trusted runtime
+  configuration. Use a scope unique to the authenticated principal, tenant, and
+  permission version, and rotate it when any of those change. Do not take it from
+  request JSON. Keys also distinguish SQL pools/HTTP clients and REST URLs.
+  SQL requests with lifecycle hooks bypass result caching so authorization hooks
+  always run. Both SQL and HTTP GET requests require `cacheResults: true` to
+  enable caching; a scope alone does not opt in. Database aliases also partition
+  cache entries when they share a transport.
+- Generic Express REST routes exclude generated views by default, including
+  JOINs and scalar/derived subqueries. To expose an authorized view, set trusted
+  `restViewAllowlist: ['view_name']` in the server configuration. Request JSON
+  cannot opt in. Direct server ORM reads of views remain available.
+- `GROUP_BY` accepts the same expression grammar as SELECT. A single tuple
+  (for example `[C6C.CALL, 'COALESCE', column, [C6C.LIT, 'unknown']]`) and a list
+  of expressions are both supported. Bare strings remain references.
+- UPDATE and DELETE require a nonempty WHERE predicate. Trusted server code may
+  set `allowUnfilteredWrites: true` for intentional unfiltered writes. A client
+  JSON field cannot grant this permission. URL primary keys constrain complex
+  requests with AND and are always bound as literal values.
+- SQL allowlisting remains optional and should be configured on production REST
+  endpoints. The final SQL is checked again after mutable execution hooks.
+  An allowlist constrains query shapes; applications must still authorize users
+  and bind ownership/tenant values. Bare strings remain references in the SQL
+  expression grammar; wrap literal data in `[C6C.LIT, value]` or use `eqLit`.
+- Express responses omit SQL metadata and internal exception messages. Logs
+  retain the server error. Request `debug` cannot raise the configured log level;
+  INFO SQL logs contain status indicators, with SQL text available at DEBUG.
+- Websocket broadcasts contain identity/invalidation metadata by default, with
+  empty REQUEST and no RESPONSE row data. Set trusted `websocketIncludeRows: true`
+  only for callbacks that authorize recipients and redact sensitive fields.
+- Dependency fetching rejects traversals exceeding 8 levels or 100 requests and
+  skips repeated table/filter requests. Pagination `next()` advances the page.
+- Generator credentials use private temporary files and are removed on exit.
+  Schema-derived names are escaped as TypeScript string literals, including
+  table, view, and database-scoped templates.
+  `C6_NO_DB=1` or `--no-db 1` uses existing dumps without invoking database tools;
+  CI alone does not disable database generation. Trigger bodies and definers are
+  omitted by default; `--includeTriggerDefinitions 1` is an explicit opt-in for
+  server-only generated artifacts. Raw schema dumps still contain schema details
+  and should not be shipped to browsers.
+- Generator expressions such as `restUrlExpression`, custom imports, and override
+  expressions are trusted source code. Do not populate them from untrusted input.
+  SQL views remain generated read-only relations; only approve intended view
+  query shapes in the SQL allowlist and enforce caller authorization separately.
+- The CommonJS export uses a `.cjs` extension. Regenerate bindings to receive
+  generator fixes. Existing installed applications do not change merely because
+  this repository's fixes merge.
+
+### Explicit MySQL writer registration
+
+Register `mysqlWriterPool` alongside `mysqlPool` when reads use a replica:
+
+```ts
+GLOBAL_REST_PARAMETERS.mysqlPool = guardedReaderPool;
+GLOBAL_REST_PARAMETERS.mysqlWriterPool = writerPool;
+```
+
+GET uses `mysqlPool` (or the writer when no read pool is registered). POST, PUT, PATCH and DELETE acquire `mysqlWriterPool`, falling back to `mysqlPool` for existing single-pool applications. The complete mutation lifecycle, including transaction and session settings, stays on that writer connection. Register these trusted options globally or per database; never accept pools from request input. Replica health, replication fences and read-after-write policy belong to the registered pool provider.

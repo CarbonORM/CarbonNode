@@ -1,6 +1,6 @@
 /** biome-ignore-all lint/suspicious/noExplicitAny: working with global browser objects */
 function getRuntimeEnv(key: string): any {
-    return typeof window !== "undefined" && (window as any).__ENV__?.[key];
+    return typeof window !== "undefined" ? (window as any).__ENV__?.[key] : undefined;
 }
 // Do not import anything here
 function getViteEnv(key: string): any {
@@ -49,6 +49,10 @@ export function getEnvDebug<T = string>(
     key: string,
     fallback?: T,
 ): { key: string; value: T; source: EnvSource } {
+    if (typeof process !== "undefined" && process.env?.[key] !== undefined) {
+        return { key, value: process.env[key] as T, source: "process" };
+    }
+
     try {
         const viteEnv = getViteEnv(key);
         if (viteEnv !== undefined) {
@@ -61,9 +65,7 @@ export function getEnvDebug<T = string>(
         return { key, value: runtimeEnv as T, source: "runtime" };
     }
 
-    if (typeof process !== "undefined" && process.env?.[key] !== undefined) {
-        return { key, value: process.env[key] as T, source: "process" };
-    }
+
 
     if (fallback !== undefined) {
         return { key, value: fallback, source: "fallback" };

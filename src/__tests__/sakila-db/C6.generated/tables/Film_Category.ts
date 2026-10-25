@@ -38,8 +38,13 @@ const film_category:
         'film_category',
         iFilm_Category,
         Film_CategoryPrimaryKeys
-    > = {
+    > & Record<string, any> & {
+        RELATION_TYPE: 'TABLE';
+        READ_ONLY: false;
+    } = {
     TABLE_NAME: 'film_category',
+    RELATION_TYPE: 'TABLE',
+    READ_ONLY: false,
     FILM_ID: 'film_category.film_id',
     CATEGORY_ID: 'film_category.category_id',
     LAST_UPDATE: 'film_category.last_update',
@@ -78,6 +83,8 @@ const film_category:
     },
     REGEX_VALIDATION: {
     },
+    TRIGGERS: [
+    ],
     LIFECYCLE_HOOKS: {
         GET: {beforeProcessing:{}, beforeExecution:{}, afterExecution:{}, afterCommit:{}},
         PUT: {beforeProcessing:{}, beforeExecution:{}, afterExecution:{}, afterCommit:{}},
@@ -115,6 +122,7 @@ registerC6Table(
     'Film_Category',
     film_category,
     Film_Category,
+    'TABLE',
 );
 
 export default Film_Category;

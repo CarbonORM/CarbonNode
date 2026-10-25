@@ -1,10 +1,30 @@
 #!/usr/bin/env node
 
-const {execFileSync, execSync} = require('child_process');
+const {execFileSync} = require('child_process');
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
+const noDatabase = () => process.env.C6_NO_DB === '1' || argMap['--no-db'] === '1';
+const credentialDirs: string[] = [];
+process.on('exit', () => {
+    for (const directory of credentialDirs) fs.rmSync(directory, {recursive: true, force: true});
+});
 const readline = require('readline');
 const Handlebars = require('handlebars');
+// Schema names are data, even when MySQL permits punctuation in quoted identifiers.
+const typeScriptString = (value: unknown): string => {
+    const escaped = JSON.stringify(String(value))
+        .slice(1, -1)
+        .replace(/'/g, "\\'")
+        .replace(/\u2028/g, '\\u2028')
+        .replace(/\u2029/g, '\\u2029');
+    return `'${escaped}'`;
+};
+Handlebars.registerHelper('tsString', (value: unknown) => new Handlebars.SafeString(typeScriptString(value)));
+Handlebars.registerHelper('tsKey', (value: unknown) => new Handlebars.SafeString(
+    /^[A-Za-z_][A-Za-z0-9_]*$/.test(String(value)) ? String(value) : typeScriptString(value),
+));
+Handlebars.registerHelper('tsComment', (value: unknown) => new Handlebars.SafeString(String(value).replace(/\*\//g, '* /')));
 import {version} from '../package.json';
 
 const args = process.argv.slice(2);  // Slice the first two elements
@@ -14,6 +34,21 @@ for (let i = 0; i < args.length; i += 2) {
     argMap[args[i]] = args[i + 1];
 }
 
+// Credential-bearing subprocesses never search ambient PATH.
+const clientEnvironment = () => ({...process.env, PATH: [path.dirname(process.execPath), '/usr/bin', '/bin', '/opt/homebrew/bin', '/usr/local/bin'].join(path.delimiter)});
+const clientPath = (name: string): string => {
+    const flags = {mysql: '--mysql-client', mysqldump: '--mysqldump-client', psql: '--psql-client', pg_dump: '--pg-dump-client'};
+    const explicit = argMap[flags[name]];
+    if (explicit && !path.isAbsolute(explicit)) throw new Error('Database client paths must be absolute.');
+    const candidates = explicit ? [explicit] : ['/usr/bin', '/opt/homebrew/bin', '/usr/local/mysql/bin', '/usr/local/bin',
+        ...[18, 17, 16, 15].map(v => `/opt/homebrew/opt/postgresql@${v}/bin`)].map(dir => path.join(dir, name));
+    for (const candidate of candidates) {
+        try {const real = fs.realpathSync(candidate); if (!fs.statSync(real).isFile()) continue; fs.accessSync(real, fs.constants.X_OK); return real;}
+        catch {if (explicit) throw new Error('Configured database client is unavailable.');}
+    }
+    throw new Error(`Trusted ${name} client unavailable; configure ${flags[name]} with an absolute path.`);
+};
+
 type iDatabaseConnection = {
     host: string;
     port: string;
@@ -21,11 +56,14 @@ type iDatabaseConnection = {
     pass: string;
 };
 
+type tDatabaseDialect = 'mysql' | 'postgresql';
+
 type iScopedDatabaseAliasDefinition = {
     DATABASE_KEY: string;
     DATABASE_NAME: string;
     DATABASE_KEY_IDENTIFIER: string;
     DATABASE_KEY_PASCAL_CASE: string;
+    DIALECT: tDatabaseDialect;
 };
 
 type iScopedDatabaseDefinition = iScopedDatabaseAliasDefinition & {
@@ -41,6 +79,7 @@ type iGeneratorDatabaseConfigEntry = {
     passEnv?: string;
     dbname?: string;
     dbnames?: string[];
+    dialect?: tDatabaseDialect;
 };
 
 type iGeneratorConfig = {
@@ -54,6 +93,23 @@ type iGeneratorConfig = {
     react?: string;
     primaryAlias?: string;
 };
+
+type iSchemaColumnMetadata = {
+    TABLE_NAME: string;
+    TABLE_TYPE: string;
+    COLUMN_NAME: string;
+    DATA_TYPE: string;
+    COLUMN_TYPE: string;
+    IS_NULLABLE: string;
+    EXTRA: string;
+};
+
+type iSchemaTableMetadata = {
+    TABLE_TYPE: string;
+    COLUMNS: iSchemaColumnMetadata[];
+};
+
+type iSchemaMetadata = Record<string, iSchemaTableMetadata>;
 
 const sanitizeIdentifier = (value: string): string => {
     const normalized = value
@@ -69,6 +125,16 @@ const toPascalCaseFromIdentifier = (identifier: string): string =>
         .filter(Boolean)
         .map(capitalizeFirstLetter)
         .join("_") || "Db";
+
+const toConstantIdentifier = (value: string): string => {
+    const normalized = value
+        .toUpperCase()
+        .replace(/[^A-Z0-9_]/g, "_")
+        .replace(/_+/g, "_")
+        .replace(/^([^A-Z_])/, "_$1");
+
+    return normalized.length > 0 ? normalized : "COLUMN";
+};
 
 const createDirIfNotExists = dir =>
     !fs.existsSync(dir) ? fs.mkdirSync(dir, {recursive: true}) : undefined;
@@ -115,6 +181,15 @@ const parseConfigDbNames = (entry: iGeneratorDatabaseConfigEntry): string[] => {
     throw new Error(`Database alias '${entry.alias}' must provide 'dbname' or a non-empty 'dbnames' array.`);
 };
 
+const parseConfigDialect = (entry: iGeneratorDatabaseConfigEntry): tDatabaseDialect => {
+    const raw = String(entry.dialect ?? 'mysql').trim().toLowerCase();
+    if (raw === 'mysql' || raw === 'postgresql') {
+        return raw;
+    }
+
+    throw new Error(`Database alias '${entry.alias}' has unsupported dialect '${entry.dialect}'. Use 'mysql' or 'postgresql'.`);
+};
+
 const aliasForConfigDbName = (
     baseAlias: string,
     dbName: string,
@@ -137,9 +212,10 @@ const buildScopedDefinitionsFromConfig = (
     const scopedDefinitions: iScopedDatabaseDefinition[] = [];
     for (const entry of config.databases) {
         const baseAlias = ensureString(entry.alias, "databases[].alias");
+        const dialect = parseConfigDialect(entry);
         const host = ensureString(entry.host, `databases[${baseAlias}].host`);
         const user = ensureString(entry.user, `databases[${baseAlias}].user`);
-        const port = String(entry.port ?? "3306").trim();
+        const port = String(entry.port ?? (dialect === 'postgresql' ? "5432" : "3306")).trim();
         if (port.length === 0) {
             throw new Error(`databases[${baseAlias}].port must be non-empty when provided.`);
         }
@@ -154,6 +230,7 @@ const buildScopedDefinitionsFromConfig = (
                 DATABASE_NAME: dbName,
                 DATABASE_KEY_IDENTIFIER: aliasIdentifier,
                 DATABASE_KEY_PASCAL_CASE: toPascalCaseFromIdentifier(aliasIdentifier),
+                DIALECT: dialect,
                 CONNECTION: {
                     host,
                     port,
@@ -186,6 +263,7 @@ const buildScopedDefinitionsFromConfig = (
 const CONFIG_DISCOVERY_NAMES = [
     ".C6.ts",
     ".C6.json",
+    "C6.config.local.json",
     "C6.config.ts",
     "C6.config.json",
 ];
@@ -224,15 +302,21 @@ const buildConfigInteractively = async (): Promise<iGeneratorConfig> => {
     });
 
     try {
-        console.log("[generateRestBindings] No config found. Let's create C6.config.json.");
+        console.log("[generateRestBindings] No config found. Let's create a secret-free C6.config.local.json.");
         const databases: iGeneratorDatabaseConfigEntry[] = [];
 
         while (true) {
             const alias = ensureString(await askQuestion(rl, "Database alias (e.g. app): "), "alias");
+            const dialect = parseConfigDialect({
+                alias,
+                dialect: (await askQuestion(rl, "Dialect (mysql/postgresql, default mysql): ")) || "mysql",
+            } as iGeneratorDatabaseConfigEntry);
             const host = ensureString(await askQuestion(rl, "Host (e.g. 127.0.0.1): "), "host");
-            const port = (await askQuestion(rl, "Port (default 3306): ")) || "3306";
+            const defaultPort = dialect === "postgresql" ? "5432" : "3306";
+            const port = (await askQuestion(rl, `Port (default ${defaultPort}): `)) || defaultPort;
             const user = ensureString(await askQuestion(rl, "User: "), "user");
-            const pass = ensureString(await askQuestion(rl, "Password: "), "pass");
+            const passEnv = (await askQuestion(rl, "Password environment variable (default C6_DB_PASSWORD): ")) || 'C6_DB_PASSWORD';
+            if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(passEnv)) throw new Error('Invalid password environment variable name.');
             const dbnamesRaw = ensureString(
                 await askQuestion(rl, "Schema names (comma-separated, e.g. app,billing): "),
                 "dbnames",
@@ -240,10 +324,11 @@ const buildConfigInteractively = async (): Promise<iGeneratorConfig> => {
 
             databases.push({
                 alias,
+                dialect,
                 host,
                 port,
                 user,
-                pass,
+                passEnv,
                 dbnames: dbnamesRaw.split(",").map((name) => name.trim()).filter(Boolean),
             });
 
@@ -338,12 +423,13 @@ class MySQLDump {
         cnfTag: string = '',
     ) {
 
+        const optionValue = (value: string) => JSON.stringify(String(value));
         const cnf = [
             '[client]',
-            `user = ${connection.user}`,
-            `password = ${connection.pass}`,
-            `host = ${connection.host}`,
-            `port = ${connection.port}`,
+            `user = ${optionValue(connection.user)}`,
+            `password = ${optionValue(connection.pass)}`,
+            `host = ${optionValue(connection.host)}`,
+            `port = ${optionValue(connection.port)}`,
             '',
         ];
 
@@ -351,16 +437,17 @@ class MySQLDump {
 
         if ('' === cnfFile) {
 
-            const suffix = cnfTag ? `.${sanitizeIdentifier(cnfTag)}` : '';
-            cnfFile = path.join(this.OUTPUT_DIR, `C6${suffix}.mysql.cnf`);
+            const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'carbonnode-mysql-'));
+            credentialDirs.push(directory);
+            cnfFile = path.join(directory, 'client.cnf');
 
         }
 
         try {
 
-            fs.writeFileSync(cnfFile, cnf.join('\n'));
+            fs.writeFileSync(cnfFile, cnf.join('\n'), {mode: 0o600});
 
-            fs.chmodSync(cnfFile, 0o750);
+            fs.chmodSync(cnfFile, 0o600);
 
             console.log(`Successfully created C6.mysql.cnf file in (${cnfFile})`);
 
@@ -402,60 +489,274 @@ class MySQLDump {
             console.warn("MysqlDump is running with --no-create-info and --no-data. Why?");
         }
 
+        if (noDatabase()) {
+            if (!fs.existsSync(outputFile)) throw new Error(`Missing offline dump at ${outputFile}.`);
+            return (this.mysqldump = outputFile);
+        }
         const defaultsExtraFile = this.buildCNF(connection, "", cnfTag);
-
-        const hexBlobOption = data ? '--hex-blob ' : '--no-data ';
-
-        const createInfoOption = schemas ? '' : ' --no-create-info ';
-
         const tempOutputFile = `${outputFile}.tmp`;
-        const cmd = `${mysqldump} --defaults-extra-file="${defaultsExtraFile}" ${otherOption} --set-gtid-purged="OFF" --skip-add-locks --lock-tables=false --single-transaction --quick ${createInfoOption}${hexBlobOption}${databaseName} ${specificTable} > '${tempOutputFile}'`;
-
-        const succeeded = this.executeAndCheckStatus(cmd, false);
-        if (succeeded && fs.existsSync(tempOutputFile)) {
-            fs.renameSync(tempOutputFile, outputFile);
-        } else if (fs.existsSync(tempOutputFile)) {
-            fs.unlinkSync(tempOutputFile);
+        let succeeded = false;
+        let outputFd: number | undefined;
+        try {
+            outputFd = fs.openSync(tempOutputFile, 'w', 0o600);
+            const dumpClient = clientPath(mysqldump);
+            const mariaDB = /mariadb/i.test(execFileSync(dumpClient, ['--version'], {encoding: 'utf8', env: clientEnvironment()}));
+            execFileSync(dumpClient, [
+                `--defaults-extra-file=${defaultsExtraFile}`,
+                ...otherOption.split(/\s+/).filter(Boolean),
+                ...(mariaDB ? [] : ['--set-gtid-purged=OFF']), '--skip-add-locks', '--lock-tables=false',
+                '--single-transaction', '--quick',
+                ...(schemas ? [] : ['--no-create-info']),
+                data ? '--hex-blob' : '--no-data', '--', databaseName,
+                ...(specificTable ? [specificTable] : []),
+            ], {stdio: ['ignore', outputFd, 'pipe'], env: clientEnvironment()});
+            succeeded = true;
+        } catch {
+            console.warn('[generateRestBindings] mysqldump failed.');
+        } finally {
+            if (outputFd !== undefined) fs.closeSync(outputFd);
+            fs.rmSync(defaultsExtraFile, {force: true});
         }
+        if (succeeded) fs.renameSync(tempOutputFile, outputFile);
+        else fs.rmSync(tempOutputFile, {force: true});
 
-        if (!succeeded && fs.existsSync(outputFile)) {
-            console.warn(`[generateRestBindings] mysqldump for '${databaseName}' failed. Reusing existing dump file at ${outputFile}.`);
-        }
-
-        if (!fs.existsSync(outputFile)) {
-            console.warn(`[generateRestBindings] mysqldump output not found at ${outputFile}. If running in CI/no-DB environment, ensure a prebuilt dump file exists at this path.`);
-        }
+        if (!succeeded) throw new Error('Online MySQL schema acquisition failed. Use explicit --no-db only for a verified offline dump.');
 
         return (this.mysqldump = outputFile);
 
     }
 
-    static executeAndCheckStatus(command: string, exitOnFailure = true, output: any[] = []): boolean {
+    static LoadInformationSchema(
+        databaseName: string = this.DB_NAME,
+        connection: iDatabaseConnection = {
+            user: this.DB_USER,
+            pass: this.DB_PASS,
+            host: this.DB_HOST,
+            port: this.DB_PORT,
+        },
+        cnfTag: string = "",
+    ): iSchemaMetadata {
+        if (noDatabase()) return {};
+        const defaultsExtraFile = this.buildCNF(connection, "", cnfTag);
+        const escapedDatabaseName = databaseName.replace(/\\/g, "\\\\").replace(/'/g, "''");
+        const query = `
+            SELECT
+                c.TABLE_NAME,
+                t.TABLE_TYPE,
+                c.COLUMN_NAME,
+                c.DATA_TYPE,
+                c.COLUMN_TYPE,
+                c.IS_NULLABLE,
+                c.EXTRA
+            FROM information_schema.COLUMNS c
+            JOIN information_schema.TABLES t
+                ON t.TABLE_SCHEMA = c.TABLE_SCHEMA
+                AND t.TABLE_NAME = c.TABLE_NAME
+            WHERE c.TABLE_SCHEMA = '${escapedDatabaseName}'
+            ORDER BY c.TABLE_NAME, c.ORDINAL_POSITION
+        `;
 
         try {
+            const stdout = execFileSync(
+                clientPath('mysql'),
+                [
+                    `--defaults-extra-file=${defaultsExtraFile}`,
+                    "--batch",
+                    "--raw",
+                    "--skip-column-names",
+                    "-e",
+                    query,
+                ],
+                {encoding: "utf-8", env: clientEnvironment()},
+            );
 
-            const stdout = execSync(command, {encoding: 'utf-8'});
+            const schemaMetadata: iSchemaMetadata = {};
+            for (const line of stdout.split(/\r?\n/)) {
+                if (!line.trim()) continue;
+                const [
+                    tableName,
+                    tableType,
+                    columnName,
+                    dataType,
+                    columnType,
+                    isNullable,
+                    extra,
+                ] = line.split("\t");
 
-            output.push(stdout);
+                if (!tableName || !columnName) continue;
 
-            return true;
+                if (!schemaMetadata[tableName]) {
+                    schemaMetadata[tableName] = {
+                        TABLE_TYPE: tableType || "BASE TABLE",
+                        COLUMNS: [],
+                    };
+                }
 
-        } catch (e) {
-
-            console.log(`Command output::`, e);
-
-            if (exitOnFailure) {
-
-                process.exit(1);
-
+                schemaMetadata[tableName].COLUMNS.push({
+                    TABLE_NAME: tableName,
+                    TABLE_TYPE: tableType || "BASE TABLE",
+                    COLUMN_NAME: columnName,
+                    DATA_TYPE: dataType || "",
+                    COLUMN_TYPE: columnType || dataType || "",
+                    IS_NULLABLE: isNullable || "YES",
+                    EXTRA: extra || "",
+                });
             }
 
-            return false;
-
+            return schemaMetadata;
+        } catch (error) {
+            throw new Error('Online MySQL metadata acquisition failed.');
         }
 
     }
 
+}
+
+class PostgreSQLDump {
+    static PgDump(
+        pgDump: string = 'pg_dump',
+        outputFile = '',
+        databaseName: string = MySQLDump.DB_NAME,
+        connection: iDatabaseConnection = {
+            user: MySQLDump.DB_USER,
+            pass: MySQLDump.DB_PASS,
+            host: MySQLDump.DB_HOST,
+            port: MySQLDump.DB_PORT,
+        },
+    ) {
+        if (outputFile === '') {
+            outputFile = path.join(MySQLDump.OUTPUT_DIR, 'C6.pg_dump.sql');
+        }
+
+        if (noDatabase()) {
+            if (!fs.existsSync(outputFile)) throw new Error(`Missing offline dump at ${outputFile}.`);
+            return outputFile;
+        }
+        const tempOutputFile = `${outputFile}.tmp`;
+        const env = {
+            ...process.env,
+            PGPASSWORD: connection.pass,
+        };
+
+        try {
+            const args = [
+                '--schema-only',
+                '--no-owner',
+                '--no-privileges',
+                '--host', connection.host,
+                '--port', connection.port,
+                '--username', connection.user,
+                '--dbname', databaseName,
+                '--file', tempOutputFile,
+            ];
+            execFileSync(clientPath(pgDump), args, {encoding: 'utf-8', env: {...env, PATH: clientEnvironment().PATH}});
+            if (!fs.existsSync(tempOutputFile)) throw new Error('PostgreSQL dump client did not produce output.');
+            if (fs.existsSync(tempOutputFile)) {
+                fs.renameSync(tempOutputFile, outputFile);
+            }
+        } catch (error) {
+            if (fs.existsSync(tempOutputFile)) {
+                fs.unlinkSync(tempOutputFile);
+            }
+            throw new Error('Online PostgreSQL schema acquisition failed. Use explicit --no-db only for a verified offline dump.');
+        }
+
+        return outputFile;
+    }
+
+    static LoadInformationSchema(
+        databaseName: string = MySQLDump.DB_NAME,
+        connection: iDatabaseConnection = {
+            user: MySQLDump.DB_USER,
+            pass: MySQLDump.DB_PASS,
+            host: MySQLDump.DB_HOST,
+            port: MySQLDump.DB_PORT,
+        },
+    ): iSchemaMetadata {
+        if (noDatabase()) return {};
+        const query = `
+            SELECT
+                c.table_name,
+                CASE WHEN t.table_type = 'VIEW' THEN 'VIEW' ELSE 'BASE TABLE' END AS table_type,
+                c.column_name,
+                c.data_type,
+                COALESCE(c.udt_name, c.data_type) AS column_type,
+                c.is_nullable,
+                CASE
+                    WHEN c.is_identity = 'YES' THEN 'auto_increment'
+                    WHEN c.column_default LIKE 'nextval(%' THEN 'auto_increment'
+                    ELSE ''
+                END AS extra
+            FROM information_schema.columns c
+            JOIN information_schema.tables t
+                ON t.table_schema = c.table_schema
+                AND t.table_name = c.table_name
+            WHERE c.table_schema = 'public'
+            ORDER BY c.table_name, c.ordinal_position
+        `;
+
+        try {
+            const stdout = execFileSync(
+                clientPath('psql'),
+                [
+                    '--host', connection.host,
+                    '--port', connection.port,
+                    '--username', connection.user,
+                    '--dbname', databaseName,
+                    '--no-psqlrc',
+                    '--no-password',
+                    '--tuples-only',
+                    '--no-align',
+                    '--field-separator', '\t',
+                    '--command', query,
+                ],
+                {
+                    encoding: 'utf-8',
+                    env: {
+                        ...clientEnvironment(),
+                        PGPASSWORD: connection.pass,
+                    },
+                },
+            );
+
+            const schemaMetadata: iSchemaMetadata = {};
+            for (const line of stdout.split(/\r?\n/)) {
+                if (!line.trim()) continue;
+                const [
+                    tableName,
+                    tableType,
+                    columnName,
+                    dataType,
+                    columnType,
+                    isNullable,
+                    extra,
+                ] = line.split('\t');
+
+                if (!tableName || !columnName) continue;
+
+                if (!schemaMetadata[tableName]) {
+                    schemaMetadata[tableName] = {
+                        TABLE_TYPE: tableType || 'BASE TABLE',
+                        COLUMNS: [],
+                    };
+                }
+
+                schemaMetadata[tableName].COLUMNS.push({
+                    TABLE_NAME: tableName,
+                    TABLE_TYPE: tableType || 'BASE TABLE',
+                    COLUMN_NAME: columnName,
+                    DATA_TYPE: dataType || '',
+                    COLUMN_TYPE: columnType || dataType || '',
+                    IS_NULLABLE: isNullable || 'YES',
+                    EXTRA: extra || '',
+                });
+            }
+
+            return schemaMetadata;
+        } catch (error) {
+            throw new Error('Online PostgreSQL metadata acquisition failed.');
+        }
+    }
 }
 
 let pathRuntimeReference = '';
@@ -503,11 +804,13 @@ function determineTypeScriptType(mysqlType: string, enumValues?: string[]): stri
         // String & Temporal
         case 'char':
         case 'varchar':
+        case 'character':
         case 'text':
         case 'tinytext':
         case 'mediumtext':
         case 'longtext':
         case 'set':
+        case 'uuid':
             return 'string';
 
         // Numeric
@@ -516,6 +819,8 @@ function determineTypeScriptType(mysqlType: string, enumValues?: string[]): stri
         case 'mediumint':
         case 'int':
         case 'integer':
+        case 'serial':
+        case 'bigserial':
         case 'bigint':
         case 'decimal':
         case 'dec':
@@ -532,6 +837,7 @@ function determineTypeScriptType(mysqlType: string, enumValues?: string[]): stri
 
         // JSON
         case 'json':
+        case 'jsonb':
             return 'any';
 
         // GeoJSON
@@ -566,14 +872,26 @@ function determineTypeScriptType(mysqlType: string, enumValues?: string[]): stri
     }
 }
 
-const parseSQLToTypeScript = (sql: string) => {
+const parseSQLToTypeScript = (sql: string, schemaMetadata: iSchemaMetadata = {}) => {
 
     const tableMatches = sql.matchAll(/CREATE\s+TABLE\s+`?(\w+)`?\s+\(((.|\n)+?)\)\s*(ENGINE=.+?);/gm);
+
+    type TriggerMetadata = {
+        TRIGGER_NAME: string;
+        EVENT_MANIPULATION: 'INSERT' | 'UPDATE' | 'DELETE';
+        ACTION_TIMING: 'BEFORE' | 'AFTER';
+        EVENT_OBJECT_TABLE: string;
+        ACTION_STATEMENT: string;
+        CREATE_STATEMENT: string;
+        DEFINER: string | null;
+    };
 
     let tableData: {
         [TableName: string]: {
             RELATIVE_OUTPUT_DIR: string,
             TABLE_NAME: string,
+            RELATION_TYPE: 'TABLE' | 'VIEW',
+            READ_ONLY: boolean,
             TABLE_DEFINITION: string,
             TABLE_CONSTRAINT: {},
             TABLE_NAME_SHORT: string,
@@ -589,11 +907,230 @@ const parseSQLToTypeScript = (sql: string) => {
             COLUMNS_UPPERCASE: {},
             TYPE_VALIDATION: {},
             REGEX_VALIDATION: {},
+            TRIGGERS?: TriggerMetadata[],
             HAS_GEOJSON_TYPES?: boolean,
         }
     } = {};
 
     let references: foreignKeyInfo[] = [];
+
+    const sanitizeSqlForGeneratedComment = (value: string): string =>
+        value.replace(/\*\//g, '* /').trim();
+
+    const unwrapMysqlExecutableComments = (value: string): string =>
+        value.replace(/\/\*!\d{5}\s+([\s\S]*?)\*\//g, (_match, body) => {
+            return body.trim();
+        });
+
+    const normalizeTriggerStatementTerminator = (value: string): string => {
+        const trimmed = value.trim().replace(/\s*(?:\/\/|;;)\s*$/g, '');
+        return trimmed.endsWith(';') ? trimmed : `${trimmed};`;
+    };
+
+    const findMysqlTriggerStatementEnd = (normalizedSql: string, actionStart: number): number => {
+        const actionRemainder = normalizedSql.slice(actionStart);
+        const firstToken = actionRemainder.match(/^\s*(\w+)/)?.[1]?.toUpperCase() ?? '';
+
+        if (firstToken === 'BEGIN') {
+            const endRegex = /\bEND\s*(?:;;|\/\/|;)/gi;
+            endRegex.lastIndex = actionStart;
+            const endMatch = endRegex.exec(normalizedSql);
+            if (endMatch) {
+                return endMatch.index + endMatch[0].length;
+            }
+        }
+
+        const semicolonIndex = normalizedSql.indexOf(';', actionStart);
+        return semicolonIndex === -1 ? normalizedSql.length : semicolonIndex + 1;
+    };
+
+    const extractMysqlTriggers = (rawSql: string): TriggerMetadata[] => {
+        const normalizedSql = unwrapMysqlExecutableComments(rawSql)
+            .replace(/^\s*DELIMITER\s+\S+\s*$/gim, '');
+        const triggerRegex = /CREATE\s+(?:DEFINER\s*=\s*((?:`[^`]+`|'[^']+'|"[^"]+"|[^\s]+)(?:\s*@\s*(?:`[^`]+`|'[^']+'|"[^"]+"|[^\s]+))?)\s+)?TRIGGER\s+`?([^`\s]+)`?\s+(BEFORE|AFTER)\s+(INSERT|UPDATE|DELETE)\s+ON\s+`?([^`\s]+)`?\s+FOR\s+EACH\s+ROW\s+/gi;
+        const triggers: TriggerMetadata[] = [];
+        let triggerMatch: RegExpExecArray | null;
+
+        while ((triggerMatch = triggerRegex.exec(normalizedSql))) {
+            const statementStart = triggerMatch.index;
+            const actionStart = triggerRegex.lastIndex;
+            const statementEnd = findMysqlTriggerStatementEnd(normalizedSql, actionStart);
+            const createStatement = normalizeTriggerStatementTerminator(
+                normalizedSql.slice(statementStart, statementEnd),
+            );
+            const actionStatement = normalizedSql
+                .slice(actionStart, statementEnd)
+                .trim()
+                .replace(/\s*(?:\/\/|;;|;)\s*$/g, '');
+
+            triggers.push({
+                TRIGGER_NAME: triggerMatch[2],
+                ACTION_TIMING: triggerMatch[3].toUpperCase() as 'BEFORE' | 'AFTER',
+                EVENT_MANIPULATION: triggerMatch[4].toUpperCase() as 'INSERT' | 'UPDATE' | 'DELETE',
+                EVENT_OBJECT_TABLE: triggerMatch[5],
+                ACTION_STATEMENT: actionStatement,
+                CREATE_STATEMENT: sanitizeSqlForGeneratedComment(createStatement),
+                DEFINER: triggerMatch[1]?.replace(/\s*@\s*/g, '@') ?? null,
+            });
+
+            triggerRegex.lastIndex = statementEnd;
+        }
+
+        return triggers;
+    };
+
+    const triggersByTable = extractMysqlTriggers(sql).reduce((byTable, trigger) => {
+        const tableTriggers = byTable.get(trigger.EVENT_OBJECT_TABLE) ?? [];
+        tableTriggers.push(trigger);
+        byTable.set(trigger.EVENT_OBJECT_TABLE, tableTriggers);
+        return byTable;
+    }, new Map<string, TriggerMetadata[]>());
+
+    const normalizeSqlIdentifier = (identifier: string): string =>
+        identifier.trim().replace(/^["`]|["`]$/g, '');
+
+    const normalizeQualifiedSqlIdentifier = (identifier: string): string => {
+        const parts = identifier
+            .split('.')
+            .map(part => normalizeSqlIdentifier(part))
+            .filter(Boolean);
+
+        return parts[parts.length - 1] || normalizeSqlIdentifier(identifier);
+    };
+
+    const normalizeSqlIdentifierList = (identifierList: string): string[] =>
+        identifierList
+            .split(',')
+            .map(identifier => normalizeQualifiedSqlIdentifier(identifier.trim()))
+            .filter(Boolean);
+
+    const splitSqlDefinitionList = (definitionList: string): string[] => {
+        const definitions: string[] = [];
+        let current = '';
+        let depth = 0;
+        let quote: string | null = null;
+
+        for (let i = 0; i < definitionList.length; i++) {
+            const char = definitionList[i];
+            const previous = definitionList[i - 1];
+
+            if ((char === "'" || char === '"') && previous !== '\\') {
+                quote = quote === char ? null : quote ?? char;
+            }
+
+            if (!quote) {
+                if (char === '(') depth++;
+                if (char === ')') depth = Math.max(0, depth - 1);
+                if (char === ',' && depth === 0) {
+                    if (current.trim()) definitions.push(current.trim());
+                    current = '';
+                    continue;
+                }
+            }
+
+            current += char;
+        }
+
+        if (current.trim()) definitions.push(current.trim());
+        return definitions;
+    };
+
+    const normalizePostgresColumnType = (rawType: string): { type: string; length: string } => {
+        const cleanedType = rawType
+            .replace(/\s+COLLATE\s+("[^"]+"|\S+)/i, '')
+            .trim();
+        const lengthMatch = cleanedType.match(/\(([^)]+)\)/);
+        const length = lengthMatch ? lengthMatch[1] : '';
+        const withoutLength = cleanedType.replace(/\(.+?\)/, '').toLowerCase().replace(/\s+/g, ' ').trim();
+
+        if (withoutLength === 'character varying') return { type: 'varchar', length };
+        if (withoutLength === 'character') return { type: 'char', length };
+        if (withoutLength === 'timestamp without time zone' || withoutLength === 'timestamp with time zone') return { type: 'timestamp', length };
+        if (withoutLength === 'time without time zone' || withoutLength === 'time with time zone') return { type: 'time', length };
+        if (withoutLength === 'double precision') return { type: 'double', length };
+        if (withoutLength === 'integer') return { type: 'int', length };
+
+        return {
+            type: withoutLength.split(' ')[0] || 'text',
+            length,
+        };
+    };
+
+    const postgresPrimaryKeysByTable = new Map<string, string[]>();
+    const rememberPostgresPrimaryKeys = (tableName: string, columns: string[]) => {
+        if (columns.length > 0) {
+            postgresPrimaryKeysByTable.set(tableName, columns);
+        }
+    };
+
+    const postgresIdentityColumns = new Set<string>();
+    const postgresAlterIdentityRegex = /ALTER\s+TABLE\s+(?:ONLY\s+)?((?:"[^"]+"|[A-Za-z_][A-Za-z0-9_$]*)(?:\.(?:"[^"]+"|[A-Za-z_][A-Za-z0-9_$]*))?)\s+ALTER\s+COLUMN\s+("[^"]+"|[A-Za-z_][A-Za-z0-9_$]*)\s+ADD\s+GENERATED\s+(?:ALWAYS|BY\s+DEFAULT)\s+AS\s+IDENTITY/gim;
+    let postgresAlterIdentityMatch: RegExpExecArray | null;
+    while ((postgresAlterIdentityMatch = postgresAlterIdentityRegex.exec(sql))) {
+        postgresIdentityColumns.add(
+            `${normalizeQualifiedSqlIdentifier(postgresAlterIdentityMatch[1])}.${normalizeSqlIdentifier(postgresAlterIdentityMatch[2])}`,
+        );
+    }
+
+    const postgresAlterPrimaryKeyRegex = /ALTER\s+TABLE\s+(?:ONLY\s+)?((?:"[^"]+"|[A-Za-z_][A-Za-z0-9_$]*)(?:\.(?:"[^"]+"|[A-Za-z_][A-Za-z0-9_$]*))?)\s+ADD\s+CONSTRAINT\s+(?:"[^"]+"|[A-Za-z_][A-Za-z0-9_$]*)\s+PRIMARY\s+KEY\s*\(([^)]+)\)/gim;
+    let postgresAlterPrimaryKeyMatch: RegExpExecArray | null;
+    while ((postgresAlterPrimaryKeyMatch = postgresAlterPrimaryKeyRegex.exec(sql))) {
+        rememberPostgresPrimaryKeys(
+            normalizeQualifiedSqlIdentifier(postgresAlterPrimaryKeyMatch[1]),
+            normalizeSqlIdentifierList(postgresAlterPrimaryKeyMatch[2]),
+        );
+    }
+
+    const postgresAlterForeignKeyRegex = /ALTER\s+TABLE\s+(?:ONLY\s+)?((?:"[^"]+"|[A-Za-z_][A-Za-z0-9_$]*)(?:\.(?:"[^"]+"|[A-Za-z_][A-Za-z0-9_$]*))?)\s+ADD\s+CONSTRAINT\s+("[^"]+"|[A-Za-z_][A-Za-z0-9_$]*)\s+FOREIGN\s+KEY\s*\(([^)]+)\)\s+REFERENCES\s+((?:"[^"]+"|[A-Za-z_][A-Za-z0-9_$]*)(?:\.(?:"[^"]+"|[A-Za-z_][A-Za-z0-9_$]*))?)\s*\(([^)]+)\)(?:\s+ON\s+DELETE\s+([A-Z ]+?))?(?:\s+ON\s+UPDATE\s+([A-Z ]+?))?(?:;|\s+NOT\s+VALID|\s*$)/gim;
+    let postgresAlterForeignKeyMatch: RegExpExecArray | null;
+    while ((postgresAlterForeignKeyMatch = postgresAlterForeignKeyRegex.exec(sql))) {
+        const localColumns = normalizeSqlIdentifierList(postgresAlterForeignKeyMatch[3]);
+        const foreignColumns = normalizeSqlIdentifierList(postgresAlterForeignKeyMatch[5]);
+
+        localColumns.forEach((localColumn, index) => {
+            references.push({
+                TABLE: normalizeQualifiedSqlIdentifier(postgresAlterForeignKeyMatch![1]),
+                CONSTRAINT: normalizeSqlIdentifier(postgresAlterForeignKeyMatch![2]),
+                FOREIGN_KEY: localColumn,
+                REFERENCES: `${normalizeQualifiedSqlIdentifier(postgresAlterForeignKeyMatch![4])}.${foreignColumns[index] ?? foreignColumns[0]}`,
+                ON_DELETE: postgresAlterForeignKeyMatch![6]?.trim() || '',
+                ON_UPDATE: postgresAlterForeignKeyMatch![7]?.trim() || '',
+            });
+        });
+    }
+
+    const columnInfoFromMetadata = (column: iSchemaColumnMetadata) => {
+        const fullType = (column.COLUMN_TYPE || column.DATA_TYPE || 'text').trim();
+        const enumMatch = /^enum\((.+)\)$/i.exec(fullType);
+        const enumValues = enumMatch
+            ? enumMatch[1]
+                .split(/,(?=(?:[^']*'[^']*')*[^']*$)/)
+                .map(s => s.trim().replace(/^'(.*)'$/, '$1'))
+            : null;
+        const type = fullType.replace(/\(.+?\)/, '').split(' ')[0].toLowerCase();
+        const lengthMatch = fullType.match(/\(([^)]+)\)/);
+        const length = lengthMatch ? lengthMatch[1] : '';
+
+        return {
+            type,
+            length,
+            srid: null,
+            enumValues,
+            notNull: column.IS_NULLABLE.toUpperCase() === 'NO',
+            autoIncrement: column.EXTRA.toLowerCase().includes('auto_increment'),
+            defaultValue: '',
+        };
+    };
+
+    const fallbackColumnInfo = () => ({
+        type: 'text',
+        length: '',
+        srid: null,
+        enumValues: null,
+        notNull: false,
+        autoIncrement: false,
+        defaultValue: '',
+    });
 
     // @ts-ignore
     for (const tableMatch of tableMatches) {
@@ -693,9 +1230,11 @@ const parseSQLToTypeScript = (sql: string) => {
         const tsModel = {
             RELATIVE_OUTPUT_DIR: pathRuntimeReference,
             TABLE_NAME: tableName,
+            RELATION_TYPE: 'TABLE' as const,
+            READ_ONLY: false,
             TABLE_DEFINITION: tableMatch[0].replace(/\/\*!([0-9]{5}) ([^*]+)\*\//g, (_match, _version, body) => {
                 return `/!* ${body.trim()} *!/`;
-            }),
+            }).replace(/\*\//g, '* /'),
             TABLE_CONSTRAINT: references,
             REST_URL_EXPRESSION: argMap['--restUrlExpression'] || '"/rest/"',
             TABLE_NAME_SHORT: tableName.replace(MySQLDump.DB_PREFIX, ''),
@@ -713,6 +1252,10 @@ const parseSQLToTypeScript = (sql: string) => {
             TABLE_REFERENCES: {},
             TABLE_REFERENCED_BY: {},
             HAS_GEOJSON_TYPES: false,
+            TRIGGERS: (triggersByTable.get(tableName) ?? []).map(trigger =>
+                argMap['--includeTriggerDefinitions'] === '1' ? trigger : {
+                    ...trigger, ACTION_STATEMENT: '', CREATE_STATEMENT: '', DEFINER: null,
+                }),
             REACT_IMPORT: REACT_IMPORT,
             CARBON_REACT_INSTANCE: CARBON_REACT_INSTANCE,
         };
@@ -721,7 +1264,7 @@ const parseSQLToTypeScript = (sql: string) => {
 
             tsModel.COLUMNS[`${tableName}.${colName}`] = colName;
 
-            tsModel.COLUMNS_UPPERCASE[colName.toUpperCase()] = tableName + '.' + colName;
+            tsModel.COLUMNS_UPPERCASE[toConstantIdentifier(colName)] = tableName + '.' + colName;
 
             const typescript_type = determineTypeScriptType(columns[colName].type.toLowerCase(), columns[colName].enumValues)
 
@@ -745,6 +1288,227 @@ const parseSQLToTypeScript = (sql: string) => {
 
         tableData[tableName] = tsModel;
 
+    }
+
+    const postgresTableMatches = sql.matchAll(/CREATE\s+TABLE\s+((?:"[^"]+"|[A-Za-z_][A-Za-z0-9_$]*)(?:\.(?:"[^"]+"|[A-Za-z_][A-Za-z0-9_$]*))?)\s*\(([\s\S]*?)\);/gim);
+
+    for (const tableMatch of postgresTableMatches) {
+        const tableName = normalizeQualifiedSqlIdentifier(tableMatch[1]);
+        if (tableData[tableName]) continue;
+
+        const columnDefinitions = tableMatch[2];
+        const columns = {};
+
+        for (const line of splitSqlDefinitionList(columnDefinitions)) {
+            if (/^(CONSTRAINT|PRIMARY\s+KEY|FOREIGN\s+KEY|UNIQUE|CHECK|EXCLUDE)\b/i.test(line)) {
+                const inlinePrimaryKeyMatch = line.match(/PRIMARY\s+KEY\s*\(([^)]+)\)/i);
+                if (inlinePrimaryKeyMatch) {
+                    rememberPostgresPrimaryKeys(tableName, normalizeSqlIdentifierList(inlinePrimaryKeyMatch[1]));
+                }
+                continue;
+            }
+
+            const match = line.match(/^\s*("[^"]+"|[A-Za-z_][A-Za-z0-9_$]*)\s+([\s\S]+?)\s*$/);
+            if (!match) continue;
+
+            const name = normalizeSqlIdentifier(match[1]);
+            const rest = match[2].replace(/,$/, '').trim();
+            const constraintMatch = rest.match(/\s+(?:CONSTRAINT\s+\S+\s+)?(?:NOT\s+NULL|NULL|DEFAULT\b|PRIMARY\s+KEY\b|REFERENCES\b|CHECK\b|GENERATED\b|COLLATE\b)/i);
+            const fullTypeRaw = (constraintMatch ? rest.slice(0, constraintMatch.index) : rest).trim();
+            const { type, length } = normalizePostgresColumnType(fullTypeRaw);
+            const defaultMatch = rest.match(/\bDEFAULT\s+((?:'[^']*')|(?:"[^"]*")|[^,\s]+(?:\([^)]*\))?)/i);
+
+            columns[name] = {
+                type,
+                length,
+                srid: null,
+                enumValues: null,
+                notNull: /\bNOT\s+NULL\b/i.test(rest) || /\bPRIMARY\s+KEY\b/i.test(rest),
+                autoIncrement: /^(?:serial|bigserial|smallserial)$/i.test(type)
+                    || /\bnextval\s*\(/i.test(rest)
+                    || /\bGENERATED\s+(?:ALWAYS|BY\s+DEFAULT)\s+AS\s+IDENTITY\b/i.test(rest)
+                    || postgresIdentityColumns.has(`${tableName}.${name}`),
+                defaultValue: defaultMatch ? defaultMatch[1] : '',
+            };
+
+            if (/\bPRIMARY\s+KEY\b/i.test(rest)) {
+                rememberPostgresPrimaryKeys(tableName, [name]);
+            }
+        }
+
+        const primaryKeys = postgresPrimaryKeysByTable.get(tableName) ?? [];
+        const primaryKeysType = primaryKeys.length > 0
+            ? primaryKeys.map(pk => `'${pk}'`).join(' | ')
+            : 'never';
+
+        let REACT_IMPORT: false | string = false, CARBON_REACT_INSTANCE: false | string = false;
+
+        if (argMap['--react']) {
+            const reactArgSplit = argMap['--react'].split(';')
+            if (reactArgSplit.length !== 2) {
+                console.error("React requires two arguments, the import and the carbon react instance statement. Example: --react 'import CustomCarbonReactApplication from \"src/CustomCarbonReactApplication.tsx\"; CustomCarbonReactApplication.instance'");
+                process.exit(1);
+            }
+            [REACT_IMPORT, CARBON_REACT_INSTANCE] = reactArgSplit;
+        }
+
+        const tsModel = {
+            RELATIVE_OUTPUT_DIR: pathRuntimeReference,
+            TABLE_NAME: tableName,
+            RELATION_TYPE: 'TABLE' as const,
+            READ_ONLY: false,
+            TABLE_DEFINITION: tableMatch[0].replace(/\*\//g, '* /'),
+            TABLE_CONSTRAINT: references,
+            REST_URL_EXPRESSION: argMap['--restUrlExpression'] || '"/rest/"',
+            TABLE_NAME_SHORT: tableName.replace(MySQLDump.DB_PREFIX, ''),
+            TABLE_NAME_LOWER: tableName.toLowerCase(),
+            TABLE_NAME_UPPER: tableName.toUpperCase(),
+            TABLE_NAME_PASCAL_CASE: tableName.split('_').map(capitalizeFirstLetter).join('_'),
+            TABLE_NAME_SHORT_PASCAL_CASE: tableName.replace(MySQLDump.DB_PREFIX, '').split('_').map(capitalizeFirstLetter).join('_'),
+            PRIMARY: primaryKeys.map(pk => `${tableName}.${pk}`),
+            PRIMARY_SHORT: primaryKeys,
+            PRIMARY_KEYS_TYPE: primaryKeysType,
+            COLUMNS: {},
+            COLUMNS_UPPERCASE: {},
+            TYPE_VALIDATION: {},
+            REGEX_VALIDATION: {},
+            TABLE_REFERENCES: {},
+            TABLE_REFERENCED_BY: {},
+            HAS_GEOJSON_TYPES: false,
+            TRIGGERS: [],
+            REACT_IMPORT: REACT_IMPORT,
+            CARBON_REACT_INSTANCE: CARBON_REACT_INSTANCE,
+        };
+
+        for (const colName in columns) {
+            tsModel.COLUMNS[`${tableName}.${colName}`] = colName;
+            tsModel.COLUMNS_UPPERCASE[toConstantIdentifier(colName)] = tableName + '.' + colName;
+
+            const typescript_type = determineTypeScriptType(columns[colName].type.toLowerCase(), columns[colName].enumValues);
+
+            if (typescript_type.includes('GeoJSON.')) {
+                tsModel.HAS_GEOJSON_TYPES = true;
+            }
+
+            tsModel.TYPE_VALIDATION[`${tableName}.${colName}`] = {
+                COLUMN_NAME: colName,
+                MYSQL_TYPE: columns[colName].type.toLowerCase(),
+                TYPESCRIPT_TYPE: typescript_type,
+                TYPESCRIPT_TYPE_IS_STRING: typescript_type === 'string' || typescript_type.includes("'"),
+                TYPESCRIPT_TYPE_IS_NUMBER: 'number' === typescript_type,
+                MAX_LENGTH: columns[colName].length,
+                AUTO_INCREMENT: columns[colName].autoIncrement,
+                NOT_NULL: columns[colName].notNull,
+                SKIP_COLUMN_IN_POST: !columns[colName].notNull && !columns[colName].defaultValue,
+            };
+        }
+
+        tableData[tableName] = tsModel;
+    }
+
+    const viewDefinitions = new Map<string, string>();
+    const viewColumnNamesFromDump = new Map<string, string[]>();
+    const tempViewRegex = /\/\*!50001\s+CREATE\s+VIEW\s+(?:`[^`]+`\.)?`?(\w+)`?\s+AS\s+SELECT\s+([\s\S]*?)\*\/;/gim;
+    const finalViewRegex = /\/\*!50001\s+VIEW\s+(?:`[^`]+`\.)?`?(\w+)`?\s+AS\s+([\s\S]*?)\s*\*\/;/gim;
+    let tempViewMatch: RegExpExecArray | null;
+
+    while ((tempViewMatch = tempViewRegex.exec(sql))) {
+        const viewName = tempViewMatch[1];
+        const selectDefinition = tempViewMatch[2];
+        const aliases = Array.from(selectDefinition.matchAll(/\bAS\s+`([^`]+)`/gi))
+            .map(match => match[1])
+            .filter(Boolean);
+
+        if (!viewColumnNamesFromDump.has(viewName)) {
+            viewColumnNamesFromDump.set(viewName, aliases);
+        }
+    }
+
+    let finalViewMatch: RegExpExecArray | null;
+    while ((finalViewMatch = finalViewRegex.exec(sql))) {
+        const viewName = finalViewMatch[1];
+        const selectDefinition = finalViewMatch[2].trim().replace(/;\s*$/, '');
+        viewDefinitions.set(viewName, `CREATE VIEW \`${viewName}\` AS ${selectDefinition};`);
+    }
+
+    const viewNames = new Set<string>([
+        ...Object.entries(schemaMetadata)
+            .filter(([, metadata]) => metadata.TABLE_TYPE.toUpperCase().includes('VIEW'))
+            .map(([tableName]) => tableName),
+        ...viewColumnNamesFromDump.keys(),
+        ...viewDefinitions.keys(),
+    ]);
+
+    for (const viewName of viewNames) {
+        if (tableData[viewName]) continue;
+
+        const metadataColumns = schemaMetadata[viewName]?.COLUMNS ?? [];
+        const dumpColumnNames = viewColumnNamesFromDump.get(viewName) ?? [];
+        const columns = metadataColumns.length > 0
+            ? Object.fromEntries(metadataColumns.map(column => [
+                column.COLUMN_NAME,
+                columnInfoFromMetadata(column),
+            ]))
+            : Object.fromEntries(dumpColumnNames.map(columnName => [
+                columnName,
+                fallbackColumnInfo(),
+            ]));
+
+        if (Object.keys(columns).length === 0) {
+            continue;
+        }
+
+        const tsModel = {
+            RELATIVE_OUTPUT_DIR: pathRuntimeReference,
+            TABLE_NAME: viewName,
+            RELATION_TYPE: 'VIEW' as const,
+            READ_ONLY: true,
+            TABLE_DEFINITION: (viewDefinitions.get(viewName) || `VIEW ${viewName}`).replace(/\*\//g, '* /'),
+            TABLE_CONSTRAINT: {},
+            REST_URL_EXPRESSION: argMap['--restUrlExpression'] || '"/rest/"',
+            TABLE_NAME_SHORT: viewName.replace(MySQLDump.DB_PREFIX, ''),
+            TABLE_NAME_LOWER: viewName.toLowerCase(),
+            TABLE_NAME_UPPER: viewName.toUpperCase(),
+            TABLE_NAME_PASCAL_CASE: viewName.split('_').map(capitalizeFirstLetter).join('_'),
+            TABLE_NAME_SHORT_PASCAL_CASE: viewName.replace(MySQLDump.DB_PREFIX, '').split('_').map(capitalizeFirstLetter).join('_'),
+            PRIMARY: [],
+            PRIMARY_SHORT: [],
+            PRIMARY_KEYS_TYPE: 'never',
+            COLUMNS: {},
+            COLUMNS_UPPERCASE: {},
+            TYPE_VALIDATION: {},
+            REGEX_VALIDATION: {},
+            TABLE_REFERENCES: {},
+            TABLE_REFERENCED_BY: {},
+            HAS_GEOJSON_TYPES: false,
+            REACT_IMPORT: false,
+            CARBON_REACT_INSTANCE: false,
+        };
+
+        for (const colName in columns) {
+            tsModel.COLUMNS[`${viewName}.${colName}`] = colName;
+            tsModel.COLUMNS_UPPERCASE[toConstantIdentifier(colName)] = viewName + '.' + colName;
+
+            const typescript_type = determineTypeScriptType(columns[colName].type.toLowerCase(), columns[colName].enumValues);
+
+            if (typescript_type.includes('GeoJSON.')) {
+                tsModel.HAS_GEOJSON_TYPES = true;
+            }
+
+            tsModel.TYPE_VALIDATION[`${viewName}.${colName}`] = {
+                COLUMN_NAME: colName,
+                MYSQL_TYPE: columns[colName].type.toLowerCase(),
+                TYPESCRIPT_TYPE: typescript_type,
+                TYPESCRIPT_TYPE_IS_STRING: typescript_type === 'string' || typescript_type.includes("'"),
+                TYPESCRIPT_TYPE_IS_NUMBER: 'number' === typescript_type,
+                MAX_LENGTH: columns[colName].length,
+                AUTO_INCREMENT: false,
+                NOT_NULL: columns[colName].notNull,
+                SKIP_COLUMN_IN_POST: true,
+            };
+        }
+
+        tableData[viewName] = tsModel;
     }
 
     for (const ref of references) {
@@ -796,7 +1560,9 @@ const parseSQLToTypeScript = (sql: string) => {
 
     }
 
-    const tables = Object.values(tableData);
+    const relations = Object.values(tableData);
+    const tables = relations.filter((table: any) => table.RELATION_TYPE !== 'VIEW');
+    const views = relations.filter((table: any) => table.RELATION_TYPE === 'VIEW');
 
 
     return {
@@ -807,9 +1573,17 @@ const parseSQLToTypeScript = (sql: string) => {
         CUSTOM_IMPORTS: argMap['--customImports'] || '',
         REST_URL_EXPRESSION: argMap['--restUrlExpression'] || '"/rest/"',
         TABLES: tables,
-        RestTableNames: tables.map(table => "'" + table.TABLE_NAME + "'").join('\n | '),
-        RestShortTableNames: tables.map(table => "'" + table.TABLE_NAME_SHORT + "'").join('\n | '),
-        RestTableInterfaces: tables.map(table => 'i' + table.TABLE_NAME_SHORT_PASCAL_CASE).join('\n | '),
+        VIEWS: views,
+        RELATIONS: relations,
+        RestTableNames: relations.map((table: any) => "'" + table.TABLE_NAME + "'").join('\n | '),
+        RestShortTableNames: relations.map((table: any) => "'" + table.TABLE_NAME_SHORT + "'").join('\n | '),
+        RestTableInterfaces: relations.map((table: any) => 'i' + table.TABLE_NAME_SHORT_PASCAL_CASE).join('\n | '),
+        RestViewNames: views.length
+            ? views.map((table: any) => "'" + table.TABLE_NAME + "'").join('\n | ')
+            : 'never',
+        RestShortViewNames: views.length
+            ? views.map((table: any) => "'" + table.TABLE_NAME_SHORT + "'").join('\n | ')
+            : 'never',
     };
 };
 
@@ -861,37 +1635,97 @@ const applyGeneratedModuleMetadata = (tableData: any) => {
     }
 };
 
+const validateGeneratedOutput = (outputDir: string, tableData: any) => {
+    const root = path.resolve(outputDir);
+    const symbols = new Set<string>();
+    const targets = ['C6.ts', 'C6.test.ts', 'C6.mysqldump.json', 'C6.generated/core.ts',
+        'C6.generated/scoped.ts', 'C6.generated/tables/index.ts', 'C6.generated/views/index.ts'];
+    const reservedSymbols = new Set(['await', 'break', 'case', 'catch', 'class', 'const', 'continue',
+        'debugger', 'default', 'delete', 'do', 'else', 'enum', 'export', 'extends', 'false', 'finally',
+        'for', 'function', 'if', 'implements', 'import', 'in', 'instanceof', 'interface', 'let', 'new',
+        'null', 'package', 'private', 'protected', 'public', 'return', 'static', 'super', 'switch',
+        'this', 'throw', 'true', 'try', 'typeof', 'var', 'void', 'while', 'with', 'yield']);
+    for (const relation of tableData.RELATIONS) {
+        const name = relation.TABLE_NAME_SHORT_PASCAL_CASE;
+        if (![relation.TABLE_NAME, relation.TABLE_NAME_SHORT, name].every(value =>
+            typeof value === 'string' && /^[A-Za-z_][A-Za-z0-9_]*$/.test(value))) {
+            throw new Error('Unsafe generated relation name; SQL names must map to safe symbols and filenames.');
+        }
+        const key = name.toLowerCase();
+        if (reservedSymbols.has(relation.TABLE_NAME_SHORT) || /^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/.test(key)
+            || ['index', 'core', 'scoped', 'c6'].includes(key) || symbols.has(key)) throw new Error('Reserved or colliding generated relation name.');
+        symbols.add(key);
+        targets.push(`C6.generated/${relation.RELATION_TYPE === 'VIEW' ? 'views' : 'tables'}/${name}.ts`);
+    }
+    for (const relative of targets) {
+        const target = path.resolve(root, relative);
+        if (!target.startsWith(root + path.sep)) throw new Error('Generated path escapes output directory.');
+        let current = root;
+        for (const part of ['', ...relative.split('/')]) {
+            current = path.join(current, part);
+            try {
+                if (fs.lstatSync(current).isSymbolicLink()) throw new Error('Generated output refuses symbolic links.');
+            } catch (error) {
+                if ((error as any).code !== 'ENOENT') throw error;
+            }
+        }
+    }
+};
+
 const writeGeneratedBindings = (outputDir: string, tableData: any) => {
+    validateGeneratedOutput(outputDir, tableData);
     const templatesDir = path.resolve(__dirname, 'assets/handlebars');
     const readTemplate = (templateName: string) =>
         fs.readFileSync(path.join(templatesDir, templateName), 'utf-8');
+    const cleanGeneratedSource = (source: string) =>
+        `${source.replace(/[ \t]+(\r?\n)/g, "$1").trimEnd()}\n`;
+    const writeGeneratedSource = (filePath: string, source: string) => {
+        fs.writeFileSync(filePath, cleanGeneratedSource(source));
+    };
+
+    Handlebars.registerHelper('json', (value) => JSON.stringify(value ?? null));
 
     const c6Template = Handlebars.compile(readTemplate('C6.ts.handlebars'));
     const c6CoreTemplate = Handlebars.compile(readTemplate('C6.core.ts.handlebars'));
     const c6ScopedTemplate = Handlebars.compile(readTemplate('C6.scoped.ts.handlebars'));
     const c6TableTemplate = Handlebars.compile(readTemplate('C6.table.ts.handlebars'));
+    const c6ViewTemplate = Handlebars.compile(readTemplate('C6.view.ts.handlebars'));
     const c6TablesIndexTemplate = Handlebars.compile(readTemplate('C6.tablesIndex.ts.handlebars'));
+    const c6ViewsIndexTemplate = Handlebars.compile(readTemplate('C6.viewsIndex.ts.handlebars'));
     const c6TestTemplate = Handlebars.compile(readTemplate('C6.test.ts.handlebars'));
 
     const generatedDir = path.join(outputDir, 'C6.generated');
     const tablesDir = path.join(generatedDir, 'tables');
+    const viewsDir = path.join(generatedDir, 'views');
 
     fs.rmSync(generatedDir, { recursive: true, force: true });
     fs.rmSync(path.join(outputDir, 'C6.js'), { force: true });
     createDirIfNotExists(tablesDir);
+    createDirIfNotExists(viewsDir);
 
-    fs.writeFileSync(path.join(outputDir, 'C6.ts'), c6Template(tableData));
-    fs.writeFileSync(path.join(outputDir, 'C6.test.ts'), c6TestTemplate(tableData));
-    fs.writeFileSync(path.join(generatedDir, 'core.ts'), c6CoreTemplate(tableData));
-    fs.writeFileSync(path.join(generatedDir, 'scoped.ts'), c6ScopedTemplate(tableData));
-    fs.writeFileSync(path.join(tablesDir, 'index.ts'), c6TablesIndexTemplate(tableData));
+    writeGeneratedSource(path.join(outputDir, 'C6.ts'), c6Template(tableData));
+    writeGeneratedSource(path.join(outputDir, 'C6.test.ts'), c6TestTemplate(tableData));
+    writeGeneratedSource(path.join(generatedDir, 'core.ts'), c6CoreTemplate(tableData));
+    writeGeneratedSource(path.join(generatedDir, 'scoped.ts'), c6ScopedTemplate(tableData));
+    writeGeneratedSource(path.join(tablesDir, 'index.ts'), c6TablesIndexTemplate(tableData));
+    writeGeneratedSource(path.join(viewsDir, 'index.ts'), c6ViewsIndexTemplate(tableData));
 
     for (const table of tableData.TABLES) {
-        fs.writeFileSync(
+        writeGeneratedSource(
             path.join(tablesDir, `${table.TABLE_NAME_SHORT_PASCAL_CASE}.ts`),
             c6TableTemplate({
                 ...tableData,
                 ...table,
+            }),
+        );
+    }
+
+    for (const view of tableData.VIEWS) {
+        writeGeneratedSource(
+            path.join(viewsDir, `${view.TABLE_NAME_SHORT_PASCAL_CASE}.ts`),
+            c6ViewTemplate({
+                ...tableData,
+                ...view,
             }),
         );
     }
@@ -946,7 +1780,7 @@ const resolveConfigPathFromArgsOrDiscovery = async (): Promise<string> => {
         output: process.stdout,
     });
     try {
-        const answer = (await askQuestion(rl, "No config found. Create ./C6.config.json now? (y/N): ")).toLowerCase();
+        const answer = (await askQuestion(rl, "No config found. Create ./C6.config.local.json now? (y/N): ")).toLowerCase();
         if (answer !== "y" && answer !== "yes") {
             throw new Error("Config is required. Generation cancelled.");
         }
@@ -955,10 +1789,68 @@ const resolveConfigPathFromArgsOrDiscovery = async (): Promise<string> => {
     }
 
     const generatedConfig = await buildConfigInteractively();
-    const generatedPath = path.resolve(process.cwd(), "C6.config.json");
-    fs.writeFileSync(generatedPath, `${JSON.stringify(generatedConfig, null, 2)}\n`);
+    const generatedPath = path.resolve(process.cwd(), "C6.config.local.json");
+    fs.writeFileSync(generatedPath, `${JSON.stringify(generatedConfig, null, 2)}\n`, {mode: 0o600, flag: 'wx'});
     console.log(`[generateRestBindings] Created config at ${generatedPath}`);
     return generatedPath;
+};
+
+const getCurrentPackageName = (): string | null => {
+    try {
+        const packageJsonPath = path.resolve(process.cwd(), "package.json");
+        if (!fs.existsSync(packageJsonPath)) {
+            return null;
+        }
+
+        const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, "utf-8"));
+        return typeof packageJson.name === "string" ? packageJson.name : null;
+    } catch {
+        return null;
+    }
+};
+
+const typeCheckGeneratedC6 = (outputDir: string) => {
+    const c6Path = path.join(outputDir, "C6.ts");
+    const tempTsConfigPath = path.join(outputDir, ".C6.generated-typecheck.tsconfig.json");
+    const currentPackageName = getCurrentPackageName();
+    const localSourceRoot = path.resolve(process.cwd(), "src");
+    const compilerOptions: Record<string, any> = {
+        target: "ES2020",
+        module: "ES2020",
+        moduleResolution: "node",
+        esModuleInterop: true,
+        resolveJsonModule: true,
+        skipLibCheck: true,
+        noEmit: true,
+    };
+
+    if (
+        currentPackageName === "@carbonorm/carbonnode" &&
+        fs.existsSync(path.join(localSourceRoot, "index.ts"))
+    ) {
+        compilerOptions.baseUrl = localSourceRoot;
+        compilerOptions.paths = {
+            "@carbonorm/carbonnode": ["."],
+        };
+    }
+
+    fs.writeFileSync(
+        tempTsConfigPath,
+        `${JSON.stringify({
+            compilerOptions,
+            files: [c6Path],
+        }, null, 2)}\n`,
+    );
+
+    try {
+        execFileSync(process.execPath, [
+            require.resolve("typescript/bin/tsc"),
+            "--project",
+            tempTsConfigPath,
+        ], { encoding: "utf-8" });
+    } finally {
+        fs.rmSync(tempTsConfigPath, { force: true });
+    }
 };
 
 const resolveScopedDefinitionsFromConfig = (
@@ -1010,16 +1902,23 @@ const main = async () => {
     createDirIfNotExists(MySQLDump.OUTPUT_DIR);
     pathRuntimeReference = MySQLDump.RELATIVE_OUTPUT_DIR.replace(/(^\/(src\/)?)|(\/+$)/g, '');
 
-    const dumpFileLocation = MySQLDump.MySQLDump(
-        'mysqldump',
-        false,
-        true,
-        '',
-        '',
-        '',
-        primaryDefinition.DATABASE_NAME,
-        primaryDefinition.CONNECTION,
-    );
+    const dumpFileLocation = primaryDefinition.DIALECT === 'postgresql'
+        ? PostgreSQLDump.PgDump(
+            'pg_dump',
+            '',
+            primaryDefinition.DATABASE_NAME,
+            primaryDefinition.CONNECTION,
+        )
+        : MySQLDump.MySQLDump(
+            'mysqldump',
+            false,
+            true,
+            '',
+            '',
+            '',
+            primaryDefinition.DATABASE_NAME,
+            primaryDefinition.CONNECTION,
+        );
 
     if (!fs.existsSync(dumpFileLocation)) {
         throw new Error(`[generateRestBindings] Missing base dump at ${dumpFileLocation}.`);
@@ -1027,7 +1926,16 @@ const main = async () => {
 
     // use dumpFileLocation to get sql
     const sql = fs.readFileSync(dumpFileLocation, 'utf-8');
-    const tableData: any = parseSQLToTypeScript(sql);
+    const schemaMetadata = primaryDefinition.DIALECT === 'postgresql'
+        ? PostgreSQLDump.LoadInformationSchema(
+            primaryDefinition.DATABASE_NAME,
+            primaryDefinition.CONNECTION,
+        )
+        : MySQLDump.LoadInformationSchema(
+            primaryDefinition.DATABASE_NAME,
+            primaryDefinition.CONNECTION,
+        );
+    const tableData: any = parseSQLToTypeScript(sql, schemaMetadata);
 
     const scopedDatabaseSchemas = scopedDefinitions.map((databaseDefinition) => {
         const isPrimaryScopedDefinition = databaseDefinition.DATABASE_NAME === primaryDefinition.DATABASE_NAME
@@ -1042,28 +1950,37 @@ const main = async () => {
                 DATABASE_NAME: databaseDefinition.DATABASE_NAME,
                 DATABASE_KEY_IDENTIFIER: databaseDefinition.DATABASE_KEY_IDENTIFIER,
                 DATABASE_KEY_PASCAL_CASE: databaseDefinition.DATABASE_KEY_PASCAL_CASE,
-                TABLES: withScopedTableSymbols(
+                RELATIONS: withScopedTableSymbols(
                     databaseDefinition,
-                    tableData.TABLES,
+                    tableData.RELATIONS,
                 ),
             };
         }
 
         const scopedDumpFile = path.join(
             MySQLDump.OUTPUT_DIR,
-            `C6.${databaseDefinition.DATABASE_KEY_IDENTIFIER}.mysqldump.sql`,
+            databaseDefinition.DIALECT === 'postgresql'
+                ? `C6.${databaseDefinition.DATABASE_KEY_IDENTIFIER}.pg_dump.sql`
+                : `C6.${databaseDefinition.DATABASE_KEY_IDENTIFIER}.mysqldump.sql`,
         );
-        const scopedDumpPath = MySQLDump.MySQLDump(
-            'mysqldump',
-            false,
-            true,
-            scopedDumpFile,
-            '',
-            '',
-            databaseDefinition.DATABASE_NAME,
-            databaseDefinition.CONNECTION,
-            databaseDefinition.DATABASE_KEY_IDENTIFIER,
-        );
+        const scopedDumpPath = databaseDefinition.DIALECT === 'postgresql'
+            ? PostgreSQLDump.PgDump(
+                'pg_dump',
+                scopedDumpFile,
+                databaseDefinition.DATABASE_NAME,
+                databaseDefinition.CONNECTION,
+            )
+            : MySQLDump.MySQLDump(
+                'mysqldump',
+                false,
+                true,
+                scopedDumpFile,
+                '',
+                '',
+                databaseDefinition.DATABASE_NAME,
+                databaseDefinition.CONNECTION,
+                databaseDefinition.DATABASE_KEY_IDENTIFIER,
+            );
 
         if (!fs.existsSync(scopedDumpPath)) {
             throw new Error(
@@ -1072,22 +1989,33 @@ const main = async () => {
         }
 
         const scopedSql = fs.readFileSync(scopedDumpPath, 'utf-8');
-        const scopedTableData = parseSQLToTypeScript(scopedSql);
+        const scopedSchemaMetadata = databaseDefinition.DIALECT === 'postgresql'
+            ? PostgreSQLDump.LoadInformationSchema(
+                databaseDefinition.DATABASE_NAME,
+                databaseDefinition.CONNECTION,
+            )
+            : MySQLDump.LoadInformationSchema(
+                databaseDefinition.DATABASE_NAME,
+                databaseDefinition.CONNECTION,
+                databaseDefinition.DATABASE_KEY_IDENTIFIER,
+            );
+        const scopedTableData = parseSQLToTypeScript(scopedSql, scopedSchemaMetadata);
 
         return {
             DATABASE_KEY: databaseDefinition.DATABASE_KEY,
             DATABASE_NAME: databaseDefinition.DATABASE_NAME,
             DATABASE_KEY_IDENTIFIER: databaseDefinition.DATABASE_KEY_IDENTIFIER,
             DATABASE_KEY_PASCAL_CASE: databaseDefinition.DATABASE_KEY_PASCAL_CASE,
-            TABLES: withScopedTableSymbols(
+            RELATIONS: withScopedTableSymbols(
                 databaseDefinition,
-                scopedTableData.TABLES,
+                scopedTableData.RELATIONS,
             ),
         };
     });
 
     tableData.SCOPED_DATABASES = scopedDatabaseSchemas;
     applyGeneratedModuleMetadata(tableData);
+    validateGeneratedOutput(MySQLDump.OUTPUT_DIR, tableData);
 
     // write to file
     fs.writeFileSync(path.join(MySQLDump.OUTPUT_DIR, 'C6.mysqldump.json'), JSON.stringify(tableData));
@@ -1099,23 +2027,7 @@ const main = async () => {
     if (process.env.C6_SKIP_GENERATED_TSC === "1") {
         console.log("[generateRestBindings] Skipping generated C6.ts type check (C6_SKIP_GENERATED_TSC=1).");
     } else {
-        try {
-            execFileSync("npx", [
-                "tsc",
-                path.join(outputDir, "C6.ts"),
-                "--target",
-                "ES2020",
-                "--module",
-                "ES2020",
-                "--moduleResolution",
-                "node",
-                "--esModuleInterop",
-                "--skipLibCheck",
-                "--noEmit",
-            ], { encoding: "utf-8" });
-        } catch (e) {
-            console.warn('TypeScript type check for generated C6.ts reported errors:', e);
-        }
+        typeCheckGeneratedC6(outputDir);
     }
 
     console.log('Successfully created CarbonORM bindings!');

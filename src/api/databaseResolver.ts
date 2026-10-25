@@ -11,6 +11,8 @@ type iDatabaseSelectableConfig = {
     databases?: Record<string, iDatabaseRuntimeConfig>;
     defaultDatabase?: string;
     mysqlPool?: Pool;
+    mysqlWriterPool?: Pool;
+    postgresPool?: any;
     axios?: any;
     restURL?: string;
     withCredentials?: boolean;
@@ -24,6 +26,9 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 
 const isMysqlPoolLike = (value: unknown): value is Pool =>
     !!value && typeof (value as Pool).getConnection === "function";
+
+const isPostgresPoolLike = (value: unknown): boolean =>
+    !!value && typeof (value as { connect?: unknown }).connect === "function";
 
 const normalizeDatabaseKey = (raw: unknown, origin: string): string => {
     if (typeof raw !== "string") {
@@ -65,7 +70,7 @@ const resolveTableModelForC6 = (
 
     for (const candidate of candidates) {
         if (!candidate) continue;
-        if (candidate in c6.TABLES) {
+        if (hasOwn(c6.TABLES, candidate)) {
             return c6.TABLES[candidate] as C6RestfulModel<string, any, any>;
         }
     }
@@ -83,12 +88,25 @@ const mergeDatabaseEntry = <
         return {
             ...baseConfig,
             mysqlPool: entry,
+            mysqlWriterPool: undefined,
+            postgresPool: undefined,
+            axios: undefined,
+        };
+    }
+
+    if (isPostgresPoolLike(entry)) {
+        return {
+            ...baseConfig,
+            mysqlPool: undefined,
+            mysqlWriterPool: undefined,
+            postgresPool: entry,
+            sqlDialect: "postgresql",
             axios: undefined,
         };
     }
 
     if (!isRecord(entry)) {
-        throw new Error("Database configuration entries must be a mysql pool or a configuration object.");
+        throw new Error("Database configuration entries must be a mysql pool, postgres pool, or a configuration object.");
     }
 
     const merged = {
@@ -96,15 +114,28 @@ const mergeDatabaseEntry = <
         ...(entry as Record<string, unknown>),
     } as T;
 
-    const hasMysqlField = hasOwn(entry, "mysqlPool");
+    const hasMysqlField = hasOwn(entry, "mysqlPool") || hasOwn(entry, "mysqlWriterPool");
+    const hasPostgresField = hasOwn(entry, "postgresPool");
     const hasAxiosField = hasOwn(entry, "axios");
-    const mysqlPool = (entry as Record<string, unknown>).mysqlPool;
+    const mysqlPool = (entry as Record<string, unknown>).mysqlPool ?? (entry as Record<string, unknown>).mysqlWriterPool;
+    // A selected database must not inherit a writer belonging to another database.
+    if (hasMysqlField && !hasOwn(entry, "mysqlWriterPool")) merged.mysqlWriterPool = undefined;
+    if (hasMysqlField && !hasOwn(entry, "mysqlPool")) merged.mysqlPool = undefined;
+    const postgresPool = (entry as Record<string, unknown>).postgresPool;
     const axios = (entry as Record<string, unknown>).axios;
 
-    if (hasMysqlField && !hasAxiosField && mysqlPool) {
+    if (hasMysqlField && !hasPostgresField && !hasAxiosField && mysqlPool) {
         merged.axios = undefined;
-    } else if (hasAxiosField && !hasMysqlField && axios) {
+        merged.postgresPool = undefined;
+    } else if (hasPostgresField && !hasMysqlField && !hasAxiosField && postgresPool) {
+        merged.axios = undefined;
         merged.mysqlPool = undefined;
+        merged.mysqlWriterPool = undefined;
+        (merged as any).sqlDialect = (merged as any).sqlDialect ?? "postgresql";
+    } else if (hasAxiosField && !hasMysqlField && !hasPostgresField && axios) {
+        merged.mysqlPool = undefined;
+        merged.mysqlWriterPool = undefined;
+        merged.postgresPool = undefined;
     }
 
     return merged;
@@ -169,7 +200,7 @@ export const resolveDatabaseSelection = <
         );
     }
 
-    const entry = configuredDatabases[databaseKey];
+    const entry = hasOwn(configuredDatabases, databaseKey) ? configuredDatabases[databaseKey] : undefined;
     if (!entry) {
         throw new Error(
             `Unknown database key '${databaseKey}'. Known keys: ${Object.keys(configuredDatabases).join(", ") || "(none)"}.`,
@@ -177,7 +208,7 @@ export const resolveDatabaseSelection = <
     }
 
     return {
-        config: mergeDatabaseEntry(baseConfig, entry),
+        config: {...mergeDatabaseEntry(baseConfig, entry), cacheDatabaseKey: databaseKey},
         databaseKey,
     };
 };

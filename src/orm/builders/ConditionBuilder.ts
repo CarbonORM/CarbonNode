@@ -10,29 +10,21 @@ export abstract class ConditionBuilder<
     G extends OrmGenerics
 > extends AggregateBuilder<G> {
 
-    protected aliasMap: Record<string, string> = {};
+    protected aliasMap: Record<string, string> = Object.create(null);
     protected derivedAliases: Set<string> = new Set<string>();
 
-    protected allowLegacyRightColumnReferences = false;
-
-    protected withLegacyRightColumnReferences<T>(allowed: boolean, callback: () => T): T {
-        const previous = this.allowLegacyRightColumnReferences;
-        this.allowLegacyRightColumnReferences = allowed;
-        try {
-            return callback();
-        } finally {
-            this.allowLegacyRightColumnReferences = previous;
-        }
-    }
-
     protected initAlias(baseTable: string, joins?: any): void {
-        this.aliasMap = { [baseTable]: baseTable };
+        this.aliasMap = Object.create(null);
         this.derivedAliases = new Set<string>();
+        this.registerAlias(baseTable, baseTable);
 
         if (!joins) return;
 
-        for (const joinType in joins) {
-            for (const raw in joins[joinType]) {
+        const sections = joins instanceof Map ? Array.from(joins.values()) : Object.values(joins);
+        for (const section of sections) {
+            const keys = section instanceof Map ? Array.from(section.keys()) : Object.keys(section ?? {});
+            for (const rawKey of keys) {
+                const raw = String(rawKey);
                 const [table, alias] = raw.trim().split(/\s+/, 2);
                 if (!table) continue;
                 this.registerAlias(alias || table, table);
@@ -41,24 +33,49 @@ export abstract class ConditionBuilder<
     }
 
     protected registerAlias(alias: string, table: string): void {
+        if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(alias)) {
+            throw new Error(`Invalid JOIN alias '${alias}'.`);
+        }
+        if (!isDerivedTableKey(table) && !Object.prototype.hasOwnProperty.call(this.config.C6?.TABLES ?? {}, table)) {
+            throw new Error(`Unknown JOIN table '${table}'.`);
+        }
         this.aliasMap[alias] = table;
         if (isDerivedTableKey(table)) {
             this.derivedAliases.add(alias);
         }
     }
 
+    protected normalizeWritableColumn(table: string, column: string, context: string): string {
+        const parts = typeof column === 'string' ? column.split('.') : [];
+        if (parts.length < 1 || parts.length > 2 || (parts.length === 2 && parts[0] !== table)) {
+            throw new Error(`Invalid column in ${context}: '${column}'.`);
+        }
+        const name = parts[parts.length - 1];
+        if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) {
+            throw new Error(`Invalid column in ${context}: '${column}'.`);
+        }
+        const columns = this.config.C6?.TABLES?.[table]?.COLUMNS ?? {};
+        if (!Object.prototype.hasOwnProperty.call(columns, `${table}.${name}`) && !Object.values(columns).includes(name)) {
+            throw new Error(`Unknown column in ${context}: '${column}'.`);
+        }
+        return name;
+    }
+
     protected assertValidIdentifier(identifier: string, context: string): void {
         if (typeof identifier !== 'string') return;
         if (!identifier.includes('.')) return;
 
-        const [alias] = identifier.split('.', 2);
-        if (!(alias in this.aliasMap)) {
+        if (!/^[A-Za-z_][A-Za-z0-9_]*\.(?:[A-Za-z_][A-Za-z0-9_]*|\*)$/.test(identifier)) {
+            throw new Error(`Invalid SQL reference in ${context}: '${identifier}'.`);
+        }
+        const [alias] = identifier.split('.');
+        if (!Object.prototype.hasOwnProperty.call(this.aliasMap, alias)) {
             throw new Error(`Unknown table or alias '${alias}' referenced in ${context}: '${identifier}'.`);
         }
     }
 
     protected isColumnRef(ref: string): boolean {
-        if (typeof ref !== 'string' || !ref.includes('.')) return false;
+        if (typeof ref !== 'string' || !/^[A-Za-z_][A-Za-z0-9_]*\.[A-Za-z_][A-Za-z0-9_]*$/.test(ref)) return false;
 
         const [prefix, column] = ref.split('.', 2);
         const tableName = this.aliasMap[prefix] || prefix;
@@ -71,7 +88,7 @@ export abstract class ConditionBuilder<
         if (!table) return false;
 
         const fullKey = `${tableName}.${column}`;
-        if (table.COLUMNS && (fullKey in table.COLUMNS)) return true;
+        if (table.COLUMNS && (Object.prototype.hasOwnProperty.call(table.COLUMNS, fullKey))) return true;
         if (table.COLUMNS && Object.values(table.COLUMNS).includes(column)) return true;
 
         return false;
@@ -85,6 +102,7 @@ export abstract class ConditionBuilder<
 
         if (trimmed.includes('.')) {
             if (/^[A-Za-z_][A-Za-z0-9_]*\.\*$/.test(trimmed)) {
+                this.assertValidIdentifier(trimmed, 'SQL reference');
                 return true;
             }
             if (this.isTableReference(trimmed) || this.isColumnRef(trimmed)) {
@@ -92,7 +110,6 @@ export abstract class ConditionBuilder<
             }
             if (/^[A-Za-z_][A-Za-z0-9_]*\.[A-Za-z_][A-Za-z0-9_]*$/.test(trimmed)) {
                 this.assertValidIdentifier(trimmed, 'SQL reference');
-                return true;
             }
             return false;
         }
@@ -166,6 +183,7 @@ export abstract class ConditionBuilder<
             }
             return false;
         }
+        if (!/^[A-Za-z_][A-Za-z0-9_]*\.[A-Za-z_][A-Za-z0-9_]*$/.test(val)) return false;
         const [prefix, column] = val.split('.');
         const tableName = this.aliasMap[prefix] ?? prefix;
         if (isDerivedTableKey(tableName) || this.derivedAliases.has(prefix)) {
@@ -177,7 +195,7 @@ export abstract class ConditionBuilder<
         const fullKey = `${tableName}.${column}`;
 
         return (
-            fullKey in table.COLUMNS ||
+            Object.prototype.hasOwnProperty.call(table.COLUMNS, fullKey) ||
             Object.values(table.COLUMNS).includes(column)
         );
     }
@@ -196,7 +214,7 @@ export abstract class ConditionBuilder<
             return `:${key}`;
         } else {
             (params as any[]).push(val);
-            return '?';
+            return this.sqlDialect.positionalPlaceholder((params as any[]).length);
         }
     }
 
@@ -323,7 +341,7 @@ export abstract class ConditionBuilder<
         throw new Error('Unsupported operand type in SQL expression.');
     }
 
-    private isExpressionTuple(value: any): boolean {
+    protected isExpressionTuple(value: any): boolean {
         if (!Array.isArray(value) || value.length === 0 || typeof value[0] !== 'string') {
             return false;
         }
@@ -564,7 +582,7 @@ export abstract class ConditionBuilder<
         }
 
         const existingWhereRaw = this.ensurePlainObject(subRequest[C6C.WHERE]);
-        const correlationCondition = { [C6C.EQUAL]: [correlationColumn, outerColumn] };
+        const correlationCondition = { [correlationColumn]: [C6C.EQUAL, outerColumn] };
 
         const normalizedExistingWhere = existingWhereRaw && typeof existingWhereRaw === 'object'
             ? Array.isArray(existingWhereRaw)
@@ -750,34 +768,6 @@ export abstract class ConditionBuilder<
         return `${leftSql} ${operator} ${rightSql}`;
     }
 
-
-    private literalizeLegacyValueOperand(value: any): any {
-        if (value === C6C.NULL) {
-            return value;
-        }
-
-        if (typeof value === 'string') {
-            return [C6C.LIT, value];
-        }
-
-        if (Array.isArray(value)) {
-            if (this.isExpressionTuple(value)) {
-                return value;
-            }
-
-            return value.map(item => this.literalizeLegacyValueOperand(item));
-        }
-
-        return value;
-    }
-
-    private shouldLiteralizeLegacyRightOperand(op: string): boolean {
-        const normalized = this.normalizeOperatorKey(op);
-        return normalized !== C6C.MATCH_AGAINST
-            && normalized !== C6C.EXISTS
-            && normalized !== 'NOT EXISTS';
-    }
-
     private buildLegacyColumnCondition(
         column: string,
         value: any,
@@ -804,28 +794,22 @@ export abstract class ConditionBuilder<
         if (Array.isArray(value)) {
             if (value.length >= 2 && typeof value[0] === 'string') {
                 const [op, ...rest] = value;
-                const operands = this.allowLegacyRightColumnReferences || !this.shouldLiteralizeLegacyRightOperand(op)
-                    ? rest
-                    : rest.map(item => this.literalizeLegacyValueOperand(item));
-                return this.buildOperatorExpression(op, [column, ...operands], params, column);
+                return this.buildOperatorExpression(op, [column, ...rest], params, column);
             }
             if (value.length === 3 && typeof value[0] === 'string' && typeof value[1] === 'string') {
-                const operand = this.allowLegacyRightColumnReferences || !this.shouldLiteralizeLegacyRightOperand(value[1])
-                    ? value[2]
-                    : this.literalizeLegacyValueOperand(value[2]);
-                return this.buildOperatorExpression(value[1], [value[0], operand], params, value[0]);
+                return this.buildOperatorExpression(value[1], [value[0], value[2]], params, value[0]);
             }
         }
 
         if (typeof value === 'object' && value !== null) {
             const entries = Object.entries(value);
+            if (!entries.length || entries.some(([op]) => !this.isOperator(op))) {
+                throw new Error('Column condition objects must contain comparison operators.');
+            }
             if (entries.length === 1) {
                 const [op, operand] = entries[0];
                 if (this.isOperator(op)) {
-                    const rightOperand = this.allowLegacyRightColumnReferences || !this.shouldLiteralizeLegacyRightOperand(op)
-                        ? operand
-                        : this.literalizeLegacyValueOperand(operand);
-                    return this.buildOperatorExpression(op, [column, rightOperand], params, column);
+                    return this.buildOperatorExpression(op, [column, operand], params, column);
                 }
                 if (this.BOOLEAN_OPERATORS.has(op)) {
                     const expression = this.buildBooleanExpression({ [op]: operand }, params, 'AND');
@@ -835,10 +819,7 @@ export abstract class ConditionBuilder<
 
             const subParts = entries.map(([op, operand]) => {
                 if (this.isOperator(op)) {
-                    const rightOperand = this.allowLegacyRightColumnReferences || !this.shouldLiteralizeLegacyRightOperand(op)
-                        ? operand
-                        : this.literalizeLegacyValueOperand(operand);
-                    return this.buildOperatorExpression(op, [column, rightOperand], params, column);
+                    return this.buildOperatorExpression(op, [column, operand], params, column);
                 }
                 return this.buildBooleanExpression({ [op]: operand }, params, 'AND');
             }).filter(Boolean);
@@ -846,10 +827,7 @@ export abstract class ConditionBuilder<
             return this.joinBooleanParts(subParts, 'AND');
         }
 
-        const rightOperand = this.allowLegacyRightColumnReferences
-            ? value
-            : this.literalizeLegacyValueOperand(value);
-        return this.buildOperatorExpression(C6C.EQUAL, [column, rightOperand], params, column);
+        return this.buildOperatorExpression(C6C.EQUAL, [column, value], params, column);
     }
 
     private buildBooleanExpression(
@@ -964,7 +942,7 @@ export abstract class ConditionBuilder<
 
     buildWhereClause(whereArg: any, params: any[] | Record<string, any>): string {
         const clause = this.buildBooleanJoinedConditions(whereArg, true, params);
-        if (!clause) return '';
+        if (!clause) throw new Error('WHERE must contain a predicate.');
 
         let trimmed = clause.trim();
         const upper = trimmed.toUpperCase();

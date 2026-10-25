@@ -55,9 +55,10 @@ beforeAll(async () => {
     });
 
     const app = createTestServer({C6, mysqlPool: pool});
-    server = app.listen(0);
+    server = app.listen(0, '127.0.0.1');
     await new Promise(resolve => server.on('listening', resolve));
     const {port} = server.address() as AddressInfo;
+    expect((server.address() as AddressInfo).address).toBe('127.0.0.1');
 
     restURL = `http://127.0.0.1:${port}/rest/`;
     axiosClient = axios.create();
@@ -234,7 +235,7 @@ describe("ExpressHandler e2e", () => {
         expect(response.data?.success).toBeTruthy();
     });
 
-    it("allows composite keys when a URL primary is present", async () => {
+    it("rejects ambiguous composite-key URL identities", async () => {
         const table = Film_Actor.TABLE_NAME;
 
         const seed = await filmActorRequest("GET", {
@@ -249,11 +250,8 @@ describe("ExpressHandler e2e", () => {
                 [Film_Actor.ACTOR_ID]: filmActor.actor_id,
                 [Film_Actor.FILM_ID]: filmActor.film_id,
             },
-        });
+        }, {validateStatus: () => true});
 
-        expect(response.status).toBe(200);
-        expect(response.data?.rest).toHaveLength(1);
-        expect(response.data?.rest?.[0]?.actor_id).toBe(filmActor.actor_id);
-        expect(response.data?.rest?.[0]?.film_id).toBe(filmActor.film_id);
+        expect(response.status).toBe(400);
     });
 });

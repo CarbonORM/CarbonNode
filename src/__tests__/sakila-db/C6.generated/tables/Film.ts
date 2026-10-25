@@ -31,7 +31,8 @@ CREATE TABLE `film` (
   KEY `idx_fk_original_language_id` (`original_language_id`),
   CONSTRAINT `fk_film_language` FOREIGN KEY (`language_id`) REFERENCES `language` (`language_id`) ON DELETE RESTRICT ON UPDATE CASCADE,
   CONSTRAINT `fk_film_language_original` FOREIGN KEY (`original_language_id`) REFERENCES `language` (`language_id`) ON DELETE RESTRICT ON UPDATE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=1092 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=1110 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
 **/
 
 export interface iFilm {
@@ -59,8 +60,13 @@ const film:
         'film',
         iFilm,
         FilmPrimaryKeys
-    > = {
+    > & Record<string, any> & {
+        RELATION_TYPE: 'TABLE';
+        READ_ONLY: false;
+    } = {
     TABLE_NAME: 'film',
+    RELATION_TYPE: 'TABLE',
+    READ_ONLY: false,
     FILM_ID: 'film.film_id',
     TITLE: 'film.title',
     DESCRIPTION: 'film.description',
@@ -177,6 +183,35 @@ const film:
     },
     REGEX_VALIDATION: {
     },
+    TRIGGERS: [
+        {
+            TRIGGER_NAME: "ins_film",
+            EVENT_MANIPULATION: "INSERT",
+            ACTION_TIMING: "AFTER",
+            EVENT_OBJECT_TABLE: "film",
+            ACTION_STATEMENT: "",
+            CREATE_STATEMENT: "",
+            DEFINER: null,
+        },
+        {
+            TRIGGER_NAME: "upd_film",
+            EVENT_MANIPULATION: "UPDATE",
+            ACTION_TIMING: "AFTER",
+            EVENT_OBJECT_TABLE: "film",
+            ACTION_STATEMENT: "",
+            CREATE_STATEMENT: "",
+            DEFINER: null,
+        },
+        {
+            TRIGGER_NAME: "del_film",
+            EVENT_MANIPULATION: "DELETE",
+            ACTION_TIMING: "AFTER",
+            EVENT_OBJECT_TABLE: "film",
+            ACTION_STATEMENT: "",
+            CREATE_STATEMENT: "",
+            DEFINER: null,
+        },
+    ],
     LIFECYCLE_HOOKS: {
         GET: {beforeProcessing:{}, beforeExecution:{}, afterExecution:{}, afterCommit:{}},
         PUT: {beforeProcessing:{}, beforeExecution:{}, afterExecution:{}, afterCommit:{}},
@@ -226,6 +261,7 @@ registerC6Table(
     'Film',
     film,
     Film,
+    'TABLE',
 );
 
 export default Film;

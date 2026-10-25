@@ -12,6 +12,9 @@ export class SelectQueryBuilder<G extends OrmGenerics> extends PaginationBuilder
         table: string,
         isSubSelect: boolean = false
     ): SqlBuilderResult {
+        if (!Object.prototype.hasOwnProperty.call(this.config.C6?.TABLES ?? {}, table)) {
+            throw new Error(`Unknown SELECT table '${table}'.`);
+        }
         this.aliasMap = {};
         // reset any previously collected SELECT aliases (from AggregateBuilder)
         // @ts-ignore
@@ -25,7 +28,7 @@ export class SelectQueryBuilder<G extends OrmGenerics> extends PaginationBuilder
             .map((f: any) => this.buildAggregateField(f, params))
             .join(', ');
 
-        let sql = `SELECT ${selectFields} FROM \`${table}\``;
+        let sql = `SELECT ${selectFields} ${this.sqlDialect.selectFrom(table)}`;
         const baseIndexHint = this.getIndexHintClause(table);
         if (baseIndexHint) {
             sql += ` ${baseIndexHint}`;
@@ -40,9 +43,9 @@ export class SelectQueryBuilder<G extends OrmGenerics> extends PaginationBuilder
         }
 
         if (args.GROUP_BY) {
-            const groupBy = Array.isArray(args.GROUP_BY)
-                ? args.GROUP_BY.join(', ')
-                : args.GROUP_BY;
+            const groupTerms = Array.isArray(args.GROUP_BY) && !this.isExpressionTuple(args.GROUP_BY)
+                ? args.GROUP_BY : [args.GROUP_BY];
+            const groupBy = groupTerms.map(term => this.serializeExpression(term, params, 'GROUP BY expression').sql).join(', ');
             sql += ` GROUP BY ${groupBy}`;
         }
 
@@ -53,7 +56,7 @@ export class SelectQueryBuilder<G extends OrmGenerics> extends PaginationBuilder
         if (args.PAGINATION) {
             sql += this.buildPaginationClause(args.PAGINATION, params);
         } else if (!isSubSelect) {
-            sql += ` LIMIT 100`;
+            sql += this.buildPaginationClause({}, params);
         }
 
         return { sql, params };

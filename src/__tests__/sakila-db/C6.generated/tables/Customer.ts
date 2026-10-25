@@ -27,7 +27,9 @@ CREATE TABLE `customer` (
   KEY `idx_last_name` (`last_name`),
   CONSTRAINT `fk_customer_address` FOREIGN KEY (`address_id`) REFERENCES `address` (`address_id`) ON DELETE RESTRICT ON UPDATE CASCADE,
   CONSTRAINT `fk_customer_store` FOREIGN KEY (`store_id`) REFERENCES `store` (`store_id`) ON DELETE RESTRICT ON UPDATE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=692 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=710 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+CREATE DEFINER=`root`@`localhost` TRIGGER `customer_create_date` BEFORE INSERT ON `customer` FOR EACH ROW SET NEW.create_date = NOW();
 **/
 
 export interface iCustomer {
@@ -51,8 +53,13 @@ const customer:
         'customer',
         iCustomer,
         CustomerPrimaryKeys
-    > = {
+    > & Record<string, any> & {
+        RELATION_TYPE: 'TABLE';
+        READ_ONLY: false;
+    } = {
     TABLE_NAME: 'customer',
+    RELATION_TYPE: 'TABLE',
+    READ_ONLY: false,
     CUSTOMER_ID: 'customer.customer_id',
     STORE_ID: 'customer.store_id',
     FIRST_NAME: 'customer.first_name',
@@ -137,6 +144,17 @@ const customer:
     },
     REGEX_VALIDATION: {
     },
+    TRIGGERS: [
+        {
+            TRIGGER_NAME: "customer_create_date",
+            EVENT_MANIPULATION: "INSERT",
+            ACTION_TIMING: "BEFORE",
+            EVENT_OBJECT_TABLE: "customer",
+            ACTION_STATEMENT: "SET NEW.create_date = NOW()",
+            CREATE_STATEMENT: "CREATE DEFINER=`root`@`localhost` TRIGGER `customer_create_date` BEFORE INSERT ON `customer` FOR EACH ROW SET NEW.create_date = NOW();",
+            DEFINER: "`root`@`localhost`",
+        },
+    ],
     LIFECYCLE_HOOKS: {
         GET: {beforeProcessing:{}, beforeExecution:{}, afterExecution:{}, afterCommit:{}},
         PUT: {beforeProcessing:{}, beforeExecution:{}, afterExecution:{}, afterCommit:{}},
@@ -182,6 +200,7 @@ registerC6Table(
     'Customer',
     customer,
     Customer,
+    'TABLE',
 );
 
 export default Customer;

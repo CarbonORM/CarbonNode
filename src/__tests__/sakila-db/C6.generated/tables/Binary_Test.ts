@@ -32,8 +32,13 @@ const binary_test:
         'binary_test',
         iBinary_Test,
         Binary_TestPrimaryKeys
-    > = {
+    > & Record<string, any> & {
+        RELATION_TYPE: 'TABLE';
+        READ_ONLY: false;
+    } = {
     TABLE_NAME: 'binary_test',
+    RELATION_TYPE: 'TABLE',
+    READ_ONLY: false,
     ID: 'binary_test.id',
     BIN_COL: 'binary_test.bin_col',
     PRIMARY: [
@@ -62,6 +67,8 @@ const binary_test:
     },
     REGEX_VALIDATION: {
     },
+    TRIGGERS: [
+    ],
     LIFECYCLE_HOOKS: {
         GET: {beforeProcessing:{}, beforeExecution:{}, afterExecution:{}, afterCommit:{}},
         PUT: {beforeProcessing:{}, beforeExecution:{}, afterExecution:{}, afterCommit:{}},
@@ -91,6 +98,7 @@ registerC6Table(
     'Binary_Test',
     binary_test,
     Binary_Test,
+    'TABLE',
 );
 
 export default Binary_Test;

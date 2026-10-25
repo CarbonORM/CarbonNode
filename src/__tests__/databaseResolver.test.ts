@@ -14,6 +14,13 @@ const makePool = () => ({
     }),
 }) as any;
 
+const makePostgresPool = () => ({
+    connect: async () => ({
+        query: async () => ({ rows: [], rowCount: 0 }),
+        release: () => undefined,
+    }),
+}) as any;
+
 describe("databaseResolver", () => {
     it("extracts and strips DB selection metadata", () => {
         expect(extractDatabaseKeyFromRequest({ [C6C.DB]: "billing" })).toBe("billing");
@@ -48,6 +55,39 @@ describe("databaseResolver", () => {
         const { config, databaseKey } = resolveDatabaseSelection(base, {});
         expect(databaseKey).toBe("app");
         expect(config.mysqlPool).toBe(pool);
+    });
+
+    it("routes to postgres pool entries and defaults the SQL dialect", () => {
+        const base = buildTestConfig() as any;
+        const pool = makePostgresPool();
+        base.mysqlPool = makePool();
+        base.axios = { defaults: {} };
+        base.databases = { reporting: pool };
+
+        const { config, databaseKey } = resolveDatabaseSelection(base, { [C6C.DB]: "reporting" });
+        expect(databaseKey).toBe("reporting");
+        expect(config.postgresPool).toBe(pool);
+        expect(config.sqlDialect).toBe("postgresql");
+        expect(config.mysqlPool).toBeUndefined();
+        expect(config.axios).toBeUndefined();
+    });
+
+    it("supports object postgresPool entries and clears other transports", () => {
+        const base = buildTestConfig() as any;
+        const pool = makePostgresPool();
+        base.mysqlPool = makePool();
+        base.axios = { defaults: {} };
+        base.databases = {
+            reporting: {
+                postgresPool: pool,
+            },
+        };
+
+        const { config } = resolveDatabaseSelection(base, { [C6C.DB]: "reporting" });
+        expect(config.postgresPool).toBe(pool);
+        expect(config.sqlDialect).toBe("postgresql");
+        expect(config.mysqlPool).toBeUndefined();
+        expect(config.axios).toBeUndefined();
     });
 
     it("supports per-database axios transport and clears mysqlPool", () => {

@@ -4,7 +4,7 @@ import { SelectQueryBuilder } from '../orm/queries/SelectQueryBuilder';
 import { PostQueryBuilder } from '../orm/queries/PostQueryBuilder';
 import { UpdateQueryBuilder } from '../orm/queries/UpdateQueryBuilder';
 import { DeleteQueryBuilder } from '../orm/queries/DeleteQueryBuilder';
-import { alias, betweenLit, call, distinct, eqLit, fn, inLit, lit, lits, order } from '../orm/queryHelpers';
+import { alias, asc, betweenLit, call, desc, distinct, eqLit, fn, inLit, lit, lits, notInLit, order } from '../orm/queryHelpers';
 import { buildTestConfig, buildBinaryTestConfig, buildBinaryTestConfigFqn, buildTemporalTestConfig } from './fixtures/c6.fixture';
 
 describe('SQL Builders', () => {
@@ -44,6 +44,68 @@ describe('SQL Builders', () => {
     expect(params).toEqual(['%A%', 10, 1]);
   });
 
+  it('builds SELECT joins against read-only view relations', () => {
+    const config = buildTestConfig();
+    config.C6.TABLES.actor_info = {
+      TABLE_NAME: 'actor_info',
+      RELATION_TYPE: 'VIEW',
+      READ_ONLY: true,
+      PRIMARY: [],
+      PRIMARY_SHORT: [],
+      COLUMNS: {
+        'actor_info.actor_id': 'actor_id',
+        'actor_info.film_info': 'film_info',
+      },
+      TYPE_VALIDATION: {},
+      REGEX_VALIDATION: {},
+      LIFECYCLE_HOOKS: { GET: {}, POST: {}, PUT: {}, DELETE: {} },
+      TABLE_REFERENCES: {},
+      TABLE_REFERENCED_BY: {},
+    };
+
+    const qb = new SelectQueryBuilder(config as any, {
+      SELECT: ['actor.first_name', 'ai.film_info'],
+      JOIN: {
+        [C6C.LEFT]: {
+          'actor_info ai': {
+            'ai.actor_id': [C6C.EQUAL, 'actor.actor_id'],
+          },
+        },
+      },
+    } as any, false);
+
+    const { sql, params } = qb.build('actor');
+
+    expect(sql).toContain('LEFT JOIN `actor_info` AS `ai` ON');
+    expect(sql).toContain('(ai.actor_id) = actor.actor_id');
+    expect(params).toEqual([]);
+  });
+
+  it('rejects raw SQL fragments in SELECT and GROUP BY expressions', () => {
+    const config = buildTestConfig();
+
+    expect(() => new SelectQueryBuilder(config as any, {
+      SELECT: ['actor.actor_id', '(SELECT GROUP_CONCAT(password) FROM secrets) AS leaked'],
+    } as any, false).build('actor')).toThrow(/Bare string .* is not a reference in SELECT expression/);
+
+    expect(() => new SelectQueryBuilder(config as any, {
+      SELECT: ['actor.actor_id'],
+      GROUP_BY: 'actor.actor_id WITH ROLLUP',
+    } as any, false).build('actor')).toThrow(/Bare string .* is not a reference in GROUP BY expression/);
+  });
+
+  it('serializes GROUP BY terms through the expression serializer', () => {
+    const config = buildTestConfig();
+    const qb = new SelectQueryBuilder(config as any, {
+      SELECT: ['actor.first_name', [C6C.AS, [C6C.COUNT, 'actor.actor_id'], 'cnt']],
+      GROUP_BY: ['actor.first_name', 'actor.last_name'],
+    } as any, false);
+
+    const { sql } = qb.build('actor');
+
+    expect(sql).toContain('GROUP BY actor.first_name, actor.last_name');
+  });
+
   it('logs SELECT aggregate expressions at DEBUG level', () => {
     const config = buildTestConfig();
     const logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
@@ -74,7 +136,7 @@ describe('SQL Builders', () => {
     expect(params).toEqual(['fallback']);
   });
 
-  it('supports helper builders for fn/call/as/distinct/lit/lits/order', () => {
+  it('supports helper builders for fn/call/as/distinct/lit/lits/order/asc/desc', () => {
     const config = buildTestConfig();
     const qb = new SelectQueryBuilder(config as any, {
       SELECT: [
@@ -84,9 +146,10 @@ describe('SQL Builders', () => {
       ],
       WHERE: {
         'actor.first_name': [C6C.IN, lits(['ALICE', 'BOB'])],
+        'actor.last_name': { ...notInLit(['SMITH', 'DOE']) },
       },
       PAGINATION: {
-        [C6C.ORDER]: [order(fn(C6C.COUNT, 'actor.actor_id'), 'DESC')],
+        [C6C.ORDER]: [desc(fn(C6C.COUNT, 'actor.actor_id')), asc('actor.first_name'), order('actor.last_name', 'DESC')],
         [C6C.LIMIT]: 5,
       },
     } as any, false);
@@ -96,8 +159,98 @@ describe('SQL Builders', () => {
     expect(sql).toContain('COUNT(actor.actor_id) AS cnt');
     expect(sql).toContain('COALESCE(?, actor.last_name)');
     expect(sql).toContain('( actor.first_name IN (?, ?) )');
-    expect(sql).toContain('ORDER BY COUNT(actor.actor_id) DESC');
-    expect(params).toEqual(['N/A', 'ALICE', 'BOB']);
+    expect(sql).toContain('( actor.last_name NOT IN (?, ?) )');
+    expect(sql).toContain('ORDER BY COUNT(actor.actor_id) DESC, actor.first_name ASC, actor.last_name DESC');
+    expect(params).toEqual(['N/A', 'ALICE', 'BOB', 'SMITH', 'DOE']);
+  });
+
+  it('builds PostgreSQL SELECT pagination with dialect-specific table quoting', () => {
+    const config = {
+      ...buildTestConfig(),
+      sqlDialect: 'postgresql',
+    };
+    const qb = new SelectQueryBuilder(config as any, {
+      SELECT: ['actor.first_name'],
+      PAGINATION: {
+        [C6C.ORDER]: [asc('actor.first_name')],
+        [C6C.LIMIT]: 10,
+        [C6C.PAGE]: 3,
+      },
+    } as any, false);
+
+    const { sql, params } = qb.build('actor');
+
+    expect(sql).toContain('SELECT actor.first_name FROM "actor"');
+    expect(sql).toContain('ORDER BY actor.first_name ASC LIMIT 10 OFFSET 20');
+    expect(params).toEqual([]);
+  });
+
+  it('builds PostgreSQL INSERT and UPDATE with dialect-specific identifiers', () => {
+    const config = {
+      ...buildTestConfig(),
+      sqlDialect: 'postgresql',
+    };
+    const post = new PostQueryBuilder(config as any, {
+      [C6C.INSERT]: {
+        'actor.first_name': 'ALICE',
+        'actor.last_name': 'SMITH',
+      },
+    } as any, false);
+    const put = new UpdateQueryBuilder(config as any, {
+      [C6C.UPDATE]: {
+        'actor.first_name': 'ALICIA',
+      },
+      WHERE: {
+        'actor.actor_id': [C6C.EQUAL, 7],
+      },
+    } as any, false);
+
+    const postResult = post.build('actor');
+    const putResult = put.build('actor');
+
+    expect(postResult.sql).toContain('INSERT INTO "actor"');
+    expect(postResult.sql).toContain('"first_name", "last_name"');
+    expect(postResult.sql).toContain('($1, $2)');
+    expect(postResult.params).toEqual(['ALICE', 'SMITH']);
+    expect(putResult.sql).toContain('UPDATE "actor" SET "first_name" = $1');
+    expect(putResult.sql).toContain('WHERE (actor.actor_id) = $2');
+    expect(putResult.params).toEqual(['ALICIA', 7]);
+  });
+
+  it('builds PostgreSQL ON CONFLICT upserts from primary key metadata', () => {
+    const config = {
+      ...buildTestConfig(),
+      sqlDialect: 'postgresql',
+    };
+    const qb = new PostQueryBuilder(config as any, {
+      [C6C.INSERT]: {
+        'actor.actor_id': 1,
+        'actor.first_name': 'ALICE',
+        'actor.last_name': 'SMITH',
+      },
+      [C6C.UPDATE]: ['first_name', 'last_name'],
+    } as any, false);
+
+    const { sql, params } = qb.build('actor');
+
+    expect(sql).toContain('INSERT INTO "actor"');
+    expect(sql).toContain('ON CONFLICT ("actor_id") DO UPDATE SET "first_name" = EXCLUDED."first_name", "last_name" = EXCLUDED."last_name"');
+    expect(sql).toContain('RETURNING *');
+    expect(params).toEqual([1, 'ALICE', 'SMITH']);
+  });
+
+  it('throws for PostgreSQL REPLACE', () => {
+    const config = {
+      ...buildTestConfig(),
+      sqlDialect: 'postgresql',
+    };
+    const replace = new PostQueryBuilder(config as any, {
+      [C6C.REPLACE]: {
+        'actor.first_name': 'ALICE',
+      },
+    } as any, false);
+
+    expect(() => replace.build('actor')).toThrowError(/does not support REPLACE/);
   });
 
   it('supports literal-safe WHERE helper builders', () => {
@@ -123,23 +276,6 @@ describe('SQL Builders', () => {
       '2006-02-15 04:34:33',
       '2006-02-16 04:34:33',
     ]);
-  });
-
-  it('binds column-looking legacy WHERE string values as literals', () => {
-    const config = buildTestConfig();
-    const qb = new DeleteQueryBuilder(config as any, {
-      WHERE: {
-        'actor.actor_id': { [C6C.EQUAL]: 'actor.actor_id' },
-        'actor.first_name': { [C6C.IN]: ['actor.first_name', 'ALICE'] },
-      },
-    } as any, false);
-
-    const { sql, params } = qb.build('actor');
-
-    expect(sql).toContain('(actor.actor_id) = ?');
-    expect(sql).toContain('( actor.first_name IN (?, ?) )');
-    expect(sql).not.toContain('actor.actor_id = actor.actor_id');
-    expect(params).toEqual(['actor.actor_id', 'actor.first_name', 'ALICE']);
   });
 
   it('builds INSERT with ON DUPLICATE KEY UPDATE', () => {
@@ -355,6 +491,81 @@ describe('SQL Builders', () => {
     expect(sql).toContain('INNER JOIN `film_actor` AS `fa` ON');
     expect(sql).toContain('(actor.actor_id) > ?');
     expect(params).toEqual([100]);
+  });
+
+  it('builds PostgreSQL DELETE USING for inner joins', () => {
+    const config = {
+      ...buildTestConfig(),
+      sqlDialect: 'postgresql',
+    };
+    const qb = new DeleteQueryBuilder(config as any, {
+      JOIN: {
+        [C6C.INNER]: {
+          'film_actor fa': {
+            'fa.actor_id': [C6C.EQUAL, 'actor.actor_id'],
+          },
+        },
+      },
+      WHERE: { 'actor.actor_id': [C6C.GREATER_THAN, 100] },
+    } as any, false);
+
+    const { sql, params } = qb.build('actor');
+
+    expect(sql).toBe('DELETE FROM "actor" USING "film_actor" AS "fa" WHERE ((fa.actor_id) = actor.actor_id) AND ((actor.actor_id) > $1)');
+    expect(params).toEqual([100]);
+  });
+
+  it('throws on PostgreSQL DELETE USING for non-inner joins', () => {
+    const config = {
+      ...buildTestConfig(),
+      sqlDialect: 'postgresql',
+    };
+    const qb = new DeleteQueryBuilder(config as any, {
+      WHERE: {'actor.actor_id': 5},
+      JOIN: {
+        [C6C.LEFT]: {
+          'film_actor fa': {
+            'fa.actor_id': [C6C.EQUAL, 'actor.actor_id'],
+          },
+        },
+      },
+    } as any, false);
+
+    expect(() => qb.build('actor')).toThrowError(/INNER joins only/);
+  });
+
+  it('rejects unsafe JOIN aliases and inherited column names', () => {
+    const config = buildTestConfig();
+    for (const [table, column] of [
+      ['film_actor 1)OR/**/1=1#', '1)OR/**/1=1#.toString'],
+      ['film_actor fa', 'fa.toString'],
+    ]) {
+      expect(() => new SelectQueryBuilder(config as any, {
+        SELECT: ['actor.actor_id'],
+        JOIN: { [C6C.INNER]: { [table]: { [column]: [C6C.EQUAL, [C6C.LIT, 1]] } } },
+      } as any, false).build('actor')).toThrow();
+    }
+  });
+
+  it('supports a GROUP BY tuple and lists of expressions with bound literals', () => {
+    const config = buildTestConfig();
+    const group = [C6C.CALL, 'COALESCE', 'actor.first_name', [C6C.LIT, 'unknown']];
+    const single = new SelectQueryBuilder(config as any, {GROUP_BY: group} as any).build('actor');
+    expect(single.sql).toContain('GROUP BY COALESCE(actor.first_name, ?)');
+    expect(single.params).toEqual(['unknown']);
+    const multiple = new SelectQueryBuilder(config as any, {GROUP_BY: [group, 'actor.last_name']} as any).build('actor');
+    expect(multiple.sql).toContain('GROUP BY COALESCE(actor.first_name, ?), actor.last_name');
+    expect(multiple.params).toEqual(['unknown']);
+  });
+
+  it('registers Map JOIN aliases before SELECT serialization', () => {
+    const config = buildTestConfig();
+    const qb = new SelectQueryBuilder(config as any, {
+      SELECT: ['fa.actor_id'],
+      JOIN: new Map([[C6C.INNER, new Map([['film_actor fa', {'fa.actor_id': [C6C.EQUAL, 'actor.actor_id']}]])]]),
+    } as any);
+    expect(qb.build('actor').sql).toContain('INNER JOIN `film_actor` AS `fa`');
+    expect(() => new SelectQueryBuilder(config as any, {SELECT: ['unknown.*']} as any).build('actor')).toThrow(/Unknown table or alias/);
   });
 
   it('converts hex to Buffer for BINARY columns in WHERE params', () => {

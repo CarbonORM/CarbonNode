@@ -5,7 +5,9 @@ import {
     iRestReactiveLifecycle,
     RequestQueryBody
 } from "../types/ormInterfaces";
+import {resolveSqlDialect, SqlDialect} from "../orm/dialects/SqlDialect";
 import {applyLogLevelDefaults, getLogContext, LogLevel, logWithLevel, shouldLog} from "../utils/logLevel";
+import {validateQueryRequest} from '../utils/querySafety';
 
 export abstract class Executor<
     G extends OrmGenerics
@@ -24,7 +26,15 @@ export abstract class Executor<
         >,
         protected useNamedParams: boolean = false,
     ) {
+        validateQueryRequest(this.request, this.config);
         applyLogLevelDefaults(this.config, this.request);
+    }
+
+    protected get sqlDialect(): SqlDialect {
+        if ((this.config as any).postgresPool && !(this.config as any).sqlDialect) {
+            return resolveSqlDialect("postgresql");
+        }
+        return resolveSqlDialect((this.config as any).sqlDialect);
     }
 
     abstract execute(): Promise<DetermineResponseDataType<G['RequestMethod'], G['RestTableInterface']>>;
@@ -55,6 +65,7 @@ export abstract class Executor<
                 try {
                     // todo - this
                     await fn(args  as any);
+                    validateQueryRequest(args.request, this.config);
                 } catch (err) {
                     logWithLevel(
                         LogLevel.ERROR,

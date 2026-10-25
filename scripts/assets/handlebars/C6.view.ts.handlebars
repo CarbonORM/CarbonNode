@@ -1,0 +1,87 @@
+// noinspection JSUnusedGlobalSymbols,SpellCheckingInspection
+
+import { restRequest } from "@carbonorm/carbonnode";
+{{#if HAS_GEOJSON_TYPES}}
+import type * as GeoJSON from "geojson";
+{{/if}}
+{{#if CUSTOM_IMPORTS_TABLE}}{{{CUSTOM_IMPORTS_TABLE}}}
+{{/if}}
+import {
+    GLOBAL_REST_PARAMETERS,
+    registerC6Table,
+} from "../core";
+
+/**
+{{{tsComment TABLE_DEFINITION}}}
+**/
+
+export interface i{{TABLE_NAME_SHORT_PASCAL_CASE}} {
+{{#each TYPE_VALIDATION}}
+    {{{tsString this.COLUMN_NAME}}}?: {{{this.TYPESCRIPT_TYPE}}}{{^NOT_NULL}} | null{{/NOT_NULL}};
+{{/each}}
+}
+
+export type {{TABLE_NAME_SHORT_PASCAL_CASE}}PrimaryKeys = never;
+
+const {{TABLE_NAME_SHORT}}: Record<string, any> & {
+        TABLE_NAME: {{{tsString TABLE_NAME_SHORT}}};
+        RELATION_TYPE: 'VIEW';
+        READ_ONLY: true;
+    } = {
+    TABLE_NAME: {{{tsString TABLE_NAME}}},
+    RELATION_TYPE: 'VIEW',
+    READ_ONLY: true,
+    {{#each COLUMNS_UPPERCASE}}
+    {{{tsKey @key}}}: {{{tsString this}}},
+    {{/each}}
+    PRIMARY: [],
+    PRIMARY_SHORT: [],
+    COLUMNS: {
+    {{#each COLUMNS}}
+        {{{tsString @key}}}: {{{tsString this}}},
+    {{/each}}
+    },
+    TYPE_VALIDATION: {
+    {{#each TYPE_VALIDATION}}
+        {{{tsString @key}}}: {
+            MYSQL_TYPE: {{{tsString this.MYSQL_TYPE}}},
+            MAX_LENGTH: {{{tsString this.MAX_LENGTH}}},
+            AUTO_INCREMENT: {{this.AUTO_INCREMENT}},
+            SKIP_COLUMN_IN_POST: {{this.SKIP_COLUMN_IN_POST}}
+        },
+    {{/each}}
+    },
+    REGEX_VALIDATION: {
+    {{#each REGEX_VALIDATION}}
+        {{{tsString @key}}}: {{{tsString this}}},
+    {{/each}}
+    },
+    LIFECYCLE_HOOKS: {
+        GET: {beforeProcessing:{}, beforeExecution:{}, afterExecution:{}, afterCommit:{}},
+        PUT: {beforeProcessing:{}, beforeExecution:{}, afterExecution:{}, afterCommit:{}},
+        POST: {beforeProcessing:{}, beforeExecution:{}, afterExecution:{}, afterCommit:{}},
+        DELETE: {beforeProcessing:{}, beforeExecution:{}, afterExecution:{}, afterCommit:{}},
+    },
+    TABLE_REFERENCES: {},
+    TABLE_REFERENCED_BY: {}
+}
+
+export const {{TABLE_NAME_SHORT_PASCAL_CASE}} = {
+    ...{{TABLE_NAME_SHORT}},
+    Get: (restRequest as any)(() => ({
+        ...GLOBAL_REST_PARAMETERS,
+        restModel: {{TABLE_NAME_SHORT}} as any{{#if OBJECT_OVERRIDES}},
+        {{{OBJECT_OVERRIDES}}}{{/if}},
+        requestMethod: 'GET',
+    }))
+}
+
+registerC6Table(
+    {{{tsString TABLE_NAME_SHORT}}},
+    {{{tsString TABLE_NAME_SHORT_PASCAL_CASE}}},
+    {{TABLE_NAME_SHORT}},
+    {{TABLE_NAME_SHORT_PASCAL_CASE}},
+    'VIEW',
+);
+
+export default {{TABLE_NAME_SHORT_PASCAL_CASE}};

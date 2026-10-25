@@ -1,0 +1,22 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "ES2020",
+    "moduleResolution": "node",
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "baseUrl": "../../",
+    "paths": {
+      "@carbonorm/carbonnode": [
+        "."
+      ]
+    }
+  },
+  "files": [
+    "../sakila-db/C6.ts",
+    "./generatedC6PublicImports.ts",
+    "./generatedC6DoubleBarrel.ts"
+  ]
+}

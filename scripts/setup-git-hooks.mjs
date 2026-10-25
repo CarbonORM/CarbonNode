@@ -3,15 +3,14 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { execSync } from 'child_process';
-import chalk from 'chalk';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-function logInfo(msg) { console.log(chalk.cyan(`[hooks-setup] ${msg}`)); }
-function logSuccess(msg) { console.log(chalk.green(`[hooks-setup] ${msg}`)); }
-function logWarn(msg) { console.warn(chalk.yellow(`[hooks-setup] ${msg}`)); }
-function logError(msg) { console.error(chalk.red(`[hooks-setup] ${msg}`)); }
+function logInfo(msg) { console.log(`[hooks-setup] ${msg}`); }
+function logSuccess(msg) { console.log(`[hooks-setup] ${msg}`); }
+function logWarn(msg) { console.warn(`[hooks-setup] ${msg}`); }
+function logError(msg) { console.error(`[hooks-setup] ${msg}`); }
 
 function isGitRepo() {
   try {
@@ -62,7 +61,7 @@ function chmodExecutables(hooksDir) {
 
     logInfo('Starting git hooks setup...');
 
-    if (!isGitRepo()) {
+    if (!fs.existsSync(path.join(repoRoot, '.git')) || !isGitRepo()) {
       logWarn('Not a git repository (or no .git directory found). Skipping git hooks setup.');
       return;
     }

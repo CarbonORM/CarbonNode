@@ -13,6 +13,7 @@ const pkg = JSON.parse(readFileSync('package.json', {encoding: 'utf8'}));
 const config = JSON.parse(readFileSync('tsconfig.json', {encoding: 'utf8'}));
 
 const externals = [
+	/^mysql2(?:\/.*)?$/,
 	...Object.keys(pkg.dependencies || {}),
 	...Object.keys(pkg.peerDependencies || {})
 ]

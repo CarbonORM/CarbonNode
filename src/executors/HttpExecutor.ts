@@ -1,3 +1,4 @@
+import {reserveDependency} from "../utils/dependencyTraversal";
 import type {AxiosPromise, AxiosResponse} from "axios";
 import isLocal from "../variables/isLocal";
 import isTest from "../variables/isTest";
@@ -13,13 +14,16 @@ import {
     PUT, RequestQueryBody
 } from "../types/ormInterfaces";
 import {removeInvalidKeys, removePrefixIfExists, TestRestfulResponse} from "../utils/apiHelpers";
-import {checkCache, evictCacheEntry, setCache, userCustomClearCache} from "../utils/cacheManager";
+import {scopedCacheRequest, checkCache, evictCacheEntry, setCache, userCustomClearCache} from "../utils/cacheManager";
 import type { SqlAllowListStatus } from "../utils/logSql";
 import {normalizeRequestOrder} from "../utils/normalizeSingularRequest";
+import isNode from '../variables/isNode';
+import {readHttpResponseStream} from '../utils/httpResponseStream';
+import {safePagination, queryLimits, validateResponseBudget} from '../utils/querySafety';
 import {sortAndSerializeQueryObject} from "../utils/sortAndSerializeQueryObject";
 import {notifyToast} from "../utils/toastRuntime";
 import {Executor} from "./Executor";
-import {toastOptions, toastOptionsDevs} from "variables/toastOptions";
+import {toastOptions, toastOptionsDevs} from "../variables/toastOptions";
 import {getLogContext, LogLevel, logWithLevel, shouldLog} from "../utils/logLevel";
 
 export class HttpExecutor<
@@ -208,7 +212,7 @@ export class HttpExecutor<
                 throw Error('Bad request method passed to getApi')
         }
 
-        if (clearCache != null) {
+        if (clearCache != null && !userCustomClearCache.includes(clearCache)) {
             userCustomClearCache.push(clearCache);
         }
 
@@ -228,7 +232,7 @@ export class HttpExecutor<
 
             const {
                 debug,
-                cacheResults = (C6.GET === requestMethod),
+                cacheResults: requestedCacheResults = false,
                 skipReactBootstrap = false,
                 dataInsertMultipleRows,
                 success,
@@ -246,6 +250,10 @@ export class HttpExecutor<
                 console.groupEnd();
             }
 
+            const cacheResults = requestedCacheResults === true && requestMethod === GET
+                && typeof this.config.cacheScope === 'string' && this.config.cacheScope.length > 0
+                && !Object.values(this.config.restModel.LIFECYCLE_HOOKS.GET ?? {}).some(group =>
+                    group && Object.keys(group).length > 0);
             let cachingConfirmed = false;
 
             // determine if we need to paginate.
@@ -268,20 +276,14 @@ export class HttpExecutor<
 
                 }
 
-                query[C6.PAGINATION][C6.PAGE] = query[C6.PAGINATION][C6.PAGE] || 1;
-
-                query[C6.PAGINATION][C6.LIMIT] = query[C6.PAGINATION][C6.LIMIT] || 100;
+                query[C6.PAGINATION] = {...query[C6.PAGINATION], ...safePagination(query[C6.PAGINATION], this.config)};
 
             }
 
             // The problem with creating cache keys with a stringified object is the order of keys matters and it's possible for the same query to be stringified differently.
             // Here we ensure the key order will be identical between two of the same requests. https://stackoverflow.com/questions/5467129/sort-javascript-object-by-key
-            const cacheRequestData = JSON.parse(JSON.stringify(query ?? {})) as RequestQueryBody<
-                G['RequestMethod'],
-                G['RestTableInterface'],
-                G['CustomAndRequiredFields'],
-                G['RequestTableOverrides']
-            >;
+            const cacheRequestData = scopedCacheRequest(this.config,
+                JSON.parse(JSON.stringify(query ?? {})), 'http');
             const cacheAllowListStatus: SqlAllowListStatus = this.config.sqlAllowListPath
                 ? "allowed"
                 : "not verified";
@@ -349,7 +351,8 @@ export class HttpExecutor<
             // todo - aggregate primary key check with condition check
             // check if PK exists in query, clone so pop does not affect the real data
             const primaryKeyList = structuredClone(TABLES[operatingTable]?.PRIMARY);
-            const primaryKeyFullyQualified = primaryKeyList?.pop();
+            // Composite identities stay in the payload; one path segment cannot represent them.
+            const primaryKeyFullyQualified = primaryKeyList?.length === 1 ? primaryKeyList[0] : undefined;
             const primaryKey = primaryKeyFullyQualified?.split('.')?.pop();
 
             if (needsConditionOrPrimaryCheck) {
@@ -362,11 +365,15 @@ export class HttpExecutor<
                         (Array.isArray(whereVal) && whereVal.length === 0) ||
                         (typeof whereVal === 'object' && !Array.isArray(whereVal) && Object.keys(whereVal).length === 0);
 
-                    if (whereIsEmpty) {
+                    const hasCompositeIdentity = primaryKeyList?.length > 1 && primaryKeyList.every((key: string) => {
+                        const value = query?.[key] ?? query?.[key.split('.').pop()!];
+                        return value !== undefined && value !== null;
+                    });
+                    if (whereIsEmpty && !hasCompositeIdentity) {
 
-                        logWithLevel(LogLevel.ERROR, logContext, console.error, query);
+                        logWithLevel(LogLevel.ERROR, logContext, console.error, 'Mutation requires primary identity or a WHERE condition.');
 
-                        throw Error('Failed to parse primary key information. Query: (' + JSON.stringify(query) + ') Primary Key: (' + JSON.stringify(primaryKey) + ') TABLES[operatingTable]?.PRIMARY: (' + JSON.stringify(TABLES[operatingTable]?.PRIMARY) + ') for operatingTable (' + operatingTable + ').')
+                        throw Error('Mutation requires primary identity or a WHERE condition.');
 
                     }
 
@@ -382,7 +389,7 @@ export class HttpExecutor<
 
                         }
 
-                        throw Error('You must provide the primary key (' + primaryKey + ') for table (' + operatingTable + '). Request (' + JSON.stringify(this.request, undefined, 4) + ') Query (' + JSON.stringify(query) + ')');
+                        throw Error('Mutation requires the table primary key.');
 
                     }
 
@@ -411,7 +418,13 @@ export class HttpExecutor<
 
                 if (undefined !== primaryVal) {
 
-                    restRequestUri += primaryVal + '/'
+                    if (!['string', 'number', 'bigint'].includes(typeof primaryVal)) throw new Error('Invalid HTTP primary key.');
+                    const segment = String(primaryVal);
+                    // Reject traversal and encoded delimiters; encode all remaining values as one segment.
+                    if (!segment || /[\\/?#%\u0000-\u001f\u007f]/.test(segment) || segment === '.' || segment === '..') {
+                        throw new Error('Invalid HTTP primary key path segment.');
+                    }
+                    restRequestUri += encodeURIComponent(segment) + '/';
 
                     if (isLocal() && shouldLog(LogLevel.DEBUG, logContext)) {
                         console.log('query', query, 'primaryKey', primaryKey);
@@ -441,12 +454,14 @@ export class HttpExecutor<
                     console.groupEnd();
                 }
 
-                this.runLifecycleHooks<"beforeExecution">(
+                await this.runLifecycleHooks<"beforeExecution">(
                     "beforeExecution", {
                         config: this.config,
                         request: this.request
                     })
 
+                const browserTransport = !isNode();
+                const responseController = browserTransport ? new AbortController() : undefined;
                 const axiosActiveRequest: AxiosPromise<ResponseDataType> = axios![requestMethod.toLowerCase()]<ResponseDataType>(
                     restRequestUri,
                     ...(() => {
@@ -465,6 +480,11 @@ export class HttpExecutor<
 
                         const baseConfig = {
                             withCredentials: withCredentials,
+                            adapter: browserTransport ? 'fetch' : 'http',
+                            ...(browserTransport ? {responseType: 'stream' as const, signal: responseController!.signal} : {}),
+                            timeout: this.config.statementTimeoutMs ?? 30000,
+                            maxContentLength: this.config.maxResponseBytes ?? 8 * 1024 * 1024,
+                            maxBodyLength: queryLimits(this.config.queryLimits).maxInputBytes,
                         };
 
                         switch (requestMethod) {
@@ -501,7 +521,11 @@ export class HttpExecutor<
                                 throw new Error(`The request method (${requestMethod}) was not recognized.`);
                         }
                     })()
-                );
+                ).then(async response => {
+                    if (browserTransport) response.data = await readHttpResponseStream(response.data as any, this.config, responseController!) as ResponseDataType;
+                    validateResponseBudget(response.data, this.config);
+                    return response;
+                });
 
 
                 if (cachingConfirmed) {
@@ -554,7 +578,7 @@ export class HttpExecutor<
                             });
                         }
 
-                        this.runLifecycleHooks<"afterExecution">(
+                        await this.runLifecycleHooks<"afterExecution">(
                             "afterExecution", {
                                 config: this.config,
                                 request: this.request,
@@ -571,7 +595,8 @@ export class HttpExecutor<
                             return Promise.resolve({ ...response, data: null as unknown as ResponseDataType });
                         }
 
-                        const callback = () => this.runLifecycleHooks<"afterCommit">(
+                        let commitHook: Promise<void> | undefined;
+                        const callback = () => commitHook ??= this.runLifecycleHooks<"afterCommit">(
                             "afterCommit", {
                                 config: this.config,
                                 request: this.request,
@@ -600,8 +625,9 @@ export class HttpExecutor<
                                     break;
                             }
                         } else {
-                            callback();
+                            await callback();
                         }
+                        await callback();
 
                         if (requestMethod === GET && this.isRestResponse(response)) {
 
@@ -614,7 +640,12 @@ export class HttpExecutor<
                             hasNext = pageLimit !== 1 && got === pageLimit;
 
                             if (hasNext) {
-                                responseData.next = apiRequest as () => Promise<
+                                const nextPage = Number(query[C6.PAGINATION][C6.PAGE]) + 1;
+                                const nextRequest = {
+                                    ...query,
+                                    [C6.PAGINATION]: {...query[C6.PAGINATION], [C6.PAGE]: nextPage},
+                                };
+                                responseData.next = () => new HttpExecutor<G>(this.config, nextRequest).execute() as Promise<
                                     DetermineResponseDataType<'GET', G['RestTableInterface']>
                                 >;
                             } else {
@@ -813,7 +844,10 @@ export class HttpExecutor<
                                         .map(part => part.charAt(0).toUpperCase() + part.slice(1))
                                         .join('_');
 
-                                    const RestApi = C6.ORM[ormKey] ?? new Error(`Fetch Dependencies could not find table (${ormKey}) in the set ∉ [ ${Object.keys(C6.ORM).join(', ')} ]`);
+                                    const RestApi = C6.ORM[ormKey];
+                                    if (!RestApi) {
+                                        throw new Error(`Fetch Dependencies could not find table (${ormKey}) in the set ∉ [ ${Object.keys(C6.ORM).join(', ')} ]`);
+                                    }
 
                                     if (debugEnabled) {
                                         console.log('%c Fetch Dependencies will select (' + tableToFetch + ') using GET request', 'color: #33ccff');
@@ -861,7 +895,7 @@ export class HttpExecutor<
 
                                     // this is a dynamic call to the rest api, any generated table may resolve with (RestApi)
                                     // todo - using value to avoid joins.... but. maybe this should be a parameterizable option -- think race conditions; its safer to join
-                                    apiRequestPromises.push(RestApi.Get({
+                                    const dependencyRequest: any = {
                                             [C6.WHERE]: Object.keys(fetchReferences[tableToFetch]).reduce((sum, column) => {
 
                                                     fetchReferences[tableToFetch][column] = fetchReferences[tableToFetch][column].flat(Infinity)
@@ -890,8 +924,10 @@ export class HttpExecutor<
 
                                                 }, {}),
                                             fetchDependencies: nextFetchDependencies
-                                        }
-                                    ));
+                                        };
+                                    if (reserveDependency(this.request, tableToFetch, dependencyRequest)) {
+                                        apiRequestPromises.push(RestApi.Get(dependencyRequest));
+                                    }
 
                                 }
 
