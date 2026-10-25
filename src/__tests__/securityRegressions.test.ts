@@ -33,6 +33,19 @@ beforeEach(() => clearCache({ignoreWarning: true}));
 afterEach(() => vi.restoreAllMocks());
 
 describe('REST security boundary', () => {
+    it.each(['GET', 'PUT', 'DELETE'])('keeps a column-looking route key bound alongside client WHERE for %s', async method => {
+        const {config, conn} = sqlFixture();
+        await handle(config, method, {
+            WHERE: {'actor.last_name': [C6C.EQUAL, [C6C.LIT, 'SMITH']]},
+            ...(method === 'PUT' ? {UPDATE: {first_name: 'Changed'}} : {}),
+        }, 'actor.actor_id');
+        const statements = conn.query.mock.calls.filter(([sql]: any) => /\bWHERE\b/.test(sql));
+        expect(statements).toHaveLength(1);
+        const [sql, params]: any = statements[0];
+        expect(sql).toMatch(/WHERE.*AND/s);
+        expect(sql).not.toMatch(/actor\.actor_id\)?\s*=\s*\(?actor\.actor_id/);
+        expect(params).toEqual(method === 'PUT' ? ['Changed', 'SMITH', 'actor.actor_id'] : ['SMITH', 'actor.actor_id']);
+    });
     it.each(['GET', 'PUT', 'DELETE'])('binds the URL key as a literal for singular %s', async method => {
         const {config, conn} = sqlFixture();
         await handle(config, method, {actor_id: 6, 'actor.actor_id': 7, ...(method === 'PUT' ? {first_name: 'Changed'} : {})}, 'actor.actor_id');
@@ -82,6 +95,18 @@ describe('REST security boundary', () => {
 });
 
 describe('SQL query integrity', () => {
+    it.each(['mysql', 'postgresql'])('distinguishes reference strings from explicit literal data in %s', sqlDialect => {
+        const config: any = {...buildTestConfig(), sqlDialect};
+        const reference = new SelectQueryBuilder(config, {WHERE: {
+            [C6C.EQUAL]: ['actor.actor_id', 'actor.actor_id'],
+        }} as any).build('actor');
+        expect(reference.params).toEqual([]);
+        const literal = new DeleteQueryBuilder(config, {WHERE: {
+            [C6C.EQUAL]: ['actor.actor_id', [C6C.LIT, 'actor.actor_id']],
+        }} as any).build('actor');
+        expect(literal.params).toEqual(['actor.actor_id']);
+        expect(literal.sql).toContain(sqlDialect === 'postgresql' ? '$1' : '?');
+    });
     it.each([{}, {'actor.last_name': [C6C.LIT, 'X']}, {OR: []}])('rejects malformed column conditions %j', value => {
         expect(() => new DeleteQueryBuilder(buildTestConfig() as any, {WHERE: {'actor.actor_id': value}} as any).build('actor')).toThrow();
     });
