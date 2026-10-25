@@ -125,6 +125,23 @@ describe('SQL Builders', () => {
     ]);
   });
 
+  it('binds column-looking legacy WHERE string values as literals', () => {
+    const config = buildTestConfig();
+    const qb = new DeleteQueryBuilder(config as any, {
+      WHERE: {
+        'actor.actor_id': { [C6C.EQUAL]: 'actor.actor_id' },
+        'actor.first_name': { [C6C.IN]: ['actor.first_name', 'ALICE'] },
+      },
+    } as any, false);
+
+    const { sql, params } = qb.build('actor');
+
+    expect(sql).toContain('(actor.actor_id) = ?');
+    expect(sql).toContain('( actor.first_name IN (?, ?) )');
+    expect(sql).not.toContain('actor.actor_id = actor.actor_id');
+    expect(params).toEqual(['actor.actor_id', 'actor.first_name', 'ALICE']);
+  });
+
   it('builds INSERT with ON DUPLICATE KEY UPDATE', () => {
     const config = buildTestConfig();
     const qb = new PostQueryBuilder(config as any, {

@@ -217,7 +217,9 @@ export abstract class JoinBuilder<G extends OrmGenerics> extends ConditionBuilde
 
                     const formatted = normalizedSql.trim().split('\n').map(line => `  ${line}`).join('\n');
                     const joinSql = `(\n${formatted}\n) AS \`${alias}\``;
-                    const onClause = this.buildBooleanJoinedConditions(conditions, true, params);
+                    const onClause = this.withLegacyRightColumnReferences(true, () =>
+                        this.buildBooleanJoinedConditions(conditions, true, params)
+                    );
                     sql += ` ${joinKind} JOIN ${joinSql}`;
                     if (onClause) {
                         sql += ` ON ${onClause}`;
@@ -230,7 +232,9 @@ export abstract class JoinBuilder<G extends OrmGenerics> extends ConditionBuilde
                     const hintClause = this.getIndexHintClause(table, alias);
                     const baseJoinSql = alias ? `\`${table}\` AS \`${alias}\`` : `\`${table}\``;
                     const joinSql = hintClause ? `${baseJoinSql} ${hintClause}` : baseJoinSql;
-                    const onClause = this.buildBooleanJoinedConditions(conditions, true, params);
+                    const onClause = this.withLegacyRightColumnReferences(true, () =>
+                        this.buildBooleanJoinedConditions(conditions, true, params)
+                    );
                     sql += ` ${joinKind} JOIN ${joinSql}`;
                     if (onClause) {
                         sql += ` ON ${onClause}`;

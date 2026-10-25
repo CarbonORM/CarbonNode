@@ -13,6 +13,18 @@ export abstract class ConditionBuilder<
     protected aliasMap: Record<string, string> = {};
     protected derivedAliases: Set<string> = new Set<string>();
 
+    protected allowLegacyRightColumnReferences = false;
+
+    protected withLegacyRightColumnReferences<T>(allowed: boolean, callback: () => T): T {
+        const previous = this.allowLegacyRightColumnReferences;
+        this.allowLegacyRightColumnReferences = allowed;
+        try {
+            return callback();
+        } finally {
+            this.allowLegacyRightColumnReferences = previous;
+        }
+    }
+
     protected initAlias(baseTable: string, joins?: any): void {
         this.aliasMap = { [baseTable]: baseTable };
         this.derivedAliases = new Set<string>();
@@ -552,7 +564,7 @@ export abstract class ConditionBuilder<
         }
 
         const existingWhereRaw = this.ensurePlainObject(subRequest[C6C.WHERE]);
-        const correlationCondition = { [correlationColumn]: [C6C.EQUAL, outerColumn] };
+        const correlationCondition = { [C6C.EQUAL]: [correlationColumn, outerColumn] };
 
         const normalizedExistingWhere = existingWhereRaw && typeof existingWhereRaw === 'object'
             ? Array.isArray(existingWhereRaw)
@@ -738,6 +750,34 @@ export abstract class ConditionBuilder<
         return `${leftSql} ${operator} ${rightSql}`;
     }
 
+
+    private literalizeLegacyValueOperand(value: any): any {
+        if (value === C6C.NULL) {
+            return value;
+        }
+
+        if (typeof value === 'string') {
+            return [C6C.LIT, value];
+        }
+
+        if (Array.isArray(value)) {
+            if (this.isExpressionTuple(value)) {
+                return value;
+            }
+
+            return value.map(item => this.literalizeLegacyValueOperand(item));
+        }
+
+        return value;
+    }
+
+    private shouldLiteralizeLegacyRightOperand(op: string): boolean {
+        const normalized = this.normalizeOperatorKey(op);
+        return normalized !== C6C.MATCH_AGAINST
+            && normalized !== C6C.EXISTS
+            && normalized !== 'NOT EXISTS';
+    }
+
     private buildLegacyColumnCondition(
         column: string,
         value: any,
@@ -764,10 +804,16 @@ export abstract class ConditionBuilder<
         if (Array.isArray(value)) {
             if (value.length >= 2 && typeof value[0] === 'string') {
                 const [op, ...rest] = value;
-                return this.buildOperatorExpression(op, [column, ...rest], params, column);
+                const operands = this.allowLegacyRightColumnReferences || !this.shouldLiteralizeLegacyRightOperand(op)
+                    ? rest
+                    : rest.map(item => this.literalizeLegacyValueOperand(item));
+                return this.buildOperatorExpression(op, [column, ...operands], params, column);
             }
             if (value.length === 3 && typeof value[0] === 'string' && typeof value[1] === 'string') {
-                return this.buildOperatorExpression(value[1], [value[0], value[2]], params, value[0]);
+                const operand = this.allowLegacyRightColumnReferences || !this.shouldLiteralizeLegacyRightOperand(value[1])
+                    ? value[2]
+                    : this.literalizeLegacyValueOperand(value[2]);
+                return this.buildOperatorExpression(value[1], [value[0], operand], params, value[0]);
             }
         }
 
@@ -776,7 +822,10 @@ export abstract class ConditionBuilder<
             if (entries.length === 1) {
                 const [op, operand] = entries[0];
                 if (this.isOperator(op)) {
-                    return this.buildOperatorExpression(op, [column, operand], params, column);
+                    const rightOperand = this.allowLegacyRightColumnReferences || !this.shouldLiteralizeLegacyRightOperand(op)
+                        ? operand
+                        : this.literalizeLegacyValueOperand(operand);
+                    return this.buildOperatorExpression(op, [column, rightOperand], params, column);
                 }
                 if (this.BOOLEAN_OPERATORS.has(op)) {
                     const expression = this.buildBooleanExpression({ [op]: operand }, params, 'AND');
@@ -786,7 +835,10 @@ export abstract class ConditionBuilder<
 
             const subParts = entries.map(([op, operand]) => {
                 if (this.isOperator(op)) {
-                    return this.buildOperatorExpression(op, [column, operand], params, column);
+                    const rightOperand = this.allowLegacyRightColumnReferences || !this.shouldLiteralizeLegacyRightOperand(op)
+                        ? operand
+                        : this.literalizeLegacyValueOperand(operand);
+                    return this.buildOperatorExpression(op, [column, rightOperand], params, column);
                 }
                 return this.buildBooleanExpression({ [op]: operand }, params, 'AND');
             }).filter(Boolean);
@@ -794,7 +846,10 @@ export abstract class ConditionBuilder<
             return this.joinBooleanParts(subParts, 'AND');
         }
 
-        return this.buildOperatorExpression(C6C.EQUAL, [column, value], params, column);
+        const rightOperand = this.allowLegacyRightColumnReferences
+            ? value
+            : this.literalizeLegacyValueOperand(value);
+        return this.buildOperatorExpression(C6C.EQUAL, [column, rightOperand], params, column);
     }
 
     private buildBooleanExpression(
